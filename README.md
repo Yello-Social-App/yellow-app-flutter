@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # yello_social_app
 
 A new Flutter project.
@@ -15,3 +16,6 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+=======
+# yellow-app-flutter
+>>>>>>> ea00aadc00e1d76eda9ba7229d08f24c1006a4c7

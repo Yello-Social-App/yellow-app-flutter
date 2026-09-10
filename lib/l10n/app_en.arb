@@ -1,0 +1,13 @@
+{
+  "@@locale": "en",
+
+  "securityBlockedTitle": "This device failed a security check",
+  "@securityBlockedTitle": {
+    "description": "Heading shown instead of the app when RootJailbreakDetector blocks launch on a rooted/jailbroken device."
+  },
+
+  "securityBlockedBody": "yello can't run on a rooted or jailbroken device — this protects your account and messages.",
+  "@securityBlockedBody": {
+    "description": "Body text under securityBlockedTitle explaining why the app refused to launch."
+  }
+}
