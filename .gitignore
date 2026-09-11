@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Backend repo nested in this project - not part of the Flutter app repo
+/yello_social_app_backend/
