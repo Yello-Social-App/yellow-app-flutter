@@ -1,10 +1,12 @@
 import 'package:equatable/equatable.dart';
 
 /// The backend's 6 reaction types (`ReactionType` enum on
-/// `ReactionRequest`/`ReactionSummaryResponse`) — `PUT /reactions/{targetType}/{targetId}`
-/// takes one of these as its `type` body field. Rendered as emoji rather
-/// than icon assets so no new art is needed for a feature with no mockup
-/// reference (the design source only ever drew a single heart/LIKE).
+/// `ReactionRequest`/`ReactionSummaryResponse`) — `POST /reactions/{targetType}/{targetId}`
+/// takes one of these as its optional `type` body field (omitted means
+/// `LIKE`); the server decides add/change/remove from the viewer's current
+/// reaction. Rendered as emoji rather than icon assets so no new art is
+/// needed for a feature with no mockup reference (the design source only
+/// ever drew a single heart/LIKE).
 enum ReactionType {
   like,
   love,
@@ -88,10 +90,12 @@ class PostEntity extends Equatable {
     required this.authorId,
     required this.authorUsername,
     this.authorAvatarUrl,
+    this.authorFullName,
     required this.createdAt,
     required this.content,
-    this.imageUrls = const [],
+    this.images = const [],
     this.visibility = PostVisibility.public,
+    this.isOwner = false,
     this.commentCount = 0,
     this.repostCount = 0,
     this.reactionCounts = const {},
@@ -106,10 +110,28 @@ class PostEntity extends Equatable {
   final String authorId;
   final String authorUsername;
   final String? authorAvatarUrl;
+
+  /// Display name — `AuthorSummary.fullName` on the wire. Nullable because
+  /// the backend doesn't mark it required; prefer this over
+  /// [authorUsername] wherever it's present.
+  final String? authorFullName;
   final DateTime createdAt;
   final String content;
-  final List<String> imageUrls;
+
+  /// One entry per image, in `position` order. `id` is what
+  /// `removeImageIds` on `PUT /posts/{id}` takes to drop one on edit.
+  final List<({String id, String url})> images;
+
+  /// Bare URLs, derived from [images] — the shape every existing image
+  /// widget (`PostImageCarousel` etc.) already renders from.
+  List<String> get imageUrls => images.map((i) => i.url).toList();
   final PostVisibility visibility;
+
+  /// The caller wrote this post — `PostResponse.isOwner`, computed
+  /// server-side (always `false` without a token). Drives edit/delete
+  /// controls; unlike [authorId] comparisons done elsewhere, this doesn't
+  /// need a separate `/users/me` call to be trustworthy.
+  final bool isOwner;
   final int commentCount;
   final int repostCount;
 
@@ -142,7 +164,7 @@ class PostEntity extends Equatable {
   final bool repostedByMe;
 
   bool get isRepost => originalPost != null;
-  bool get hasImages => imageUrls.isNotEmpty;
+  bool get hasImages => images.isNotEmpty;
   bool get likedByMe => viewerReaction != null;
   int get likeCount => reactionCounts['LIKE'] ?? 0;
 
@@ -168,10 +190,12 @@ class PostEntity extends Equatable {
       authorId: authorId,
       authorUsername: authorUsername,
       authorAvatarUrl: authorAvatarUrl,
+      authorFullName: authorFullName,
       createdAt: createdAt,
       content: content,
-      imageUrls: imageUrls,
+      images: images,
       visibility: visibility,
+      isOwner: isOwner,
       commentCount: commentCount ?? this.commentCount,
       repostCount: repostCount ?? this.repostCount,
       reactionCounts: reactionCounts ?? this.reactionCounts,

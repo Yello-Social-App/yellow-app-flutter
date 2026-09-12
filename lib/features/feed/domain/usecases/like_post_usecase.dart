@@ -14,9 +14,10 @@ class PostIdParams extends Equatable {
   List<Object?> get props => [postId];
 }
 
-/// Toggles the current user's `LIKE` reaction. Takes the whole [PostEntity]
-/// (not just its id) because the repository needs to know the *current*
-/// `viewerReaction` to decide PUT-to-react vs. DELETE-to-unreact.
+/// Toggles the current user's `LIKE` reaction via the single POST toggle
+/// endpoint. Takes the whole [PostEntity] (not just its id) so the result
+/// can be returned as that same post merged with the backend's fresh
+/// reaction summary.
 class LikePostUseCase implements UseCase<PostEntity, PostEntity> {
   LikePostUseCase(this._repository);
 

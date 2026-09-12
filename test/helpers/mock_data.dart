@@ -27,7 +27,8 @@ PostEntity buildPost({
     authorUsername: authorUsername,
     createdAt: createdAt ?? DateTime(2026, 1, 1),
     content: content,
-    imageUrls: imageUrls,
+    // No test cares about real image ids — the url doubles as one.
+    images: imageUrls.map((url) => (id: url, url: url)).toList(),
     reactionCounts: likeCount == 0 ? const {} : {'LIKE': likeCount},
     viewerReaction: viewerReaction,
     savedByMe: savedByMe,

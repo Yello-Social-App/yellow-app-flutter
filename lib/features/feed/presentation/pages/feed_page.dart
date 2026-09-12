@@ -27,10 +27,7 @@ class FeedPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider.value(
-      value: sl<FeedCubit>()..load(),
-      child: const _FeedView(),
-    );
+    return BlocProvider.value(value: sl<FeedCubit>()..load(), child: const _FeedView());
   }
 }
 
@@ -66,11 +63,7 @@ class _FeedViewState extends State<_FeedView> {
     // can leave `offset` at a few stray negative/positive pixels even while
     // visually "at the top".
     if (_scrollController.offset > 4) {
-      _scrollController.animateTo(
-        0,
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeOutCubic,
-      );
+      _scrollController.animateTo(0, duration: const Duration(milliseconds: 350), curve: Curves.easeOutCubic);
     } else {
       _refreshIndicatorKey.currentState?.show();
     }
@@ -108,26 +101,17 @@ class _FeedViewState extends State<_FeedView> {
                       sliver: SliverToBoxAdapter(child: _DateLabel()),
                     ),
                     _FeedAppBar(onLogoTap: _onLogoTap),
-                    if (state.status == FeedStatus.loading &&
-                        state.posts.isEmpty)
+                    if (state.status == FeedStatus.loading && state.posts.isEmpty)
                       SliverPadding(
                         padding: const EdgeInsets.symmetric(horizontal: 14),
-                        sliver: SliverList.list(
-                          children: const [
-                            ShimmerPostCard(),
-                            ShimmerPostCard(),
-                          ],
-                        ),
+                        sliver: SliverList.list(children: const [ShimmerPostCard(), ShimmerPostCard()]),
                       )
-                    else if (state.status == FeedStatus.error &&
-                        state.posts.isEmpty)
+                    else if (state.status == FeedStatus.error && state.posts.isEmpty)
                       SliverPadding(
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         sliver: SliverToBoxAdapter(
                           child: ErrorView(
-                            message:
-                                state.errorMessage ??
-                                'Could not load your feed.',
+                            message: state.errorMessage ?? 'Could not load your feed.',
                             onRetry: cubit.refresh,
                           ),
                         ),
@@ -138,13 +122,9 @@ class _FeedViewState extends State<_FeedView> {
                         sliver: SliverToBoxAdapter(
                           child: StoriesRail(
                             stories: state.stories,
-                            onAddStory: () =>
-                                context.pushNamed(RouteNames.storyCompose),
+                            onAddStory: () => context.pushNamed(RouteNames.storyCompose),
                             onOpenStory: (i) => context
-                                .pushNamed<void>(
-                                  RouteNames.storyViewer,
-                                  pathParameters: {'userIndex': '$i'},
-                                )
+                                .pushNamed<void>(RouteNames.storyViewer, pathParameters: {'userIndex': '$i'})
                                 .then((_) => cubit.reloadStories()),
                           ),
                         ),
@@ -153,16 +133,10 @@ class _FeedViewState extends State<_FeedView> {
                         padding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
                         sliver: SliverToBoxAdapter(
                           child: CreatePostPrompt(
-                            myInitials: state.me == null
-                                ? ''
-                                : (state.me!.fullName ?? state.me!.username)
-                                      .initials,
+                            myInitials: state.me == null ? '' : (state.me!.fullName ?? state.me!.username).initials,
                             myAvatarUrl: state.me?.avatarUrl,
-                            mySeed: state.me == null
-                                ? 0
-                                : avatarSeedForId(state.me!.id),
-                            onTap: () =>
-                                context.pushNamed(RouteNames.createPost),
+                            mySeed: state.me == null ? 0 : avatarSeedForId(state.me!.id),
+                            onTap: () => context.pushNamed(RouteNames.createPost),
                           ),
                         ),
                       ),
@@ -175,20 +149,13 @@ class _FeedViewState extends State<_FeedView> {
                             final post = state.posts[index];
                             return PostCard(
                               post: post,
-                              onOpen: () => context.pushNamed(
-                                RouteNames.postDetail,
-                                pathParameters: {'postId': post.id},
-                              ),
+                              onOpen: () =>
+                                  context.pushNamed(RouteNames.postDetail, pathParameters: {'postId': post.id}),
                               onLike: () => cubit.toggleLike(post),
                               onReact: (type) => cubit.react(post, type),
                               onSave: () => cubit.toggleSave(post.id),
                               onRepost: () => cubit.toggleRepost(post),
-                              onMore: () => _showFeedPostMenu(
-                                context,
-                                cubit,
-                                state,
-                                post,
-                              ),
+                              onMore: () => _showFeedPostMenu(context, cubit, state, post),
                             );
                           },
                         ),
@@ -196,18 +163,13 @@ class _FeedViewState extends State<_FeedView> {
                       if (state.isLoadingMore)
                         const SliverPadding(
                           padding: EdgeInsets.symmetric(vertical: 16),
-                          sliver: SliverToBoxAdapter(
-                            child: Center(child: CircularProgressIndicator()),
-                          ),
+                          sliver: SliverToBoxAdapter(child: Center(child: CircularProgressIndicator())),
                         )
                       else if (!state.hasMore)
                         SliverPadding(
                           padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
                           sliver: const SliverToBoxAdapter(
-                            child: EmptyStateCard(
-                              title: 'CAUGHT UP',
-                              hint: "You've seen everything from today.",
-                            ),
+                            child: EmptyStateCard(title: 'CAUGHT UP', hint: "You've seen everything from today."),
                           ),
                         ),
                     ],
@@ -226,12 +188,7 @@ class _FeedViewState extends State<_FeedView> {
 /// screen uses (see `post_options_sheet.dart`), in place, instead of
 /// navigating away. Ownership (`FeedState.me`) gates edit/delete exactly
 /// like `PostDetailState.isOwnPost` does on the detail screen.
-void _showFeedPostMenu(
-  BuildContext context,
-  FeedCubit cubit,
-  FeedState state,
-  PostEntity post,
-) {
+void _showFeedPostMenu(BuildContext context, FeedCubit cubit, FeedState state, PostEntity post) {
   showPostOptionsSheet(
     context,
     isOwnPost: state.me != null && state.me!.id == post.authorId,
@@ -239,48 +196,35 @@ void _showFeedPostMenu(
     onViewReactions: () => showReactionBreakdownSheet(
       context,
       fetch: () => cubit.getReactionSummary(post.id),
+      targetType: 'POST',
+      targetId: post.id,
     ),
     onEdit: () => showEditPostSheet(
       context,
       post: post,
-      onSave: ({content, visibility}) =>
-          cubit.updatePost(post.id, content: content, visibility: visibility),
+      onSave: ({content, visibility}) => cubit.updatePost(post.id, content: content, visibility: visibility),
     ),
     onDelete: () => _confirmDeleteFeedPost(context, cubit, post.id),
   );
 }
 
-Future<void> _copyFeedPostLink(
-  BuildContext context,
-  FeedCubit cubit,
-  String postId,
-) async {
+Future<void> _copyFeedPostLink(BuildContext context, FeedCubit cubit, String postId) async {
   final url = await cubit.getShareLink(postId);
   if (!context.mounted) return;
   if (url == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Could not get a share link.')),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not get a share link.')));
     return;
   }
   await Clipboard.setData(ClipboardData(text: url));
   if (!context.mounted) return;
-  ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(const SnackBar(content: Text('Link copied to clipboard.')));
+  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link copied to clipboard.')));
 }
 
-Future<void> _confirmDeleteFeedPost(
-  BuildContext context,
-  FeedCubit cubit,
-  String postId,
-) async {
+Future<void> _confirmDeleteFeedPost(BuildContext context, FeedCubit cubit, String postId) async {
   if (!await confirmDeletePost(context)) return;
   final ok = await cubit.deletePost(postId);
   if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(ok ? 'Post deleted.' : 'Could not delete post.')),
-  );
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Post deleted.' : 'Could not delete post.')));
 }
 
 /// Plain, ordinary (non-sticky) date row sitting directly above
@@ -306,15 +250,7 @@ class _DateLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
     final now = DateTime.now();
-    const weekdays = [
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Sunday',
-    ];
+    const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const months = [
       'Jan',
       'Feb',
@@ -329,12 +265,8 @@ class _DateLabel extends StatelessWidget {
       'Nov',
       'Dec', //
     ];
-    final dateLabel =
-        '${weekdays[now.weekday - 1]} · ${months[now.month - 1]} ${now.day}';
-    return Text(
-      dateLabel.toUpperCase(),
-      style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
-    );
+    final dateLabel = '${weekdays[now.weekday - 1]} · ${months[now.month - 1]} ${now.day}';
+    return Text(dateLabel.toUpperCase(), style: AppTextStyles.metaMono.copyWith(color: colors.ink2));
   }
 }
 
@@ -390,15 +322,10 @@ class _FeedAppBar extends StatelessWidget {
       title: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onLogoTap,
-        child: const RepaintBoundary(
-          child: YelloWordmark(fontSize: AppTextStyles.displayXlFontSize),
-        ),
+        child: const RepaintBoundary(child: YelloWordmark(fontSize: AppTextStyles.displayXlFontSize)),
       ),
       actions: [
-        AppIconButton(
-          icon: const Icon(Icons.search),
-          onPressed: () => context.pushNamed(RouteNames.search),
-        ),
+        AppIconButton(icon: const Icon(Icons.search), onPressed: () => context.pushNamed(RouteNames.search)),
         const SizedBox(width: 8),
         // Circle (friends) button — the brand-mark icon, not a user photo
         // (contrast `BottomNavBar`'s Profile-tab avatar, a different
@@ -406,12 +333,7 @@ class _FeedAppBar extends StatelessWidget {
         // slot of its own — see `BottomNavBar`'s doc comment — so this is
         // currently the only nav entry point into it besides deep-linking.
         AppIconButton(
-          icon: Image.asset(
-            AssetConstants.circleIcon,
-            width: 20,
-            height: 20,
-            fit: BoxFit.contain,
-          ),
+          icon: Image.asset(AssetConstants.circleIcon, width: 20, height: 20, fit: BoxFit.contain),
           onPressed: () => StatefulNavigationShell.of(context).goBranch(1),
         ),
         const SizedBox(width: 14),
