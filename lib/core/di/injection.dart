@@ -21,6 +21,7 @@ import '../../features/feed/data/datasources/bookmarks_local_datasource.dart';
 import '../../features/feed/data/datasources/feed_remote_datasource.dart';
 import '../../features/feed/data/datasources/story_local_datasource.dart';
 import '../../features/feed/data/repositories/feed_repository_impl.dart';
+import '../../features/feed/domain/entities/post_entity.dart';
 import '../../features/feed/domain/repositories/feed_repository.dart';
 import '../../features/feed/domain/usecases/add_comment_usecase.dart';
 import '../../features/feed/domain/usecases/create_post_usecase.dart';
@@ -40,6 +41,7 @@ import '../../features/feed/domain/usecases/update_post_usecase.dart';
 import '../../features/feed/presentation/bloc/create_post_cubit.dart';
 import '../../features/feed/presentation/bloc/feed_cubit.dart';
 import '../../features/feed/presentation/bloc/post_detail_cubit.dart';
+import '../../features/feed/presentation/bloc/reactors_cubit.dart';
 import '../../features/feed/presentation/bloc/story_cubit.dart';
 import '../../features/friends/data/datasources/friends_remote_datasource.dart';
 import '../../features/friends/data/repositories/friends_repository_impl.dart';
@@ -276,6 +278,7 @@ void _registerFeed() {
   sl.registerLazySingleton(() => ReactToPostUseCase(sl()));
   sl.registerLazySingleton(() => ReactToCommentUseCase(sl()));
   sl.registerLazySingleton(() => GetReactionSummaryUseCase(sl()));
+  sl.registerLazySingleton(() => GetReactorsUseCase(sl()));
   sl.registerLazySingleton(() => RepostUseCase(sl()));
   sl.registerLazySingleton(() => ToggleSaveUseCase(sl()));
   sl.registerLazySingleton(() => GetPostDetailUseCase(sl()));
@@ -324,6 +327,12 @@ void _registerFeed() {
       getShareLink: sl(),
       getMe: sl(),
     ),
+  );
+
+  // Fresh per open — this list's state has no reason to survive past the
+  // sheet that opened it (see the cubit's own doc).
+  sl.registerFactoryParam<ReactorsCubit, ({String targetType, String targetId}), ReactionType?>(
+    (ids, type) => ReactorsCubit(targetType: ids.targetType, targetId: ids.targetId, type: type, getReactors: sl()),
   );
   sl.registerFactory(() => StoryCubit(sl(), sl()));
   sl.registerFactory(() => CreatePostCubit(sl()));

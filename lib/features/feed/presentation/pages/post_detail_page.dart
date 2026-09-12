@@ -76,9 +76,7 @@ class _PostDetailViewState extends State<_PostDetailView> {
     });
     if (mentionUsername != null) {
       _commentController.text = '@$mentionUsername ';
-      _commentController.selection = TextSelection.collapsed(
-        offset: _commentController.text.length,
-      );
+      _commentController.selection = TextSelection.collapsed(offset: _commentController.text.length);
     }
     _commentFocusNode.requestFocus();
   }
@@ -120,19 +118,13 @@ class _PostDetailViewState extends State<_PostDetailView> {
                           onPressed: () => Navigator.of(context).maybePop(),
                         ),
                         const SizedBox(width: 11),
-                        Text(
-                          'POST',
-                          style: AppTextStyles.eyebrow.copyWith(
-                            color: colors.ink2,
-                          ),
-                        ),
+                        Text('POST', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
                         const Spacer(),
                         if (state.status == PostDetailStatus.loaded)
                           AppIconButton(
                             icon: const Icon(Icons.more_horiz),
                             size: 38,
-                            onPressed: () =>
-                                _showPostMenu(context, cubit, state),
+                            onPressed: () => _showPostMenu(context, cubit, state),
                           ),
                       ],
                     ),
@@ -140,24 +132,17 @@ class _PostDetailViewState extends State<_PostDetailView> {
                   Container(height: 1.5, color: colors.line),
                   Expanded(
                     child: switch (state.status) {
-                      PostDetailStatus.loading => const Center(
-                        child: CircularProgressIndicator(),
-                      ),
+                      PostDetailStatus.loading => const Center(child: CircularProgressIndicator()),
                       PostDetailStatus.error => Center(
                         child: Padding(
                           padding: const EdgeInsets.all(24),
                           child: ErrorView(
-                            message:
-                                state.errorMessage ??
-                                'Could not load this post.',
+                            message: state.errorMessage ?? 'Could not load this post.',
                             onRetry: cubit.load,
                           ),
                         ),
                       ),
-                      PostDetailStatus.loaded => _Loaded(
-                        state: state,
-                        onStartReply: _startReply,
-                      ),
+                      PostDetailStatus.loaded => _Loaded(state: state, onStartReply: _startReply),
                       PostDetailStatus.deleted => const SizedBox.shrink(),
                     },
                   ),
@@ -180,16 +165,17 @@ class _PostDetailViewState extends State<_PostDetailView> {
   }
 }
 
-void _showPostMenu(
-  BuildContext context,
-  PostDetailCubit cubit,
-  PostDetailState state,
-) {
+void _showPostMenu(BuildContext context, PostDetailCubit cubit, PostDetailState state) {
   showPostOptionsSheet(
     context,
     isOwnPost: state.isOwnPost,
     onCopyLink: () => _shareLink(context, cubit),
-    onViewReactions: () => showReactionBreakdownSheet(context, fetch: cubit.getReactionSummary),
+    onViewReactions: () => showReactionBreakdownSheet(
+      context,
+      fetch: cubit.getReactionSummary,
+      targetType: 'POST',
+      targetId: state.post!.id,
+    ),
     onEdit: () => _showEditSheet(context, cubit, state.post!),
     onDelete: () => _confirmDeletePost(context, cubit),
   );
@@ -211,25 +197,15 @@ Future<void> _confirmDeletePost(BuildContext context, PostDetailCubit cubit) asy
   if (await confirmDeletePost(context)) cubit.deletePost();
 }
 
-Future<void> _confirmDeleteComment(
-  BuildContext context,
-  PostDetailCubit cubit,
-  String commentId,
-) async {
+Future<void> _confirmDeleteComment(BuildContext context, PostDetailCubit cubit, String commentId) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       title: const Text('Delete this comment?'),
       content: const Text("This can't be undone."),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(false),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: const Text('Delete'),
-        ),
+        TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Cancel')),
+        TextButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('Delete')),
       ],
     ),
   );
@@ -262,8 +238,7 @@ class _Loaded extends StatelessWidget {
 
   /// `mentionUsername` is passed only when the tapped "Reply" belongs to a
   /// reply rather than a top-level comment — see `_PostDetailViewState._startReply`.
-  final void Function(CommentEntity topLevelParent, {String? mentionUsername})
-  onStartReply;
+  final void Function(CommentEntity topLevelParent, {String? mentionUsername}) onStartReply;
 
   @override
   Widget build(BuildContext context) {
@@ -283,9 +258,7 @@ class _Loaded extends StatelessWidget {
     List<CommentEntity> repliesTo(String parentId) =>
         state.comments.where((c) => c.parentCommentId == parentId).toList()
           ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    final orphanReplies = state.comments
-        .where((c) => c.isReply && !topLevelIds.contains(c.parentCommentId))
-        .toList();
+    final orphanReplies = state.comments.where((c) => c.isReply && !topLevelIds.contains(c.parentCommentId)).toList();
 
     // Pull-to-refresh is currently the only way to pick up a comment (or a
     // reaction count) someone else added after this page opened — there's
@@ -311,10 +284,7 @@ class _Loaded extends StatelessWidget {
                   padding: const EdgeInsets.all(14),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(AppRadii.md),
-                    onTap: () => context.pushNamed(
-                      RouteNames.userProfile,
-                      pathParameters: {'userId': post.authorId},
-                    ),
+                    onTap: () => context.pushNamed(RouteNames.userProfile, pathParameters: {'userId': post.authorId}),
                     child: Row(
                       children: [
                         AppAvatar(
@@ -330,17 +300,12 @@ class _Loaded extends StatelessWidget {
                             children: [
                               Text(
                                 post.authorUsername,
-                                style: AppTextStyles.titleMd.copyWith(
-                                  fontSize: 15,
-                                  color: colors.ink,
-                                ),
+                                style: AppTextStyles.titleMd.copyWith(fontSize: 15, color: colors.ink),
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 '@${post.authorUsername} · ${Formatters.relativeShort(post.createdAt)}',
-                                style: AppTextStyles.metaMono.copyWith(
-                                  color: colors.ink2,
-                                ),
+                                style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
                               ),
                             ],
                           ),
@@ -352,13 +317,7 @@ class _Loaded extends StatelessWidget {
                 if (post.content.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-                    child: Text(
-                      post.content,
-                      style: AppTextStyles.body.copyWith(
-                        fontSize: 16,
-                        color: colors.ink,
-                      ),
-                    ),
+                    child: Text(post.content, style: AppTextStyles.body.copyWith(fontSize: 16, color: colors.ink)),
                   ),
                 if (post.hasImages)
                   Padding(
@@ -368,10 +327,7 @@ class _Loaded extends StatelessWidget {
                     // become a swipeable carousel with a page indicator.
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(AppRadii.lg),
-                      child: PostImageCarousel(
-                        imageUrls: post.imageUrls,
-                        placeholderHeight: 300,
-                      ),
+                      child: PostImageCarousel(imageUrls: post.imageUrls, placeholderHeight: 300),
                     ),
                   ),
                 Padding(
@@ -382,24 +338,14 @@ class _Loaded extends StatelessWidget {
                         post: post,
                         onTap: cubit.toggleLike,
                         onLongPress: () async {
-                          final picked = await showReactionPicker(
-                            context,
-                            current: post.viewerReactionType,
-                          );
+                          final picked = await showReactionPicker(context, current: post.viewerReactionType);
                           if (picked != null) cubit.react(picked);
                         },
                       ),
                       const SizedBox(width: 8),
-                      _Chip(
-                        icon: Icons.mode_comment_outlined,
-                        label: '${state.comments.length}',
-                      ),
+                      _Chip(icon: Icons.mode_comment_outlined, label: '${state.comments.length}'),
                       const Spacer(),
-                      AppIconButton(
-                        icon: const Icon(Icons.repeat),
-                        size: 40,
-                        onPressed: () {},
-                      ),
+                      AppIconButton(icon: const Icon(Icons.repeat), size: 40, onPressed: () {}),
                     ],
                   ),
                 ),
@@ -418,13 +364,14 @@ class _Loaded extends StatelessWidget {
               comment: comment,
               canDelete: state.canDeleteComment(comment),
               onDelete: () => _confirmDeleteComment(context, cubit, comment.id),
-              onQuickLike: () =>
-                  cubit.reactToComment(comment.id, ReactionType.like),
+              onQuickLike: () => cubit.reactToComment(comment.id, ReactionType.like),
               onReact: (type) => cubit.reactToComment(comment.id, type),
               onReply: () => onStartReply(comment),
               onViewReactions: () => showReactionBreakdownSheet(
                 context,
                 fetch: () => cubit.getCommentReactionSummary(comment.id),
+                targetType: 'COMMENT',
+                targetId: comment.id,
               ),
             ),
             for (final reply in repliesTo(comment.id))
@@ -434,18 +381,15 @@ class _Loaded extends StatelessWidget {
                   comment: reply,
                   isReply: true,
                   canDelete: state.canDeleteComment(reply),
-                  onDelete: () =>
-                      _confirmDeleteComment(context, cubit, reply.id),
-                  onQuickLike: () =>
-                      cubit.reactToComment(reply.id, ReactionType.like),
+                  onDelete: () => _confirmDeleteComment(context, cubit, reply.id),
+                  onQuickLike: () => cubit.reactToComment(reply.id, ReactionType.like),
                   onReact: (type) => cubit.reactToComment(reply.id, type),
-                  onReply: () => onStartReply(
-                    comment,
-                    mentionUsername: reply.authorUsername,
-                  ),
+                  onReply: () => onStartReply(comment, mentionUsername: reply.authorUsername),
                   onViewReactions: () => showReactionBreakdownSheet(
                     context,
                     fetch: () => cubit.getCommentReactionSummary(reply.id),
+                    targetType: 'COMMENT',
+                    targetId: reply.id,
                   ),
                 ),
               ),
@@ -455,20 +399,18 @@ class _Loaded extends StatelessWidget {
               comment: orphan,
               canDelete: state.canDeleteComment(orphan),
               onDelete: () => _confirmDeleteComment(context, cubit, orphan.id),
-              onQuickLike: () =>
-                  cubit.reactToComment(orphan.id, ReactionType.like),
+              onQuickLike: () => cubit.reactToComment(orphan.id, ReactionType.like),
               onReact: (type) => cubit.reactToComment(orphan.id, type),
               onReply: () => onStartReply(orphan),
               onViewReactions: () => showReactionBreakdownSheet(
                 context,
                 fetch: () => cubit.getCommentReactionSummary(orphan.id),
+                targetType: 'COMMENT',
+                targetId: orphan.id,
               ),
             ),
           if (state.hasMoreComments)
-            _LoadMoreComments(
-              loading: state.isLoadingMoreComments,
-              onTap: cubit.loadMoreComments,
-            ),
+            _LoadMoreComments(loading: state.isLoadingMoreComments, onTap: cubit.loadMoreComments),
         ],
       ),
     );
@@ -498,18 +440,8 @@ class _LoadMoreComments extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppRadii.pill),
             ),
             child: loading
-                ? SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: colors.ink2,
-                    ),
-                  )
-                : Text(
-                    'Load more comments',
-                    style: AppTextStyles.button.copyWith(color: colors.ink2),
-                  ),
+                ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: colors.ink2))
+                : Text('Load more comments', style: AppTextStyles.button.copyWith(color: colors.ink2)),
           ),
         ),
       ),
@@ -549,10 +481,7 @@ class _CommentRow extends StatelessWidget {
   final bool isReply;
 
   Future<void> _pickReaction(BuildContext context) async {
-    final picked = await showReactionPicker(
-      context,
-      current: comment.viewerReactionType,
-    );
+    final picked = await showReactionPicker(context, current: comment.viewerReactionType);
     if (picked != null) onReact(picked);
   }
 
@@ -566,10 +495,7 @@ class _CommentRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           GestureDetector(
-            onTap: () => context.pushNamed(
-              RouteNames.userProfile,
-              pathParameters: {'userId': comment.authorId},
-            ),
+            onTap: () => context.pushNamed(RouteNames.userProfile, pathParameters: {'userId': comment.authorId}),
             child: AppAvatar(
               initials: comment.authorUsername.initials,
               seed: avatarSeedForId(comment.authorId),
@@ -593,16 +519,11 @@ class _CommentRow extends StatelessWidget {
                     children: [
                       Expanded(
                         child: GestureDetector(
-                          onTap: () => context.pushNamed(
-                            RouteNames.userProfile,
-                            pathParameters: {'userId': comment.authorId},
-                          ),
+                          onTap: () =>
+                              context.pushNamed(RouteNames.userProfile, pathParameters: {'userId': comment.authorId}),
                           child: Text(
                             comment.authorUsername,
-                            style: AppTextStyles.titleSm.copyWith(
-                              fontSize: 12,
-                              color: colors.ink,
-                            ),
+                            style: AppTextStyles.titleSm.copyWith(fontSize: 12, color: colors.ink),
                           ),
                         ),
                       ),
@@ -612,20 +533,13 @@ class _CommentRow extends StatelessWidget {
                           borderRadius: BorderRadius.circular(999),
                           child: Padding(
                             padding: const EdgeInsets.all(2),
-                            child: Icon(
-                              Icons.close,
-                              size: 15,
-                              color: colors.ink2,
-                            ),
+                            child: Icon(Icons.close, size: 15, color: colors.ink2),
                           ),
                         ),
                     ],
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    comment.content,
-                    style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
-                  ),
+                  Text(comment.content, style: AppTextStyles.bodySm.copyWith(color: colors.ink2)),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -634,24 +548,14 @@ class _CommentRow extends StatelessWidget {
                         onLongPress: () => _pickReaction(context),
                         borderRadius: BorderRadius.circular(999),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 2,
-                            horizontal: 2,
-                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
                           child: reacted == null || reacted == ReactionType.like
                               ? Icon(
-                                  reacted == null
-                                      ? Icons.favorite_border
-                                      : Icons.favorite,
+                                  reacted == null ? Icons.favorite_border : Icons.favorite,
                                   size: 14,
-                                  color: reacted == null
-                                      ? colors.ink3
-                                      : colors.red,
+                                  color: reacted == null ? colors.ink3 : colors.red,
                                 )
-                              : Text(
-                                  reacted.emoji,
-                                  style: const TextStyle(fontSize: 13),
-                                ),
+                              : Text(reacted.emoji, style: const TextStyle(fontSize: 13)),
                         ),
                       ),
                       // A sibling tap target, not nested inside the quick-like
@@ -665,17 +569,10 @@ class _CommentRow extends StatelessWidget {
                           onTap: onViewReactions,
                           borderRadius: BorderRadius.circular(999),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 2,
-                              horizontal: 2,
-                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
                             child: Text(
                               '${comment.reactionCount}',
-                              style: AppTextStyles.metaMono.copyWith(
-                                color: reacted != null
-                                    ? colors.red
-                                    : colors.ink3,
-                              ),
+                              style: AppTextStyles.metaMono.copyWith(color: reacted != null ? colors.red : colors.ink3),
                             ),
                           ),
                         ),
@@ -686,16 +583,8 @@ class _CommentRow extends StatelessWidget {
                         onTap: onReply,
                         borderRadius: BorderRadius.circular(999),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 2,
-                            horizontal: 2,
-                          ),
-                          child: Text(
-                            'Reply',
-                            style: AppTextStyles.metaMono.copyWith(
-                              color: colors.ink2,
-                            ),
-                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+                          child: Text('Reply', style: AppTextStyles.metaMono.copyWith(color: colors.ink2)),
                         ),
                       ),
                     ],
@@ -711,11 +600,7 @@ class _CommentRow extends StatelessWidget {
 }
 
 class _LikeButton extends StatelessWidget {
-  const _LikeButton({
-    required this.post,
-    required this.onTap,
-    required this.onLongPress,
-  });
+  const _LikeButton({required this.post, required this.onTap, required this.onLongPress});
   final PostEntity post;
   final VoidCallback onTap;
 
@@ -730,10 +615,7 @@ class _LikeButton extends StatelessWidget {
       color: reacted != null ? colors.red : Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadii.pill),
-        side: BorderSide(
-          color: reacted != null ? colors.red : colors.line,
-          width: 1.5,
-        ),
+        side: BorderSide(color: reacted != null ? colors.red : colors.line, width: 1.5),
       ),
       child: InkWell(
         onTap: onTap,
@@ -754,9 +636,7 @@ class _LikeButton extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 Formatters.compactCount(post.reactionTotal),
-                style: AppTextStyles.button.copyWith(
-                  color: reacted != null ? Colors.white : colors.ink2,
-                ),
+                style: AppTextStyles.button.copyWith(color: reacted != null ? Colors.white : colors.ink2),
               ),
             ],
           ),
@@ -844,9 +724,7 @@ class _CommentBar extends StatelessWidget {
                     child: Text(
                       'Replying to @$replyToName',
                       overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.metaMono.copyWith(
-                        color: colors.ink2,
-                      ),
+                      style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
                     ),
                   ),
                   InkWell(
@@ -875,12 +753,8 @@ class _CommentBar extends StatelessWidget {
                     focusNode: focusNode,
                     style: AppTextStyles.hint.copyWith(color: colors.ink),
                     decoration: InputDecoration(
-                      hintText: replyToId != null
-                          ? 'Write a reply'
-                          : 'Add a comment',
-                      hintStyle: AppTextStyles.hint.copyWith(
-                        color: colors.ink3,
-                      ),
+                      hintText: replyToId != null ? 'Write a reply' : 'Add a comment',
+                      hintStyle: AppTextStyles.hint.copyWith(color: colors.ink3),
                       border: InputBorder.none,
                     ),
                   ),

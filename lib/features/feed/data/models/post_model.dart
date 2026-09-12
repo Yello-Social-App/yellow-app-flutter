@@ -9,10 +9,12 @@ class PostModel extends PostEntity {
     required super.authorId,
     required super.authorUsername,
     super.authorAvatarUrl,
+    super.authorFullName,
     required super.createdAt,
     required super.content,
-    super.imageUrls,
+    super.images,
     super.visibility,
+    super.isOwner,
     super.commentCount,
     super.repostCount,
     super.reactionCounts,
@@ -36,15 +38,24 @@ class PostModel extends PostEntity {
       authorId: author['id'] as String? ?? '',
       authorUsername: author['username'] as String? ?? 'unknown',
       authorAvatarUrl: author['avatarUrl'] as String?,
+      authorFullName: author['fullName'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
       content: json['content'] as String? ?? '',
-      imageUrls: images.map((i) => i['url'] as String).toList(),
+      images: images.map((i) => (id: i['id'] as String, url: i['url'] as String)).toList(),
       visibility: PostVisibility.fromWire(json['visibility'] as String?),
+      isOwner: json['isOwner'] as bool? ?? false,
       commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
       repostCount: (json['repostCount'] as num?)?.toInt() ?? 0,
-      reactionCounts: (json['reactionCounts'] as Map<String, dynamic>? ?? {}).map(
-        (k, v) => MapEntry(k, (v as num).toInt()),
-      ),
+      // `reactionCounts` on the wire is per-type counts *plus* a sibling
+      // `total` key in the same object (unlike `ReactionSummaryResponse`,
+      // where `total` sits outside `counts`) — drop it here rather than
+      // storing it as if it were a 7th reaction type, which previously
+      // made `PostEntity.reactionTotal` double-count (it sums every value
+      // in this map, including a `total` that already summed the rest).
+      reactionCounts: {
+        for (final entry in (json['reactionCounts'] as Map<String, dynamic>? ?? {}).entries)
+          if (entry.key != 'total') entry.key: (entry.value as num).toInt(),
+      },
       viewerReaction: json['viewerReaction'] as String?,
       shareUrl: json['shareUrl'] as String?,
       originalPost: original == null ? null : PostModel.fromJson(original),

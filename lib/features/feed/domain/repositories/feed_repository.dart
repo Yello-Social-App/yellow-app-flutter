@@ -6,6 +6,7 @@ import '../../../../core/error/failures.dart';
 import '../entities/comment_entity.dart';
 import '../entities/post_entity.dart';
 import '../entities/reaction_breakdown.dart';
+import '../entities/reactor_entity.dart';
 import '../entities/story_entity.dart';
 
 /// One cursor-paginated page of the `/feed` endpoint.
@@ -23,6 +24,14 @@ class CommentsPage {
   final bool hasMore;
 }
 
+/// One page of `GET /reactions/{targetType}/{targetId}` — see
+/// [FeedRepository.getReactors].
+class ReactorsPage {
+  const ReactorsPage({required this.reactors, required this.hasMore});
+  final List<ReactorEntity> reactors;
+  final bool hasMore;
+}
+
 /// Domain-facing contract for everything the Home/Feed tab needs. Backed by
 /// the real `dev.yello-api.cachewraith.com` API for posts/comments/
 /// reactions/reposts; stories have no backend endpoint at all and are
@@ -36,21 +45,19 @@ abstract interface class FeedRepository {
   Future<Either<Failure, void>> markStorySeen(String userId);
   Future<Either<Failure, PostEntity>> getPost(String postId);
   Future<Either<Failure, CommentsPage>> getComments(String postId, {int page = 0});
-  Future<Either<Failure, CommentEntity>> addComment(
-    String postId,
-    String content, {
-    String? parentCommentId,
-  });
+  Future<Either<Failure, CommentEntity>> addComment(String postId, String content, {String? parentCommentId});
 
-  /// Toggles the current user's `LIKE` reaction on [post] (PUT to react,
-  /// DELETE to un-react) and returns the post merged with the backend's
-  /// authoritative reaction summary.
+  /// Toggles the current user's `LIKE` reaction on [post] via the single
+  /// `POST /reactions/{targetType}/{targetId}` toggle endpoint — the server
+  /// adds, changes, or removes the reaction based on its current state.
+  /// Returns the post merged with the backend's authoritative reaction
+  /// summary.
   Future<Either<Failure, PostEntity>> toggleLike(PostEntity post);
 
-  /// Sets [post]'s reaction to [type] — or removes it, if [type] is already
-  /// the viewer's current reaction (PUT to react/switch, DELETE to
-  /// un-react). Returns the post merged with the backend's authoritative
-  /// reaction summary, same as [toggleLike].
+  /// Sets [post]'s reaction to [type] via the same POST toggle as
+  /// [toggleLike] — sending the viewer's current reaction type again
+  /// removes it, server-side. Returns the post merged with the backend's
+  /// authoritative reaction summary.
   Future<Either<Failure, PostEntity>> reactToPost(PostEntity post, ReactionType type);
 
   /// Same toggle-by-type semantics as [reactToPost], against a comment.
@@ -59,9 +66,17 @@ abstract interface class FeedRepository {
   /// On-demand reaction breakdown for any target (`targetType` is `'POST'`
   /// or `'COMMENT'`) — independent of the viewer's own reaction, unlike the
   /// counts that ride along on [PostEntity]/[CommentEntity] already.
-  Future<Either<Failure, ReactionBreakdown>> getReactionSummary({
+  Future<Either<Failure, ReactionBreakdown>> getReactionSummary({required String targetType, required String targetId});
+
+  /// Paginated list of users who reacted to [targetType]/[targetId],
+  /// optionally filtered to one [type] — the `reactors` operation on the
+  /// same path [getReactionSummary] hits with `/summary` appended. Unlike
+  /// that summary, this can be a genuinely long list, hence pagination.
+  Future<Either<Failure, ReactorsPage>> getReactors({
     required String targetType,
     required String targetId,
+    ReactionType? type,
+    int page = 0,
   });
 
   /// Reposts [postId], optionally with added [content] — returns the newly
@@ -83,11 +98,7 @@ abstract interface class FeedRepository {
   });
 
   /// Edits a post you own (`PUT /posts/{id}`) — only non-null fields change.
-  Future<Either<Failure, PostEntity>> updatePost(
-    String postId, {
-    String? content,
-    PostVisibility? visibility,
-  });
+  Future<Either<Failure, PostEntity>> updatePost(String postId, {String? content, PostVisibility? visibility});
 
   /// Deletes a post you own (`DELETE /posts/{id}`).
   Future<Either<Failure, void>> deletePost(String postId);

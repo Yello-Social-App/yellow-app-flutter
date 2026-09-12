@@ -73,3 +73,31 @@ class GetReactionSummaryUseCase implements UseCase<ReactionBreakdown, GetReactio
   Future<Either<Failure, ReactionBreakdown>> call(GetReactionSummaryParams params) =>
       _repository.getReactionSummary(targetType: params.targetType, targetId: params.targetId);
 }
+
+class GetReactorsParams extends Equatable {
+  const GetReactorsParams({required this.targetType, required this.targetId, this.type, this.page = 0});
+
+  final String targetType;
+  final String targetId;
+  final ReactionType? type;
+  final int page;
+
+  @override
+  List<Object?> get props => [targetType, targetId, type, page];
+}
+
+/// Paginated "who reacted, and with what" — distinct from
+/// [GetReactionSummaryUseCase], which only returns per-type totals.
+class GetReactorsUseCase implements UseCase<ReactorsPage, GetReactorsParams> {
+  GetReactorsUseCase(this._repository);
+
+  final FeedRepository _repository;
+
+  @override
+  Future<Either<Failure, ReactorsPage>> call(GetReactorsParams params) => _repository.getReactors(
+    targetType: params.targetType,
+    targetId: params.targetId,
+    type: params.type,
+    page: params.page,
+  );
+}

@@ -8,8 +8,10 @@ import '../../domain/entities/post_entity.dart';
 /// Opens the long-press reaction picker — a row of the 6 backend reaction
 /// types, matching the app's existing `showModalBottomSheet` pattern (see
 /// `post_detail_page.dart`'s post-menu/edit sheets) rather than a floating
-/// popover, since there's no mockup reference for this control. Returns the
-/// tapped [ReactionType], or null if dismissed without picking one.
+/// popover, since there's no mockup reference for this control, plus one
+/// purely decorative 🖕 tile (see below). Returns the tapped [ReactionType],
+/// or null if dismissed without picking a *real* reaction — this includes
+/// tapping the decorative tile, which is never sent to the backend.
 Future<ReactionType?> showReactionPicker(BuildContext context, {ReactionType? current}) {
   final colors = AppColors.of(context);
   return showModalBottomSheet<ReactionType>(
@@ -35,10 +37,30 @@ Future<ReactionType?> showReactionPicker(BuildContext context, {ReactionType? cu
               children: [
                 for (final type in ReactionType.values)
                   _ReactionOption(
-                    type: type,
+                    emoji: type.emoji,
                     selected: type == current,
                     onTap: () => Navigator.of(sheetContext).pop(type),
                   ),
+                // Decorative only — the backend's reaction type enum is
+                // closed (verified against a fresh /v3/api-docs:
+                // LIKE|LOVE|HAHA|WOW|SAD|ANGRY, no 7th value), so this can
+                // never be a real reaction. Popping with no value makes the
+                // sheet resolve exactly like a dismiss — every call site
+                // already does `if (picked != null) ...react(picked)`, so
+                // onReact/the network/reactionCounts/viewerReaction are
+                // never touched, and nothing is remembered anywhere.
+                _ReactionOption(
+                  emoji: '🖕',
+                  selected: false,
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Sent 🖕 into the void — nobody else can see this one.')),
+                      );
+                    }
+                  },
+                ),
               ],
             ),
           ],
@@ -49,9 +71,9 @@ Future<ReactionType?> showReactionPicker(BuildContext context, {ReactionType? cu
 }
 
 class _ReactionOption extends StatelessWidget {
-  const _ReactionOption({required this.type, required this.selected, required this.onTap});
+  const _ReactionOption({required this.emoji, required this.selected, required this.onTap});
 
-  final ReactionType type;
+  final String emoji;
   final bool selected;
   final VoidCallback onTap;
 
@@ -69,7 +91,7 @@ class _ReactionOption extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadii.pill),
         child: Padding(
           padding: const EdgeInsets.all(11),
-          child: Text(type.emoji, style: const TextStyle(fontSize: 24)),
+          child: Text(emoji, style: const TextStyle(fontSize: 24)),
         ),
       ),
     );
