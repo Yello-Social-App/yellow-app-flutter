@@ -13,6 +13,7 @@ import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/error_view.dart';
 import '../../../../shared/widgets/shimmer_loading.dart';
+import '../../../../shared/widgets/yello_wordmark.dart';
 import '../../domain/entities/conversation_entity.dart';
 import '../bloc/messages_cubit.dart';
 
@@ -21,10 +22,7 @@ class MessagesPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider.value(
-      value: sl<MessagesCubit>()..load(),
-      child: const _MessagesView(),
-    );
+    return BlocProvider.value(value: sl<MessagesCubit>()..load(), child: const _MessagesView());
   }
 }
 
@@ -62,15 +60,7 @@ class _MessagesView extends StatelessWidget {
                                 style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
                               ),
                               const SizedBox(height: 8),
-                              RichText(
-                                text: TextSpan(
-                                  style: AppTextStyles.displayXl.copyWith(color: colors.ink),
-                                  children: [
-                                    const TextSpan(text: 'Inbox'),
-                                    TextSpan(text: '.', style: TextStyle(color: colors.yel)),
-                                  ],
-                                ),
-                              ),
+                              const YelloWordmark(fontSize: AppTextStyles.displayXlFontSize, text: 'Inbox'),
                             ],
                           ),
                         ),
@@ -81,10 +71,7 @@ class _MessagesView extends StatelessWidget {
                   if (state.status == MessagesStatus.loading && state.conversations.isEmpty)
                     const ShimmerPostCard()
                   else if (state.status == MessagesStatus.error && state.conversations.isEmpty)
-                    ErrorView(
-                      message: state.errorMessage ?? 'Could not load your inbox.',
-                      onRetry: cubit.refresh,
-                    )
+                    ErrorView(message: state.errorMessage ?? 'Could not load your inbox.', onRetry: cubit.refresh)
                   else ...[
                     if (state.onlineNow.isNotEmpty) ...[
                       _ActiveNowRail(conversations: state.onlineNow),
@@ -137,12 +124,7 @@ class _ActiveNowRail extends StatelessWidget {
                     width: 56,
                     child: Column(
                       children: [
-                        AppAvatar(
-                          initials: c.name.initials,
-                          seed: c.avatarSeed,
-                          size: 52,
-                          showOnlineDot: true,
-                        ),
+                        AppAvatar(initials: c.name.initials, seed: c.avatarSeed, size: 52, showOnlineDot: true),
                         const SizedBox(height: 8),
                         Text(
                           c.firstName,
@@ -178,8 +160,7 @@ class _ConversationRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadii.lg),
         child: InkWell(
           borderRadius: BorderRadius.circular(AppRadii.lg),
-          onTap: () =>
-              context.pushNamed(RouteNames.chat, pathParameters: {'conversationId': conversation.id}),
+          onTap: () => context.pushNamed(RouteNames.chat, pathParameters: {'conversationId': conversation.id}),
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -216,9 +197,7 @@ class _ConversationRow extends StatelessWidget {
                             child: Text(
                               conversation.lastMessagePreview,
                               overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.bodySm.copyWith(
-                                color: unread ? colors.ink : colors.ink3,
-                              ),
+                              style: AppTextStyles.bodySm.copyWith(color: unread ? colors.ink : colors.ink3),
                             ),
                           ),
                           if (unread) ...[

@@ -56,8 +56,9 @@ abstract final class ErrorHandler {
     final fieldErrors = data['fieldErrors'];
     if (fieldErrors is Map && fieldErrors.isNotEmpty) {
       final firstField = fieldErrors.values.first;
-      if (firstField is List && firstField.isNotEmpty)
+      if (firstField is List && firstField.isNotEmpty) {
         return firstField.first as String;
+      }
     }
     if (data['message'] is String) return data['message'] as String;
     return null;

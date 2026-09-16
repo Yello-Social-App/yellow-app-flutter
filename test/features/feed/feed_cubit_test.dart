@@ -195,7 +195,8 @@ void main() {
   );
 
   blocTest<FeedCubit, FeedState>(
-    'toggleLike leaves state unchanged when the repository call fails',
+    'toggleLike optimistically flips the post right away, then rolls it back '
+    'to its original state when the repository call fails',
     build: buildCubit,
     seed: () => FeedState(
       status: FeedStatus.loaded,
@@ -205,7 +206,10 @@ void main() {
       when(() => likePost(any())).thenAnswer((_) async => const Left(ServerFailure()));
       return cubit.toggleLike(buildPost(id: 'p1', likeCount: 0));
     },
-    expect: () => <FeedState>[],
+    expect: () => [
+      predicate<FeedState>((s) => s.posts.single.likedByMe), // the optimistic flip
+      predicate<FeedState>((s) => !s.posts.single.likedByMe && s.posts.single.likeCount == 0), // rolled back
+    ],
   );
 
   blocTest<FeedCubit, FeedState>(
@@ -224,6 +228,10 @@ void main() {
       ).thenAnswer((_) async => Right(buildPost(id: 'p1', likeCount: 0, viewerReaction: 'LOVE')));
       return cubit.react(buildPost(id: 'p1', likeCount: 0), ReactionType.love);
     },
+    // Skips the optimistic emit (`_predictReaction`'s own guess, applied
+    // before the request even goes out) to assert just the final,
+    // server-confirmed state.
+    skip: 1,
     expect: () => [
       predicate<FeedState>((s) {
         final p1 = s.posts.firstWhere((p) => p.id == 'p1');

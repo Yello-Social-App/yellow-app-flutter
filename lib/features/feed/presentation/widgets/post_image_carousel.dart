@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_text_styles.dart';
@@ -50,17 +51,28 @@ class _PostImageCarouselState extends State<PostImageCarousel> {
     final urls = widget.imageUrls;
 
     if (urls.isEmpty || urls.first.isEmpty) {
-      return SizedBox(height: widget.placeholderHeight, child: const ImagePlaceholder());
+      return SizedBox(
+        height: widget.placeholderHeight,
+        child: const ImagePlaceholder(),
+      );
     }
 
     if (urls.length == 1) {
+      final targetWidth =
+          (MediaQuery.sizeOf(context).width *
+                  MediaQuery.devicePixelRatioOf(context))
+              .round();
       return GestureDetector(
         onTap: widget.onTap,
-        child: Image.network(
-          urls.first,
+        child: CachedNetworkImage(
+          imageUrl: urls.first,
           fit: BoxFit.fitWidth,
           width: double.infinity,
-          errorBuilder: (_, _, _) => SizedBox(height: widget.placeholderHeight, child: const ImagePlaceholder()),
+          memCacheWidth: targetWidth,
+          errorWidget: (_, _, _) => SizedBox(
+            height: widget.placeholderHeight,
+            child: const ImagePlaceholder(),
+          ),
         ),
       );
     }
@@ -78,12 +90,17 @@ class _PostImageCarouselState extends State<PostImageCarousel> {
               onPageChanged: (i) => setState(() => _index = i),
               itemBuilder: (context, i) {
                 final url = urls[i];
+                final dpr = MediaQuery.devicePixelRatioOf(context);
                 return url.isEmpty
                     ? const ImagePlaceholder()
-                    : Image.network(
-                        url,
+                    : CachedNetworkImage(
+                        imageUrl: url,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const ImagePlaceholder(),
+                        memCacheWidth: (MediaQuery.sizeOf(context).width * dpr)
+                            .round(),
+                        memCacheHeight: (widget.placeholderHeight * dpr)
+                            .round(),
+                        errorWidget: (_, _, _) => const ImagePlaceholder(),
                       );
               },
             ),
@@ -122,7 +139,10 @@ class _CountBadge extends StatelessWidget {
       ),
       child: Text(
         '${index + 1}/$total',
-        style: AppTextStyles.metaMono.copyWith(color: Colors.white, fontSize: 11),
+        style: AppTextStyles.metaMono.copyWith(
+          color: Colors.white,
+          fontSize: 11,
+        ),
       ),
     );
   }
@@ -151,7 +171,12 @@ class _DotIndicator extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: i == index ? 0.95 : 0.5),
               borderRadius: BorderRadius.circular(999),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 3)],
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  blurRadius: 3,
+                ),
+              ],
             ),
           ),
       ],

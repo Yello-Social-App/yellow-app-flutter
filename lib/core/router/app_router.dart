@@ -11,6 +11,7 @@ import '../../features/feed/presentation/pages/story_compose_page.dart';
 import '../../features/feed/presentation/pages/story_viewer_page.dart';
 import '../../features/friends/presentation/pages/friends_page.dart';
 import '../../features/chat/presentation/pages/messages_page.dart';
+import '../../features/notification/presentation/pages/notification_preferences_page.dart';
 import '../../features/notification/presentation/pages/notifications_page.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
 import '../../features/profile/presentation/pages/public_profile_page.dart';
@@ -139,6 +140,11 @@ class AppRouter {
               path: '/shared-posts',
               name: RouteNames.sharedPosts,
               builder: (context, state) => const SharedPostsPage(),
+            ),
+            _overlayRoute(
+              path: '/notification-preferences',
+              name: RouteNames.notificationPreferences,
+              builder: (context, state) => const NotificationPreferencesPage(),
             ),
           ],
         );

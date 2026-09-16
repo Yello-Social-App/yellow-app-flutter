@@ -29,76 +29,109 @@ Future<void> showReactionBreakdownSheet(
     // one, or the sheet paints behind that bar instead of over it.
     useRootNavigator: true,
     backgroundColor: colors.surf,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.xl))),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.xl)),
+    ),
     builder: (_) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('REACTIONS', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
-            const SizedBox(height: 14),
-            FutureBuilder<ReactionBreakdown?>(
-              future: fetch(),
-              builder: (tileContext, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                final breakdown = snapshot.data;
-                if (breakdown == null || breakdown.total == 0) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Text(
-                      breakdown == null ? "Couldn't load reactions." : 'No reactions yet.',
-                      style: AppTextStyles.body.copyWith(color: colors.ink2),
-                    ),
-                  );
-                }
-                final entries = breakdown.counts.entries.where((e) => e.value > 0).toList()
-                  ..sort((a, b) => b.value.compareTo(a.value));
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (final entry in entries)
-                      InkWell(
-                        // Pop via `tileContext` (inside this sheet's own
-                        // subtree — see `reaction_picker_sheet.dart` for why
-                        // that's the safe context to pop with), then reopen
-                        // using the outer `context` this function was
-                        // called with, which is still mounted underneath.
-                        onTap: () {
-                          Navigator.of(tileContext).pop();
-                          if (context.mounted) {
-                            showReactorsSheet(context, targetType: targetType, targetId: targetId, type: entry.key);
-                          }
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: Row(
-                            children: [
-                              Text(entry.key.emoji, style: const TextStyle(fontSize: 20)),
-                              const SizedBox(width: 10),
-                              Text(
-                                entry.key.name[0].toUpperCase() + entry.key.name.substring(1),
-                                style: AppTextStyles.body.copyWith(color: colors.ink),
-                              ),
-                              const Spacer(),
-                              Text('${entry.value}', style: AppTextStyles.titleSm.copyWith(color: colors.ink2)),
-                              const SizedBox(width: 6),
-                              Icon(Icons.chevron_right, size: 18, color: colors.ink2),
-                            ],
+      child: SizedBox(
+        width: double.infinity,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'REACTIONS',
+                style: AppTextStyles.eyebrow.copyWith(color: colors.ink2),
+              ),
+              const SizedBox(height: 14),
+              FutureBuilder<ReactionBreakdown?>(
+                future: fetch(),
+                builder: (tileContext, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  final breakdown = snapshot.data;
+                  if (breakdown == null || breakdown.total == 0) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                        breakdown == null
+                            ? "Couldn't load reactions."
+                            : 'No reactions yet.',
+                        style: AppTextStyles.body.copyWith(color: colors.ink2),
+                      ),
+                    );
+                  }
+                  final entries =
+                      breakdown.counts.entries
+                          .where((e) => e.value > 0)
+                          .toList()
+                        ..sort((a, b) => b.value.compareTo(a.value));
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final entry in entries)
+                        InkWell(
+                          // Pop via `tileContext` (inside this sheet's own
+                          // subtree — see `reaction_picker_sheet.dart` for why
+                          // that's the safe context to pop with), then reopen
+                          // using the outer `context` this function was
+                          // called with, which is still mounted underneath.
+                          onTap: () {
+                            Navigator.of(tileContext).pop();
+                            if (context.mounted) {
+                              showReactorsSheet(
+                                context,
+                                targetType: targetType,
+                                targetId: targetId,
+                                type: entry.key,
+                              );
+                            }
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: Row(
+                              children: [
+                                Text(
+                                  entry.key.emoji,
+                                  style: const TextStyle(fontSize: 20),
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  entry.key.name[0].toUpperCase() +
+                                      entry.key.name.substring(1),
+                                  style: AppTextStyles.body.copyWith(
+                                    color: colors.ink,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  '${entry.value}',
+                                  style: AppTextStyles.titleSm.copyWith(
+                                    color: colors.ink2,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Icon(
+                                  Icons.chevron_right,
+                                  size: 18,
+                                  color: colors.ink2,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                  ],
-                );
-              },
-            ),
-          ],
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     ),

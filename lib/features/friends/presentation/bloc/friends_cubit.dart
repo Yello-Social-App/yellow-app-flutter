@@ -52,12 +52,12 @@ class FriendsCubit extends Cubit<FriendsState> {
     required AcceptFriendRequestUseCase acceptRequest,
     required DeclineFriendRequestUseCase declineRequest,
     required UnfriendUseCase unfriend,
-  })  : _getFriends = getFriends,
-        _getRequests = getRequests,
-        _acceptRequest = acceptRequest,
-        _declineRequest = declineRequest,
-        _unfriend = unfriend,
-        super(const FriendsState());
+  }) : _getFriends = getFriends,
+       _getRequests = getRequests,
+       _acceptRequest = acceptRequest,
+       _declineRequest = declineRequest,
+       _unfriend = unfriend,
+       super(const FriendsState());
 
   final GetFriendsUseCase _getFriends;
   final GetFriendRequestsUseCase _getRequests;
@@ -78,7 +78,12 @@ class FriendsCubit extends Cubit<FriendsState> {
     List<FriendshipEntity> requests = state.requests;
 
     (await _getFriends(const PageParams())).fold((l) => failure = l, (r) => friends = r.friendships);
+    if (isClosed) return;
     (await _getRequests(const PageParams())).fold((l) => failure ??= l, (r) => requests = r.friendships);
+    // The Circle (Friends) page is pushed/popped like any other screen — a
+    // pop while this is in flight closes this factory cubit before it
+    // resolves. Same guard `ReactorsCubit.load()` documents.
+    if (isClosed) return;
 
     if (failure != null) {
       emit(state.copyWith(status: FriendsStatus.error, errorMessage: failure!.message));
@@ -90,11 +95,14 @@ class FriendsCubit extends Cubit<FriendsState> {
   Future<void> accept(String requestId) async {
     emit(state.copyWith(busyIds: {...state.busyIds, requestId}));
     final result = await _acceptRequest(RequestIdParams(requestId));
+    if (isClosed) return;
     result.fold((_) {}, (accepted) {
-      emit(state.copyWith(
-        requests: state.requests.where((r) => r.id != requestId).toList(),
-        friends: [accepted, ...state.friends],
-      ));
+      emit(
+        state.copyWith(
+          requests: state.requests.where((r) => r.id != requestId).toList(),
+          friends: [accepted, ...state.friends],
+        ),
+      );
     });
     emit(state.copyWith(busyIds: {...state.busyIds}..remove(requestId)));
   }
@@ -102,6 +110,7 @@ class FriendsCubit extends Cubit<FriendsState> {
   Future<void> decline(String requestId) async {
     emit(state.copyWith(busyIds: {...state.busyIds, requestId}));
     final result = await _declineRequest(RequestIdParams(requestId));
+    if (isClosed) return;
     result.fold((_) {}, (_) {
       emit(state.copyWith(requests: state.requests.where((r) => r.id != requestId).toList()));
     });
@@ -111,6 +120,7 @@ class FriendsCubit extends Cubit<FriendsState> {
   Future<void> unfriend(String userId) async {
     emit(state.copyWith(busyIds: {...state.busyIds, userId}));
     final result = await _unfriend(UserIdParams(userId));
+    if (isClosed) return;
     result.fold((_) {}, (_) {
       emit(state.copyWith(friends: state.friends.where((f) => f.userId != userId).toList()));
     });

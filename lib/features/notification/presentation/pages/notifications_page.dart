@@ -8,12 +8,12 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
-import '../../../../shared/extensions/string_extension.dart';
-import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/error_view.dart';
 import '../../../../shared/widgets/shimmer_loading.dart';
+import '../../../../shared/widgets/yello_wordmark.dart';
 import '../../domain/entities/notification_entity.dart';
 import '../bloc/notifications_cubit.dart';
 
@@ -22,25 +22,48 @@ class NotificationsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => sl<NotificationsCubit>()..load(),
+    return BlocProvider<NotificationsCubit>.value(
+      value: sl<NotificationsCubit>()..load(),
       child: const _NotificationsView(),
     );
   }
 }
 
-/// Maps the backend's opaque `type` string to a human verb — falls back
-/// gracefully for any value the backend introduces that the client doesn't
-/// know about yet.
-String _verbFor(String type) => switch (type.toUpperCase()) {
-      'REACTION' || 'LIKE' => 'reacted to your post',
-      'FOLLOW' || 'FRIEND_REQUEST' => 'sent you a friend request',
-      'FRIEND_ACCEPT' => 'accepted your friend request',
-      'COMMENT' => 'commented on your post',
-      'MENTION' => 'mentioned you',
-      'REPOST' => 'reposted your post',
-      _ => 'sent you a notification',
-    };
+/// Icon shown for each wire `type` — `title`/`body` are the backend's own
+/// frozen display text now (see `NotificationEntity`'s doc), so this glyph
+/// is purely decorative context, not something that needs to describe the
+/// event on its own.
+IconData _iconFor(String type) => switch (type) {
+  NotificationTypes.postCreated => Icons.grid_view_rounded,
+  NotificationTypes.postCommented || NotificationTypes.commentReplied => Icons.mode_comment_outlined,
+  NotificationTypes.commentReacted || NotificationTypes.postReacted => Icons.favorite_border,
+  NotificationTypes.postReposted => Icons.repeat_rounded,
+  NotificationTypes.friendRequestReceived => Icons.person_add_alt_1_outlined,
+  NotificationTypes.friendRequestAccepted => Icons.person_outline,
+  _ => Icons.notifications_none_rounded,
+};
+
+/// Pushes whatever screen [notification]'s `data` map points at — the same
+/// deep-link keys a tapped push notification would carry (see the service
+/// doc's "Deep-link keys by type" table). A type with nothing to navigate to
+/// (or a payload missing the key it usually has — read defensively) is a
+/// silent no-op rather than an error.
+void _openDeepLink(BuildContext context, NotificationEntity notification) {
+  switch (notification.type) {
+    case NotificationTypes.postCreated:
+    case NotificationTypes.postCommented:
+    case NotificationTypes.commentReplied:
+    case NotificationTypes.postReposted:
+    case NotificationTypes.postReacted:
+    case NotificationTypes.commentReacted:
+      final postId = notification.data['postId'];
+      if (postId != null) context.pushNamed(RouteNames.postDetail, pathParameters: {'postId': postId});
+    case NotificationTypes.friendRequestReceived:
+    case NotificationTypes.friendRequestAccepted:
+      final actorId = notification.actorId;
+      if (actorId != null) context.pushNamed(RouteNames.userProfile, pathParameters: {'userId': actorId});
+  }
+}
 
 /// Runs an accept/decline call and surfaces a snackbar only on failure —
 /// same "silent on success, snackbar on failure" convention as
@@ -51,14 +74,9 @@ Future<void> _respondToFriendRequest(
   NotificationEntity notification, {
   required bool accept,
 }) async {
-  final ok = accept
-      ? await cubit.acceptFriendRequest(notification)
-      : await cubit.declineFriendRequest(notification);
+  final ok = accept ? await cubit.acceptFriendRequest(notification) : await cubit.declineFriendRequest(notification);
   if (!context.mounted || ok) return;
-  AppStatusSnackbar.showError(
-    context,
-    message: accept ? 'Could not accept request.' : 'Could not decline request.',
-  );
+  AppStatusSnackbar.showError(context, message: accept ? 'Could not accept request.' : 'Could not decline request.');
 }
 
 class _NotificationsView extends StatelessWidget {
@@ -75,76 +93,150 @@ class _NotificationsView extends StatelessWidget {
         bottom: false,
         child: BlocBuilder<NotificationsCubit, NotificationsState>(
           builder: (context, state) {
+            final loadingEmpty = state.status == NotificationsStatus.loading && state.items.isEmpty;
+            final errorEmpty = state.status == NotificationsStatus.error && state.items.isEmpty;
+            final showLoadMoreFooter = state.hasMore && state.items.isNotEmpty;
+
+            // header(1) + body/rows + optional load-more footer(1).
+            final bodyCount = loadingEmpty || errorEmpty || state.items.isEmpty ? 1 : state.items.length;
+            final itemCount = 1 + bodyCount + (showLoadMoreFooter ? 1 : 0);
+
             return RefreshIndicator(
               onRefresh: cubit.refresh,
               color: colors.ink,
               backgroundColor: colors.surf,
-              child: ListView(
+              child: ListView.builder(
                 padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 0, 4, 16),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('This week', style: AppTextStyles.metaMono.copyWith(color: colors.ink2)),
-                              const SizedBox(height: 8),
-                              RichText(
-                                text: TextSpan(
-                                  style: AppTextStyles.displayXl.copyWith(color: colors.ink),
-                                  children: [
-                                    const TextSpan(text: 'Signals'),
-                                    TextSpan(text: '.', style: TextStyle(color: colors.yel)),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        AppButton(
-                          label: 'Mark read',
-                          variant: AppButtonVariant.outline,
-                          dense: true,
-                          onPressed: state.unreadCount == 0 ? null : cubit.markAllRead,
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (state.status == NotificationsStatus.loading && state.notifications.isEmpty)
-                    const ShimmerPostCard()
-                  else if (state.status == NotificationsStatus.error && state.notifications.isEmpty)
-                    ErrorView(
-                      message: state.errorMessage ?? 'Could not load your notifications.',
-                      onRetry: cubit.refresh,
-                    )
-                  else if (state.notifications.isEmpty)
-                    Padding(
+                itemCount: itemCount,
+                itemBuilder: (context, index) {
+                  if (index == 0) return _Header(state: state, cubit: cubit);
+                  final bodyIndex = index - 1;
+
+                  if (bodyIndex < bodyCount && (loadingEmpty || errorEmpty || state.items.isEmpty)) {
+                    if (loadingEmpty) return const ShimmerPostCard();
+                    if (errorEmpty) {
+                      return ErrorView(message: state.errorMessage ?? 'Could not load your notifications.', onRetry: cubit.refresh);
+                    }
+                    return Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
                         "Nothing yet — you'll see reactions, comments and requests here.",
                         textAlign: TextAlign.center,
                         style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
                       ),
-                    )
-                  else
-                    for (final n in state.notifications)
-                      _NotificationRow(
-                        notification: n,
-                        onTap: () => cubit.openNotification(n),
-                        busy: state.busyRequestIds.contains(n.id),
-                        outcome: state.respondedRequestIds[n.id],
-                        onAccept: () => _respondToFriendRequest(context, cubit, n, accept: true),
-                        onDecline: () => _respondToFriendRequest(context, cubit, n, accept: false),
-                      ),
-                ],
+                    );
+                  }
+
+                  if (bodyIndex < bodyCount) {
+                    final n = state.items[bodyIndex];
+                    return _DismissibleNotificationRow(
+                      key: ValueKey(n.id),
+                      notification: n,
+                      cubit: cubit,
+                      busy: state.busyRequestIds.contains(n.id),
+                      outcome: state.respondedRequestIds[n.id],
+                    );
+                  }
+
+                  // Load-more footer.
+                  if (!state.isLoadingMore) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) => cubit.loadMore());
+                  }
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+                  );
+                },
               ),
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+class _Header extends StatelessWidget {
+  const _Header({required this.state, required this.cubit});
+  final NotificationsState state;
+  final NotificationsCubit cubit;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('This week', style: AppTextStyles.metaMono.copyWith(color: colors.ink2)),
+                const SizedBox(height: 8),
+                const YelloWordmark(fontSize: AppTextStyles.displayXlFontSize, text: 'Signals'),
+              ],
+            ),
+          ),
+          AppIconButton(
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => context.pushNamed(RouteNames.notificationPreferences),
+            size: 38,
+          ),
+          const SizedBox(width: 8),
+          AppButton(
+            label: 'Mark read',
+            variant: AppButtonVariant.outline,
+            dense: true,
+            onPressed: state.unreadCount == 0 ? null : cubit.markAllRead,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DismissibleNotificationRow extends StatelessWidget {
+  const _DismissibleNotificationRow({
+    super.key,
+    required this.notification,
+    required this.cubit,
+    required this.busy,
+    required this.outcome,
+  });
+
+  final NotificationEntity notification;
+  final NotificationsCubit cubit;
+  final bool busy;
+  final bool? outcome;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Dismissible(
+      key: ValueKey('dismiss-${notification.id}'),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) => cubit.deleteNotification(notification),
+      background: Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          decoration: BoxDecoration(color: colors.red, borderRadius: BorderRadius.circular(AppRadii.lg)),
+          child: const Icon(Icons.delete_outline, color: Colors.white),
+        ),
+      ),
+      child: _NotificationRow(
+        notification: notification,
+        onTap: () {
+          cubit.openNotification(notification);
+          _openDeepLink(context, notification);
+        },
+        busy: busy,
+        outcome: outcome,
+        onAccept: () => _respondToFriendRequest(context, cubit, notification, accept: true),
+        onDecline: () => _respondToFriendRequest(context, cubit, notification, accept: false),
       ),
     );
   }
@@ -176,15 +268,7 @@ class _NotificationRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
     final unread = !notification.read;
-    // Used to also require `targetId != null` here, on the theory that a
-    // null target meant nothing to act on. Dropped 2026-09-07: `targetId`
-    // turned out not to track actionability at all (see
-    // `NotificationsCubit._resolveRequestId` — it was non-null on a request
-    // that had *already* been accepted). Every friend-request notification
-    // gets the action row now; `NotificationsCubit.refresh()` precomputes
-    // `respondedRequestIds` for ones already resolved, so those render the
-    // outcome chip below instead of live buttons.
-    final showRequestActions = notification.isFriendRequestType;
+    final showRequestActions = notification.isFriendRequestReceived;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -196,41 +280,49 @@ class _NotificationRow extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadii.lg),
         ),
         clipBehavior: Clip.antiAlias,
-        // The avatar is a sibling tap target (jumps to the actor's profile),
-        // not nested inside the row's own `InkWell` below — two nested
-        // `InkWell`s with independent `onTap`s would share one gesture arena
-        // and could resolve ambiguously, so it sits outside it instead.
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            GestureDetector(
-              onTap: () =>
-                  context.pushNamed(RouteNames.userProfile, pathParameters: {'userId': notification.actorId}),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  AppAvatar(
-                    initials: notification.actorUsername.initials,
-                    seed: avatarSeedForId(notification.actorId),
-                    imageUrl: notification.actorAvatarUrl,
-                    size: 44,
-                  ),
-                  if (unread)
-                    Positioned(
-                      right: -2,
-                      top: -2,
-                      child: Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: colors.yel,
-                          border: Border.all(color: colors.ink, width: 1.5),
-                        ),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(color: colors.surf2, shape: BoxShape.circle),
+                  child: Icon(_iconFor(notification.type), size: 18, color: colors.ink2),
+                ),
+                if (unread)
+                  Positioned(
+                    right: -2,
+                    top: -2,
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: colors.yel,
+                        border: Border.all(color: colors.ink, width: 1.5),
                       ),
                     ),
-                ],
-              ),
+                  ),
+                if (notification.aggregateCount > 1)
+                  Positioned(
+                    left: -4,
+                    bottom: -4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: colors.ink,
+                        borderRadius: BorderRadius.circular(AppRadii.pill),
+                      ),
+                      child: Text(
+                        '${notification.aggregateCount}',
+                        style: AppTextStyles.metaMono.copyWith(color: colors.bg, fontSize: 9),
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -242,21 +334,26 @@ class _NotificationRow extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      RichText(
-                        text: TextSpan(
-                          style: AppTextStyles.bodySm.copyWith(fontSize: 13, color: colors.ink),
-                          children: [
-                            TextSpan(
-                              text: notification.actorUsername,
-                              style: AppTextStyles.titleSm.copyWith(fontSize: 13, color: colors.ink),
-                            ),
-                            TextSpan(text: ' ${_verbFor(notification.type)}'),
-                          ],
-                        ),
+                      Text(
+                        notification.title,
+                        style: AppTextStyles.titleMd.copyWith(fontSize: 13, color: colors.ink),
                       ),
+                      if (notification.body.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          notification.body,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.bodySm.copyWith(fontSize: 12.5, color: colors.ink2),
+                        ),
+                      ],
                       const SizedBox(height: 7),
                       Text(
-                        '${Formatters.relativeShort(notification.createdAt)} · ${notification.type.toUpperCase()}',
+                        // `updatedAt`, not `createdAt` — it's last activity
+                        // (bumped by aggregation), which is what "how long
+                        // ago" should mean for a row that collapsed several
+                        // events. See `NotificationEntity.updatedAt`'s doc.
+                        Formatters.relativeShort(notification.updatedAt),
                         style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
                       ),
                       if (showRequestActions) ...[
@@ -319,10 +416,7 @@ class _RequestOutcomeChip extends StatelessWidget {
         children: [
           Icon(accepted ? Icons.check : Icons.close, size: 13, color: colors.ink2),
           const SizedBox(width: 6),
-          Text(
-            accepted ? 'Accepted' : 'Declined',
-            style: AppTextStyles.button.copyWith(color: colors.ink2),
-          ),
+          Text(accepted ? 'Accepted' : 'Declined', style: AppTextStyles.button.copyWith(color: colors.ink2)),
         ],
       ),
     );

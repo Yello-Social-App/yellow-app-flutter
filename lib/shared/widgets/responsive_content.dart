@@ -28,7 +28,9 @@ class ResponsiveContent extends StatelessWidget {
       child: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: AppBreakpoints.maxContentWidth),
+          constraints: const BoxConstraints(
+            maxWidth: AppBreakpoints.maxContentWidth,
+          ),
           child: child,
         ),
       ),

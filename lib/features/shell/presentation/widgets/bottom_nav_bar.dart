@@ -11,11 +11,18 @@ import '../../../../shared/widgets/app_avatar.dart';
 
 /// The bottom nav: Feed, Signals, a raised "+" create button, Inbox, then
 /// Profile — five equal-width slots, with a short yellow accent line sitting
-/// on the pill's bottom edge under whichever tab is selected, topped with a
-/// small arrowhead that pops up toward that tab's icon (restyled to our own
-/// item set, unread-dot wiring and ink/yellow/red color theme; an earlier
-/// version had this accent border curl up and arc over the top of the pill
-/// instead — replaced since it read as too heavy over the nav bar).
+/// on the bar's top edge above whichever tab is selected, topped with a
+/// small arrowhead that pops down toward that tab's icon (restyled to our
+/// own item set, unread-dot wiring and ink/yellow/red color theme).
+///
+/// Laid out as a flat, full-width bar flush with the screen edges — no side
+/// margins, no rounded corners, no drop shadow — matching the plain strip
+/// look of e.g. Facebook's bottom nav, rather than the floating rounded pill
+/// this used to be. The background is white (was the dark "ink" shell
+/// token); inactive icons/labels, the unread dot's border and the Profile
+/// avatar's dim ring all flipped from a white-on-dark tint to an ink-on-white
+/// one to stay visible against it. The active yellow and the accent-line
+/// indicator are unchanged in color — only its edge moved.
 ///
 /// Circle (branch index 1, the friends screen) is intentionally not shown
 /// here — its route/branch still exists in the router for later use, it's
@@ -36,7 +43,12 @@ import '../../../../shared/widgets/app_avatar.dart';
 /// left-to-right slot order, so [_slotForBranch] maps branch -> visual slot
 /// so the indicator lands under the right tab.
 class BottomNavBar extends StatelessWidget {
-  const BottomNavBar({super.key, required this.currentIndex, required this.onTabSelected, required this.onCreate});
+  const BottomNavBar({
+    super.key,
+    required this.currentIndex,
+    required this.onTabSelected,
+    required this.onCreate,
+  });
 
   final int currentIndex;
   final void Function(int branchIndex) onTabSelected;
@@ -45,8 +57,11 @@ class BottomNavBar extends StatelessWidget {
   static const _yel = Color(0xFFF4C542);
   static const _ink = Color(0xFF14120C);
   static const _red = Color(0xFFE4574F);
+  static const _bg = Colors.white;
+  static const _slot = Color(0xFFEDE9DF);
+  static const _surf2 = Color(0xFFF5F2EA);
 
-  static const _barHeight = 58.0;
+  static const _barHeight = 62.0;
   static const _slotCount = 5;
   // Visual left-to-right order is Feed, Signals, Create, Inbox, Profile.
   static const _slotForBranch = {0: 0, 3: 1, 2: 3, 4: 4};
@@ -54,20 +69,43 @@ class BottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final selectedSlot = _slotForBranch[currentIndex] ?? 0;
-    // The pill's own 20px margin from the physical bottom edge was tuned
-    // against a 3-button-nav device, where the system reports zero bottom
-    // inset. On a gesture-nav device (most modern phones) that inset is
-    // nonzero (Android's gesture pill, iOS's home indicator) — added on top
-    // of the 20 rather than replacing it, so the pill still clears the
-    // gesture area instead of sitting under/behind it, while staying
-    // pixel-identical to before on any device that reports zero inset.
+    // Absorbed as extra ink-colored height below the icon row (rather than
+    // as outer margin, like the old floating pill used) so the bar's flat
+    // background still runs edge-to-edge down to the physical bottom of the
+    // screen on a gesture-nav device (Android's gesture pill, iOS's home
+    // indicator), matching a normal full-bleed nav bar instead of leaving a
+    // gap of page background showing underneath it.
     final bottomInset = MediaQuery.paddingOf(context).bottom;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(12, 0, 12, 20 + bottomInset),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _bg,
+        // An ink hairline rather than the old yellow tint — same family the
+        // app's light-surface dividers already use elsewhere (see
+        // `AppColors.line`), since a pale yellow line barely shows up on
+        // white.
+        border: Border(top: BorderSide(color: _ink.withValues(alpha: 0.12))),
+        // Floats the bar above the page content now that the page
+        // background is flat white too (see `AppColors.light.bg`) — a
+        // negative `dy` casts the shadow upward, onto the content behind the
+        // bar, matching a normal bottom-nav elevation cue. This is a plain
+        // `DecoratedBox` built once per `BottomNavBar` rebuild — not an
+        // `AnimatedContainer` and not rebuilt per animation frame (the
+        // `TweenAnimationBuilder`/`CustomPainter` driving the tab indicator
+        // live inside this decoration's `child`, not on it) — so it doesn't
+        // hit the Impeller/Android blurred-`BoxShadow`-in-`AnimatedContainer`
+        // crash this app hit elsewhere (see `_ProfileAvatarIcon`'s doc
+        // comment). Still unverified on-device since there's no emulator in
+        // this sandbox.
+        boxShadow: [
+          BoxShadow(
+            color: _ink.withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
       child: SizedBox(
-        // +14 gives the pill a 7px margin top and bottom within this box, so
-        // its shadow has room to render without being clipped.
-        height: _barHeight + 14,
+        height: _barHeight + bottomInset,
         child: LayoutBuilder(
           builder: (context, constraints) {
             final slotWidth = constraints.maxWidth / _slotCount;
@@ -78,30 +116,12 @@ class BottomNavBar extends StatelessWidget {
               duration: const Duration(milliseconds: 420),
               curve: Curves.easeOutCubic,
               builder: (context, animatedCenter, _) => Stack(
-                // Left off `Clip.none` (the Stack default is `Clip.hardEdge`)
-                // so the pill's shadow and the indicator's glow can bleed
-                // past this Stack's own bounds instead of being cropped.
-                clipBehavior: Clip.none,
                 children: [
-                  Positioned.fill(
-                    top: 7,
-                    bottom: 7,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: _ink,
-                        borderRadius: BorderRadius.circular(_barHeight / 2),
-                        border: Border.all(color: _yel.withValues(alpha: 0.45), width: 1.2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.35),
-                            blurRadius: 32,
-                            offset: const Offset(0, 14),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Positioned.fill(
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    height: _barHeight,
                     child: IgnorePointer(
                       child: CustomPaint(
                         painter: _ActiveTabIndicatorPainter(
@@ -113,9 +133,11 @@ class BottomNavBar extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Positioned.fill(
-                    top: 7,
-                    bottom: 7,
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    height: _barHeight,
                     child: Row(
                       children: [
                         SizedBox(
@@ -129,16 +151,20 @@ class BottomNavBar extends StatelessWidget {
                         ),
                         SizedBox(
                           width: slotWidth,
-                          child: BlocBuilder<NotificationsCubit, NotificationsState>(
-                            bloc: sl<NotificationsCubit>(),
-                            builder: (context, state) => _NavItem(
-                              icon: Icons.favorite_border,
-                              label: 'Signals',
-                              active: currentIndex == 3,
-                              dot: state.unreadCount > 0,
-                              onTap: () => onTabSelected(3),
-                            ),
-                          ),
+                          child:
+                              BlocBuilder<
+                                NotificationsCubit,
+                                NotificationsState
+                              >(
+                                bloc: sl<NotificationsCubit>(),
+                                builder: (context, state) => _NavItem(
+                                  icon: Icons.favorite_border,
+                                  label: 'Signals',
+                                  active: currentIndex == 3,
+                                  dot: state.unreadCount > 0,
+                                  onTap: () => onTabSelected(3),
+                                ),
+                              ),
                         ),
                         SizedBox(
                           width: slotWidth,
@@ -148,14 +174,23 @@ class BottomNavBar extends StatelessWidget {
                               button: true,
                               child: Material(
                                 color: _yel,
-                                shape: const CircleBorder(side: BorderSide(color: _ink, width: 1.8)),
+                                shape: const CircleBorder(
+                                  side: BorderSide(
+                                    color: Color.fromARGB(157, 155, 152, 146),
+                                    width: 1.8,
+                                  ),
+                                ),
                                 child: InkWell(
                                   onTap: onCreate,
                                   customBorder: const CircleBorder(),
                                   child: const SizedBox(
-                                    width: 42,
-                                    height: 42,
-                                    child: Icon(Icons.add, color: _ink, size: 22),
+                                    width: 45,
+                                    height: 45,
+                                    child: Icon(
+                                      Icons.add,
+                                      color: _slot,
+                                      size: 22,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -185,7 +220,9 @@ class BottomNavBar extends StatelessWidget {
                                 iconWidget: _ProfileAvatarIcon(
                                   active: currentIndex == 4,
                                   imageUrl: me?.avatarUrl,
-                                  initials: me == null ? '' : (me.fullName ?? me.username).initials,
+                                  initials: me == null
+                                      ? ''
+                                      : (me.fullName ?? me.username).initials,
                                   seed: me == null ? 0 : avatarSeedForId(me.id),
                                 ),
                                 label: 'Profile',
@@ -216,7 +253,10 @@ class _NavItem extends StatelessWidget {
     required this.active,
     required this.onTap,
     this.dot = false,
-  }) : assert(icon != null || iconWidget != null, 'Provide either icon or iconWidget');
+  }) : assert(
+         icon != null || iconWidget != null,
+         'Provide either icon or iconWidget',
+       );
 
   /// A Material glyph — mutually exclusive with [iconWidget]; tinted to [fg]
   /// like every other tab.
@@ -234,7 +274,12 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = active ? BottomNavBar._yel : Colors.white.withValues(alpha: 0.66);
+    // Was a white tint (readable over the old dark "ink" bar background) —
+    // flipped to an ink tint now the bar is white, landing close to the
+    // app's `ink3` tertiary-text token.
+    final fg = active
+        ? BottomNavBar._yel
+        : BottomNavBar._ink.withValues(alpha: 0.45);
 
     return Semantics(
       selected: active,
@@ -272,7 +317,14 @@ class _NavItem extends StatelessWidget {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: BottomNavBar._red,
-                              border: Border.all(color: const Color(0xFF100E09), width: 1),
+                              // Matches the bar's own background (white, was
+                              // near-black to match the old dark bar) so the
+                              // dot still reads as cut into it rather than
+                              // pasted on top.
+                              border: Border.all(
+                                color: BottomNavBar._bg,
+                                width: 1,
+                              ),
                             ),
                           ),
                         ),
@@ -288,7 +340,12 @@ class _NavItem extends StatelessWidget {
               // render on one line.
               FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text(label, softWrap: false, maxLines: 1, style: AppTextStyles.navLabel.copyWith(color: fg)),
+                child: Text(
+                  label,
+                  softWrap: false,
+                  maxLines: 1,
+                  style: AppTextStyles.navLabel.copyWith(color: fg),
+                ),
               ),
             ],
           ),
@@ -316,7 +373,12 @@ class _NavItem extends StatelessWidget {
 /// blur either. Don't reintroduce a `BoxShadow` blur on this widget without
 /// verifying on the exact device that crashed.
 class _ProfileAvatarIcon extends StatelessWidget {
-  const _ProfileAvatarIcon({required this.active, required this.initials, required this.seed, this.imageUrl});
+  const _ProfileAvatarIcon({
+    required this.active,
+    required this.initials,
+    required this.seed,
+    this.imageUrl,
+  });
 
   final bool active;
   final String initials;
@@ -331,16 +393,29 @@ class _ProfileAvatarIcon extends StatelessWidget {
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: active ? BottomNavBar._yel : Colors.white.withValues(alpha: 0.35), width: 1.6),
+        // Same white-to-ink tint flip as _NavItem's inactive icons above,
+        // for the same reason.
+        border: Border.all(
+          color: active
+              ? BottomNavBar._yel
+              : BottomNavBar._ink.withValues(alpha: 0.35),
+          width: 1.6,
+        ),
       ),
-      child: AppAvatar(initials: initials, seed: seed, imageUrl: imageUrl, size: 18, borderWidth: 1),
+      child: AppAvatar(
+        initials: initials,
+        seed: seed,
+        imageUrl: imageUrl,
+        size: 18,
+        borderWidth: 1,
+      ),
     );
   }
 }
 
 /// Paints the active-tab indicator: a short accent line sitting on the
-/// pill's bottom edge under the selected slot, topped with a small
-/// arrowhead that pops up from the line toward that tab's icon.
+/// bar's top edge above the selected slot, topped with a small arrowhead
+/// that pops down from the line toward that tab's icon.
 class _ActiveTabIndicatorPainter extends CustomPainter {
   const _ActiveTabIndicatorPainter({
     required this.selectedCenter,
@@ -357,14 +432,16 @@ class _ActiveTabIndicatorPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     const outerInset = 2.0;
+    // `size.height` is normally just `barHeight` (the CustomPaint is sized
+    // to exactly the icon row's Positioned box, not the bar's full height
+    // with its safe-area filler below) — `barTop` stays here so this still
+    // centers correctly if that ever changes.
     final barTop = (size.height - barHeight) / 2;
-    // Same bottom-edge coordinate the dim full-border underneath sits on,
-    // so this accent line reads as a highlighted segment of it.
-    final bottomY = barTop + barHeight - outerInset;
+    final topY = barTop + outerInset;
 
     final lineHalfWidth = slotWidth * .2;
-    final lineStart = Offset(selectedCenter - lineHalfWidth, bottomY);
-    final lineEnd = Offset(selectedCenter + lineHalfWidth, bottomY);
+    final lineStart = Offset(selectedCenter - lineHalfWidth, topY);
+    final lineEnd = Offset(selectedCenter + lineHalfWidth, topY);
 
     final glowLinePaint = Paint()
       ..color = color.withValues(alpha: .5)
@@ -381,12 +458,13 @@ class _ActiveTabIndicatorPainter extends CustomPainter {
     canvas.drawLine(lineStart, lineEnd, glowLinePaint);
     canvas.drawLine(lineStart, lineEnd, linePaint);
 
-    // Small arrowhead sitting on the line, tip pointing up toward the icon
-    // — base overlaps the line slightly so it reads as popping up out of it.
+    // Small arrowhead sitting on the line, tip pointing down toward the icon
+    // — base overlaps the line slightly so it reads as popping down out of
+    // it.
     const arrowHalfWidth = 5.0;
     const arrowHeight = 6.0;
-    final arrowBaseY = bottomY - 1;
-    final arrowTipY = arrowBaseY - arrowHeight;
+    final arrowBaseY = topY + 1;
+    final arrowTipY = arrowBaseY + arrowHeight;
     final arrowPath = Path()
       ..moveTo(selectedCenter - arrowHalfWidth, arrowBaseY)
       ..lineTo(selectedCenter, arrowTipY)

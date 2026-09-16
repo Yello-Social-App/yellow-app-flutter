@@ -37,10 +37,10 @@ void main() {
   // Regression test for a real bug: `Scaffold.bottomNavigationBar` gives its
   // child a loose height constraint that can be nearly the full body height,
   // and a plain `Row` stretches to fill it instead of shrinking to content
-  // (fixed by wrapping the Row in `IntrinsicHeight`) — the floating pill nav
-  // bar was rendering at full-screen height. Caught via live device testing,
-  // not just code review.
-  testWidgets('stays a compact pill and does not stretch to fill the Scaffold body height', (tester) async {
+  // (fixed by wrapping the Row in `IntrinsicHeight`) — the nav bar was
+  // rendering at full-screen height. Caught via live device testing, not
+  // just code review.
+  testWidgets('stays a compact bar and does not stretch to fill the Scaffold body height', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -52,11 +52,7 @@ void main() {
     );
 
     final size = tester.getSize(find.byType(BottomNavBar));
-    expect(
-      size.height,
-      lessThan(150),
-      reason: 'the floating pill nav bar must stay compact, not stretch to fill the screen',
-    );
+    expect(size.height, lessThan(150), reason: 'the nav bar must stay compact, not stretch to fill the screen');
   });
 
   // Regression test for a real bug: on a narrow phone width, "Signals" and
@@ -90,9 +86,9 @@ void main() {
   });
 
   // Regression test: on a gesture-nav device (nonzero MediaQuery.padding.bottom
-  // — Android's gesture pill, iOS's home indicator), the floating pill nav
-  // bar used to sit under/behind that system UI because its bottom margin
-  // was a plain hardcoded 20, ignoring the device's own safe-area inset.
+  // — Android's gesture pill, iOS's home indicator), the nav bar needs to
+  // grow into that inset (rather than ignoring it) so its icons don't end up
+  // sitting under/behind that system UI.
   testWidgets('grows its bottom margin by the device safe-area inset instead of ignoring it', (tester) async {
     const inset = 40.0;
     // FakeViewPadding is in physical pixels, converted to logical via
@@ -123,11 +119,10 @@ void main() {
     final flatHeight = await pump();
 
     expect(tester.takeException(), isNull);
-    // The bar's bounding box is its own SizedBox (fixed height) plus the
-    // outer Padding's top+bottom — only the bottom side should grow, and by
-    // exactly the simulated inset, so the pill still clears the gesture
-    // area on that device instead of sitting flush under the original
-    // hardcoded 20px margin.
+    // The bar's own SizedBox height is the fixed icon-row height plus the
+    // safe-area inset — only the inset side should grow, and by exactly the
+    // simulated amount, so the bar's ink background still reaches the
+    // physical bottom edge on that device instead of leaving a gap under it.
     expect(insetHeight.height, closeTo(flatHeight.height + inset, 0.5));
   });
 }

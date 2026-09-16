@@ -7,6 +7,9 @@ import 'core/di/injection.dart';
 import 'core/security/root_jailbreak_detector.dart';
 import 'core/security/session_manager.dart';
 import 'core/utils/logger.dart';
+import 'features/chat/data/datasources/user_directory.dart';
+import 'features/chat/presentation/bloc/messages_cubit.dart';
+import 'features/feed/presentation/bloc/feed_cubit.dart';
 
 /// The app's single startup sequence: set app config, wire DI, resolve the
 /// initial session, run the device-integrity check, then hand off to
@@ -30,14 +33,27 @@ Future<void> bootstrap({required String baseUrl}) async {
   // (`UISupportedInterfaceOrientations`, iPhone entry only) so the lock
   // holds from the very first native frame, not just once Flutter takes
   // over.
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
 
   AppConfig.init(baseUrl: baseUrl);
 
   await configureDependencies();
+
+  // Every logout path (see `AuthRepositoryImpl.logout`) ends in
+  // `SessionManager.endSession()` firing this — the one point in the app
+  // that reliably knows the signed-in identity is about to change. Reset
+  // every long-lived, per-account singleton Cubit here rather than at each
+  // logout call site, so a future new one can't forget to do it.
+  sl<SessionManager>().sessionState.listen((state) {
+    if (state == SessionState.unauthenticated) {
+      sl<FeedCubit>().reset();
+      sl<MessagesCubit>().reset();
+      // Chat participant names/avatars are cached per session — dropping
+      // them here stops the next account seeing the previous one's contacts.
+      sl<UserDirectory>().clear();
+    }
+  });
+
   await sl<SessionManager>().bootstrap();
 
   final integrity = await sl<RootJailbreakDetector>().check();

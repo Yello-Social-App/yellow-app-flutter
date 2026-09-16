@@ -4,7 +4,6 @@ import '../../../../core/di/injection.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/usecase/usecase.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
@@ -41,11 +40,16 @@ class _SearchPageState extends State<SearchPage> {
 
   Future<void> _loadCorpus() async {
     final feedResult = await sl<GetFeedUseCase>()(const GetFeedParams());
-    final convoResult = await sl<GetConversationsUseCase>()(const NoParams());
+    final convoResult = await sl<GetConversationsUseCase>()(
+      const CursorParams(),
+    );
     if (!mounted) return;
     setState(() {
       _posts = feedResult.fold((_) => [], (page) => page.posts);
-      _conversations = convoResult.fold((_) => [], (r) => r);
+      _conversations = convoResult.fold(
+        (_) => [],
+        (page) => page.conversations,
+      );
       _loaded = true;
     });
   }
@@ -62,9 +66,18 @@ class _SearchPageState extends State<SearchPage> {
     final q = _query.trim().toLowerCase();
     final matchedPosts = q.isEmpty
         ? const <PostEntity>[]
-        : _posts.where((p) => p.content.toLowerCase().contains(q) || p.authorUsername.toLowerCase().contains(q)).toList();
-    final matchedConvos =
-        q.isEmpty ? const <ConversationEntity>[] : _conversations.where((c) => c.name.toLowerCase().contains(q)).toList();
+        : _posts
+              .where(
+                (p) =>
+                    p.content.toLowerCase().contains(q) ||
+                    p.authorUsername.toLowerCase().contains(q),
+              )
+              .toList();
+    final matchedConvos = q.isEmpty
+        ? const <ConversationEntity>[]
+        : _conversations
+              .where((c) => c.name.toLowerCase().contains(q))
+              .toList();
 
     return Scaffold(
       backgroundColor: colors.bg,
@@ -75,7 +88,10 @@ class _SearchPageState extends State<SearchPage> {
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
               child: Row(
                 children: [
-                  AppIconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.of(context).maybePop()),
+                  AppIconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Container(
@@ -92,7 +108,9 @@ class _SearchPageState extends State<SearchPage> {
                         style: AppTextStyles.hint.copyWith(color: colors.ink),
                         decoration: InputDecoration(
                           hintText: 'Search people, posts',
-                          hintStyle: AppTextStyles.hint.copyWith(color: colors.ink3),
+                          hintStyle: AppTextStyles.hint.copyWith(
+                            color: colors.ink3,
+                          ),
                           border: InputBorder.none,
                         ),
                       ),
@@ -105,53 +123,86 @@ class _SearchPageState extends State<SearchPage> {
               child: !_loaded
                   ? const Center(child: CircularProgressIndicator())
                   : q.isEmpty
-                      ? Center(
-                          child: Text(
-                            'Search what you have already loaded.',
-                            style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
-                          ),
-                        )
-                      : matchedPosts.isEmpty && matchedConvos.isEmpty
-                          ? Center(
-                              child: Text('No matches for "$q"', style: AppTextStyles.bodySm.copyWith(color: colors.ink2)),
-                            )
-                          : ListView(
-                              padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
-                              children: [
-                                if (matchedConvos.isNotEmpty) ...[
-                                  Text('PEOPLE', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
-                                  const SizedBox(height: 8),
-                                  for (final c in matchedConvos)
-                                    ListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      leading: AppAvatar(initials: c.name.initials, seed: c.avatarSeed, size: 40),
-                                      title: Text(c.name, style: AppTextStyles.titleMd.copyWith(color: colors.ink)),
-                                    ),
-                                  const SizedBox(height: 16),
-                                ],
-                                if (matchedPosts.isNotEmpty) ...[
-                                  Text('POSTS', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
-                                  const SizedBox(height: 8),
-                                  for (final p in matchedPosts)
-                                    ListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      leading: AppAvatar(
-                                        initials: p.authorUsername.initials,
-                                        seed: avatarSeedForId(p.authorId),
-                                        imageUrl: p.authorAvatarUrl,
-                                        size: 40,
-                                      ),
-                                      title: Text('@${p.authorUsername}', style: AppTextStyles.titleMd.copyWith(color: colors.ink)),
-                                      subtitle: Text(
-                                        p.content,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
-                                      ),
-                                    ),
-                                ],
-                              ],
+                  ? Center(
+                      child: Text(
+                        'Search what you have already loaded.',
+                        style: AppTextStyles.bodySm.copyWith(
+                          color: colors.ink2,
+                        ),
+                      ),
+                    )
+                  : matchedPosts.isEmpty && matchedConvos.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No matches for "$q"',
+                        style: AppTextStyles.bodySm.copyWith(
+                          color: colors.ink2,
+                        ),
+                      ),
+                    )
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
+                      children: [
+                        if (matchedConvos.isNotEmpty) ...[
+                          Text(
+                            'PEOPLE',
+                            style: AppTextStyles.eyebrow.copyWith(
+                              color: colors.ink2,
                             ),
+                          ),
+                          const SizedBox(height: 8),
+                          for (final c in matchedConvos)
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: AppAvatar(
+                                initials: c.name.initials,
+                                seed: c.avatarSeed,
+                                size: 40,
+                              ),
+                              title: Text(
+                                c.name,
+                                style: AppTextStyles.titleMd.copyWith(
+                                  color: colors.ink,
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 16),
+                        ],
+                        if (matchedPosts.isNotEmpty) ...[
+                          Text(
+                            'POSTS',
+                            style: AppTextStyles.eyebrow.copyWith(
+                              color: colors.ink2,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          for (final p in matchedPosts)
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: AppAvatar(
+                                initials: p.authorUsername.initials,
+                                seed: avatarSeedForId(p.authorId),
+                                imageUrl: p.authorAvatarUrl,
+                                size: 40,
+                              ),
+                              title: Text(
+                                '@${p.authorUsername}',
+                                style: AppTextStyles.titleMd.copyWith(
+                                  color: colors.ink,
+                                ),
+                              ),
+                              subtitle: Text(
+                                p.content,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.bodySm.copyWith(
+                                  color: colors.ink2,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
             ),
           ],
         ),

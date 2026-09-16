@@ -70,6 +70,14 @@ class ReactorsCubit extends Cubit<ReactorsState> {
     final result = await _getReactors(
       GetReactorsParams(targetType: _targetType, targetId: _targetId, type: _type, page: 0),
     );
+    // The sheet this cubit backs (`showReactorsSheet`) can be popped —
+    // e.g. tapping a reactor row navigates to their profile and pops this
+    // sheet in the same gesture (see `reactors_sheet.dart`'s row `onTap`) —
+    // before this request resolves. `BlocProvider` closes the cubit the
+    // moment that pop removes it from the tree, so without this guard the
+    // `emit` below fires on an already-closed cubit and throws
+    // `StateError: Cannot emit new states after calling close`.
+    if (isClosed) return;
     result.fold(
       (failure) => emit(state.copyWith(status: ReactorsStatus.error, errorMessage: failure.message)),
       (page) =>
@@ -88,6 +96,10 @@ class ReactorsCubit extends Cubit<ReactorsState> {
     final result = await _getReactors(
       GetReactorsParams(targetType: _targetType, targetId: _targetId, type: _type, page: nextPage),
     );
+    // Same closed-sheet race as `load()` above — a near-bottom scroll can
+    // kick this off right before a row tap pops the sheet and closes this
+    // cubit out from under the still-in-flight request.
+    if (isClosed) return;
     result.fold(
       (failure) => emit(state.copyWith(status: ReactorsStatus.loaded, errorMessage: failure.message)),
       (page) => emit(

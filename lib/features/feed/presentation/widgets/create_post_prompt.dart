@@ -28,6 +28,10 @@ class CreatePostPrompt extends StatelessWidget {
     return Material(
       color: colors.surf,
       borderRadius: BorderRadius.circular(AppRadii.pill),
+      // Floats above the now-flat-white page background — see PostCard's
+      // matching shadow for why.
+      elevation: 3,
+      shadowColor: colors.ink.withValues(alpha: 0.15),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppRadii.pill),

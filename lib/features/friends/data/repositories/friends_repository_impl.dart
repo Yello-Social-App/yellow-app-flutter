@@ -32,8 +32,17 @@ class FriendsRepositoryImpl implements FriendsRepository {
       });
 
   @override
-  Future<Either<Failure, FriendsPage>> getRequests({int page = 0}) => _run(() async {
-        final result = await _remote.getRequests(page: page);
+  Future<Either<Failure, FriendsPage>> getRequests({int page = 0, bool sent = false}) => _run(() async {
+        final result = await _remote.getRequests(
+          page: page,
+          direction: sent ? RequestDirection.sent : RequestDirection.received,
+        );
+        return FriendsPage(friendships: result.items, hasMore: result.hasMore);
+      });
+
+  @override
+  Future<Either<Failure, FriendsPage>> getBlocked({int page = 0}) => _run(() async {
+        final result = await _remote.getBlocked(page: page);
         return FriendsPage(friendships: result.items, hasMore: result.hasMore);
       });
 
@@ -41,13 +50,22 @@ class FriendsRepositoryImpl implements FriendsRepository {
   Future<Either<Failure, void>> sendRequest(String userId) => _run(() => _remote.sendRequest(userId));
 
   @override
-  Future<Either<Failure, FriendshipEntity>> acceptRequest(String requestId) =>
-      _run(() => _remote.acceptRequest(requestId));
+  Future<Either<Failure, void>> cancelRequest(String userId) => _run(() => _remote.cancelRequest(userId));
 
   @override
-  Future<Either<Failure, void>> declineRequest(String requestId) =>
-      _run(() => _remote.declineRequest(requestId));
+  Future<Either<Failure, FriendshipEntity>> acceptRequest(String userId) =>
+      _run(() => _remote.acceptRequest(userId));
+
+  @override
+  Future<Either<Failure, void>> declineRequest(String userId) => _run(() => _remote.declineRequest(userId));
 
   @override
   Future<Either<Failure, void>> unfriend(String userId) => _run(() => _remote.unfriend(userId));
+
+  @override
+  Future<Either<Failure, FriendshipEntity>> blockUser(String userId) => _run(() => _remote.blockUser(userId));
+
+  @override
+  Future<Either<Failure, FriendshipEntity>> unblockUser(String userId) =>
+      _run(() => _remote.unblockUser(userId));
 }

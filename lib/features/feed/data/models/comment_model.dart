@@ -29,4 +29,22 @@ class CommentModel extends CommentEntity {
       viewerReaction: json['viewerReaction'] as String?,
     );
   }
+
+  /// Parses one top-level `CommentResponse` *and* flattens its nested
+  /// `replies` (an array of full `CommentResponse` objects, per the
+  /// `/posts/{id}/comments` schema) into the same flat list — the rest of
+  /// this app (`PostDetailCubit`/`post_detail_page.dart`'s `_Loaded`) models
+  /// comments as one flat list where a reply is just identified by its own
+  /// `parentCommentId` (Facebook-style 2-level grouping), so this is where
+  /// the backend's nested shape gets flattened to match. Without this, every
+  /// reply the backend nests under a top-level comment is silently dropped —
+  /// only the top-level comments in the page's `content` array would ever
+  /// reach the UI.
+  static List<CommentModel> withRepliesFromJson(Map<String, dynamic> json) {
+    final replies = (json['replies'] as List<dynamic>?) ?? const [];
+    return [
+      CommentModel.fromJson(json),
+      for (final reply in replies) CommentModel.fromJson(reply as Map<String, dynamic>),
+    ];
+  }
 }

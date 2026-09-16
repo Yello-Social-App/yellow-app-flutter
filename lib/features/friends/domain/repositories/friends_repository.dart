@@ -10,12 +10,28 @@ class FriendsPage {
 }
 
 /// Domain-facing contract for the Circle tab, backed by
-/// `dev.yello-api.cachewraith.com`'s `/friends` resource.
+/// `api.yello.cachewraith.com`'s `/friends` resource.
+///
+/// Every method that names a user takes the **other user's id**. The API has
+/// no friendship-row id — see [FriendshipEntity.id].
 abstract interface class FriendsRepository {
   Future<Either<Failure, FriendsPage>> getFriends({int page = 0});
-  Future<Either<Failure, FriendsPage>> getRequests({int page = 0});
+
+  /// Pending requests you received. Pass `sent: true` for the outgoing list.
+  Future<Either<Failure, FriendsPage>> getRequests({int page = 0, bool sent = false});
+
+  /// Users you have blocked.
+  Future<Either<Failure, FriendsPage>> getBlocked({int page = 0});
+
   Future<Either<Failure, void>> sendRequest(String userId);
-  Future<Either<Failure, FriendshipEntity>> acceptRequest(String requestId);
-  Future<Either<Failure, void>> declineRequest(String requestId);
+
+  /// Withdraws a request you sent.
+  Future<Either<Failure, void>> cancelRequest(String userId);
+
+  Future<Either<Failure, FriendshipEntity>> acceptRequest(String userId);
+  Future<Either<Failure, void>> declineRequest(String userId);
   Future<Either<Failure, void>> unfriend(String userId);
+
+  Future<Either<Failure, FriendshipEntity>> blockUser(String userId);
+  Future<Either<Failure, FriendshipEntity>> unblockUser(String userId);
 }

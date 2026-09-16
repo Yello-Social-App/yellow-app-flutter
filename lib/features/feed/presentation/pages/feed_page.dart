@@ -11,6 +11,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
+import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/error_view.dart';
 import '../../../../shared/widgets/shimmer_loading.dart';
 import '../../../../shared/widgets/yello_wordmark.dart';
@@ -79,6 +80,12 @@ class _FeedViewState extends State<_FeedView> {
       body: SafeArea(
         bottom: false,
         child: BlocBuilder<FeedCubit, FeedState>(
+          buildWhen: (previous, current) =>
+              previous.status != current.status ||
+              previous.posts != current.posts ||
+              previous.stories != current.stories ||
+              previous.errorMessage != current.errorMessage ||
+              previous.me != current.me,
           builder: (context, state) {
             return NotificationListener<ScrollUpdateNotification>(
               onNotification: (n) {
@@ -110,9 +117,11 @@ class _FeedViewState extends State<_FeedView> {
                       SliverPadding(
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         sliver: SliverToBoxAdapter(
-                          child: ErrorView(
-                            message: state.errorMessage ?? 'Could not load your feed.',
-                            onRetry: cubit.refresh,
+                          child: Center(
+                            child: ErrorView(
+                              message: state.errorMessage ?? 'Could not load your feed.',
+                              onRetry: cubit.refresh,
+                            ),
                           ),
                         ),
                       )
@@ -145,33 +154,10 @@ class _FeedViewState extends State<_FeedView> {
                         sliver: SliverList.separated(
                           itemCount: state.posts.length,
                           separatorBuilder: (_, _) => const SizedBox.shrink(),
-                          itemBuilder: (context, index) {
-                            final post = state.posts[index];
-                            return PostCard(
-                              post: post,
-                              onOpen: () =>
-                                  context.pushNamed(RouteNames.postDetail, pathParameters: {'postId': post.id}),
-                              onLike: () => cubit.toggleLike(post),
-                              onReact: (type) => cubit.react(post, type),
-                              onSave: () => cubit.toggleSave(post.id),
-                              onRepost: () => cubit.toggleRepost(post),
-                              onMore: () => _showFeedPostMenu(context, cubit, state, post),
-                            );
-                          },
+                          itemBuilder: (context, index) => _FeedPostCard(postId: state.posts[index].id, cubit: cubit),
                         ),
                       ),
-                      if (state.isLoadingMore)
-                        const SliverPadding(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          sliver: SliverToBoxAdapter(child: Center(child: CircularProgressIndicator())),
-                        )
-                      else if (!state.hasMore)
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
-                          sliver: const SliverToBoxAdapter(
-                            child: EmptyStateCard(title: 'CAUGHT UP', hint: "You've seen everything from today."),
-                          ),
-                        ),
+                      const _PaginationFooter(),
                     ],
                   ],
                 ),
@@ -182,6 +168,55 @@ class _FeedViewState extends State<_FeedView> {
       ),
     );
   }
+}
+
+/// Wraps one feed card in its own [BlocSelector], scoped to just this post
+/// (by id) rather than [FeedState.posts] as a whole — the outer
+/// `BlocBuilder<FeedCubit, FeedState>` above already rebuilds this sliver's
+/// `itemBuilder` on *any* post's like/react/repost/save (`FeedCubit._replace`
+/// creates a new `List` every time — see that builder's `buildWhen`), which
+/// would otherwise rebuild every currently-visible [PostCard], not just the
+/// one that changed. [PostEntity] is `Equatable`, so [BlocSelector] only
+/// re-invokes [builder] — reconstructing the actual (heavier) [PostCard]
+/// subtree — when *this* post's own fields actually differ from last time.
+class _FeedPostCard extends StatelessWidget {
+  const _FeedPostCard({required this.postId, required this.cubit});
+
+  final String postId;
+  final FeedCubit cubit;
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocSelector<FeedCubit, FeedState, PostEntity?>(
+      selector: (state) => _findPost(state.posts, postId),
+      builder: (context, post) {
+        // Only transiently null: between this post being removed from
+        // `FeedState.posts` (delete/repost-cancel) and this item's own
+        // slot disappearing from the list on the next build.
+        if (post == null) return const SizedBox.shrink();
+        return PostCard(
+          post: post,
+          onOpen: () => context.pushNamed(RouteNames.postDetail, pathParameters: {'postId': post.id}),
+          onLike: () => cubit.toggleLike(post),
+          onReact: (type) => cubit.react(post, type),
+          onSave: () => cubit.toggleSave(post.id),
+          onRepost: () => cubit.toggleRepost(post),
+          // Reads `cubit.state` at tap time rather than closing over the
+          // `FeedState` this widget was built with, so the menu's
+          // `isOwnPost` check (via `state.me`) can't go stale relative to
+          // this scoped-down widget's own narrower rebuild triggers.
+          onMore: () => _showFeedPostMenu(context, cubit, cubit.state, post),
+        );
+      },
+    );
+  }
+}
+
+PostEntity? _findPost(List<PostEntity> posts, String id) {
+  for (final p in posts) {
+    if (p.id == id) return p;
+  }
+  return null;
 }
 
 /// Feed card's own "···" — opens the same options sheet the post detail
@@ -212,19 +247,23 @@ Future<void> _copyFeedPostLink(BuildContext context, FeedCubit cubit, String pos
   final url = await cubit.getShareLink(postId);
   if (!context.mounted) return;
   if (url == null) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not get a share link.')));
+    AppStatusSnackbar.showError(context, message: 'Could not get a share link.');
     return;
   }
   await Clipboard.setData(ClipboardData(text: url));
   if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link copied to clipboard.')));
+  AppStatusSnackbar.showSuccess(context, message: 'Link copied to clipboard.');
 }
 
 Future<void> _confirmDeleteFeedPost(BuildContext context, FeedCubit cubit, String postId) async {
   if (!await confirmDeletePost(context)) return;
   final ok = await cubit.deletePost(postId);
   if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Post deleted.' : 'Could not delete post.')));
+  if (ok) {
+    AppStatusSnackbar.showSuccess(context, message: 'Post deleted.');
+  } else {
+    AppStatusSnackbar.showError(context, message: 'Could not delete post.');
+  }
 }
 
 /// Plain, ordinary (non-sticky) date row sitting directly above
@@ -338,6 +377,44 @@ class _FeedAppBar extends StatelessWidget {
         ),
         const SizedBox(width: 14),
       ],
+    );
+  }
+}
+
+/// Pagination footer sliver ("loading more" spinner / "caught up" card),
+/// split out of the main `BlocBuilder<FeedCubit, FeedState>` above into its
+/// own `BlocSelector` scoped to just `isLoadingMore`/`hasMore`. The
+/// in-flight flag `FeedCubit.loadMore()` flips mid-scroll (fired off the
+/// `NotificationListener<ScrollUpdateNotification>` above as the list nears
+/// its bottom) now only rebuilds this small sliver instead of the whole
+/// pinned app bar/stories rail/post-list tree above it — see the outer
+/// `BlocBuilder`'s `buildWhen`, which deliberately excludes these two
+/// fields since this widget owns them instead.
+class _PaginationFooter extends StatelessWidget {
+  const _PaginationFooter();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocSelector<FeedCubit, FeedState, (bool, bool)>(
+      selector: (state) => (state.isLoadingMore, state.hasMore),
+      builder: (context, s) {
+        final (isLoadingMore, hasMore) = s;
+        if (isLoadingMore) {
+          return const SliverPadding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            sliver: SliverToBoxAdapter(child: Center(child: CircularProgressIndicator())),
+          );
+        }
+        if (!hasMore) {
+          return const SliverPadding(
+            padding: EdgeInsets.fromLTRB(14, 0, 14, 24),
+            sliver: SliverToBoxAdapter(
+              child: EmptyStateCard(title: 'CAUGHT UP', hint: "You've seen everything from today."),
+            ),
+          );
+        }
+        return const SliverToBoxAdapter(child: SizedBox.shrink());
+      },
     );
   }
 }

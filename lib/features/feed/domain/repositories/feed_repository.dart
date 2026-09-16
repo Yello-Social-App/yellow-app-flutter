@@ -33,7 +33,7 @@ class ReactorsPage {
 }
 
 /// Domain-facing contract for everything the Home/Feed tab needs. Backed by
-/// the real `dev.yello-api.cachewraith.com` API for posts/comments/
+/// the real `api.yello.cachewraith.com` API for posts/comments/
 /// reactions/reposts; stories have no backend endpoint at all and are
 /// served locally (see `StoryLocalDataSource`); "save" likewise has no
 /// backend endpoint and is a device-local bookmark (`BookmarksLocalDataSource`).

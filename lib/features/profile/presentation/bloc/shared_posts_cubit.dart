@@ -70,6 +70,10 @@ class SharedPostsCubit extends Cubit<SharedPostsState> {
     emit(state.copyWith(status: SharedPostsStatus.loading));
 
     final meResult = await _getMe(const NoParams());
+    // This screen is pushed/popped like `PostDetailCubit`/`PublicProfileCubit`
+    // — a pop while this chain is in flight closes this factory cubit before
+    // it resolves. Same guard `ReactorsCubit.load()` documents.
+    if (isClosed) return;
     if (meResult.isLeft()) {
       emit(state.copyWith(status: SharedPostsStatus.error, errorMessage: meResult.fold((l) => l.message, (_) => null)));
       return;
@@ -77,8 +81,10 @@ class SharedPostsCubit extends Cubit<SharedPostsState> {
     final me = meResult.fold((_) => null, (r) => r)!;
 
     await _seedMyRepostIds(me.id);
+    if (isClosed) return;
 
     final postsResult = await _getUserPosts(GetUserPostsParams(userId: me.id));
+    if (isClosed) return;
     postsResult.fold(
       (failure) => emit(state.copyWith(status: SharedPostsStatus.error, errorMessage: failure.message)),
       (page) => emit(
@@ -92,6 +98,7 @@ class SharedPostsCubit extends Cubit<SharedPostsState> {
 
   Future<void> toggleLike(PostEntity post) async {
     final result = await _likePost(post);
+    if (isClosed) return;
     result.fold((_) {}, (updated) => _replace(post.id, (_) => updated));
   }
 
@@ -99,11 +106,13 @@ class SharedPostsCubit extends Cubit<SharedPostsState> {
   /// reaction-picker path (see [toggleLike] for the plain single-tap path).
   Future<void> react(PostEntity post, ReactionType type) async {
     final result = await _reactToPost(ReactToPostParams(post: post, type: type));
+    if (isClosed) return;
     result.fold((_) {}, (updated) => _replace(post.id, (_) => updated));
   }
 
   Future<void> toggleSave(String postId) async {
     final result = await _toggleSave(PostIdParams(postId));
+    if (isClosed) return;
     result.fold((_) {}, (saved) => _replace(postId, (p) => p.copyWith(savedByMe: saved)));
   }
 
@@ -145,12 +154,14 @@ class SharedPostsCubit extends Cubit<SharedPostsState> {
         final myRepostId = _myRepostIds[post.id];
         if (myRepostId == null) return;
         final result = await _deletePost(myRepostId);
+        if (isClosed) return;
         result.fold((_) {}, (_) {
           _myRepostIds.remove(post.id);
           _replace(post.id, (p) => p.copyWith(repostCount: p.repostCount - 1, repostedByMe: false));
         });
       } else {
         final result = await _repost(RepostParams(postId: post.id));
+        if (isClosed) return;
         result.fold((_) {}, (newPost) {
           _myRepostIds[post.id] = newPost.id;
           _replace(post.id, (p) => p.copyWith(repostCount: p.repostCount + 1, repostedByMe: true));

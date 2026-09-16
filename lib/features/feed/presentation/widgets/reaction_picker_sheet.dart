@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../domain/entities/post_entity.dart';
 
 /// Opens the long-press reaction picker — a row of the 6 backend reaction
@@ -55,8 +56,9 @@ Future<ReactionType?> showReactionPicker(BuildContext context, {ReactionType? cu
                   onTap: () {
                     Navigator.of(sheetContext).pop();
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Sent 🖕 into the void — nobody else can see this one.')),
+                      AppStatusSnackbar.showSuccess(
+                        context,
+                        message: 'Sent 🖕 into the void — nobody else can see this one.',
                       );
                     }
                   },

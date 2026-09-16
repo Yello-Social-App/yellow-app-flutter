@@ -232,9 +232,17 @@ class _LoginViewState extends State<_LoginView> {
     return SizedBox(width: 20, height: 20, child: CustomPaint(painter: _GoogleGPainter()));
   }
 
+  /// Two steps in one sheet, same convention as `register_page.dart`'s
+  /// `_DetailsCard`/`_OtpCard` swap: email → `forgotPassword` → code +
+  /// new password → `submitPasswordReset` (verify-otp then reset-password
+  /// under the hood — see that method's doc). [AuthCubit.reset] first so a
+  /// previous, uncompleted attempt never leaves this reopening straight on
+  /// step 2.
   void _showForgotPasswordSheet(BuildContext context) {
-    final controller = TextEditingController();
-    final cubit = context.read<AuthCubit>();
+    final emailController = TextEditingController();
+    final codeController = TextEditingController();
+    final newPasswordController = TextEditingController();
+    final cubit = context.read<AuthCubit>()..reset();
     final colors = AppColors.of(context);
     showModalBottomSheet<void>(
       context: context,
@@ -252,13 +260,75 @@ class _LoginViewState extends State<_LoginView> {
           child: BlocProvider.value(
             value: cubit,
             child: BlocConsumer<AuthCubit, AuthState>(
+              listenWhen: (prev, curr) =>
+                  curr.status != prev.status ||
+                  curr.errorMessage != prev.errorMessage ||
+                  curr.infoMessage != prev.infoMessage,
               listener: (context, state) {
-                if (state.status == AuthStatus.resetEmailSent) {
+                if (state.status == AuthStatus.passwordResetDone) {
                   Navigator.of(sheetContext).pop();
-                  AppStatusSnackbar.showSuccess(this.context, message: 'Check your email for a reset link.');
+                  AppStatusSnackbar.showSuccess(this.context, message: 'Password changed — sign in below.');
+                  cubit.reset();
+                } else if (state.errorMessage != null) {
+                  AppStatusSnackbar.showError(this.context, message: state.errorMessage!);
+                } else if (state.infoMessage != null) {
+                  AppStatusSnackbar.showSuccess(this.context, message: state.infoMessage!);
                 }
               },
               builder: (context, state) {
+                if (state.status == AuthStatus.resetEmailSent) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('Enter your code', style: AppTextStyles.titleLg.copyWith(color: colors.ink)),
+                      const SizedBox(height: 6),
+                      Text(
+                        'We sent a 6-digit code to ${state.pendingEmail}. Enter it below with your new password.',
+                        style: AppTextStyles.bodySm.copyWith(color: colors.ink2, fontSize: 13),
+                      ),
+                      const SizedBox(height: 16),
+                      AuthFormField(
+                        label: 'Verification code',
+                        controller: codeController,
+                        keyboardType: TextInputType.number,
+                        leadingIcon: Icons.password_outlined,
+                      ),
+                      const SizedBox(height: 12),
+                      AuthFormField(
+                        label: 'New password',
+                        controller: newPasswordController,
+                        obscureText: true,
+                        leadingIcon: Icons.lock_outline,
+                      ),
+                      const SizedBox(height: 16),
+                      AppButton(
+                        label: state.isProcessing ? 'Resetting…' : 'Reset password',
+                        fullWidth: true,
+                        onPressed: state.isProcessing
+                            ? null
+                            : () => cubit.submitPasswordReset(
+                                code: codeController.text,
+                                newPassword: newPasswordController.text,
+                              ),
+                      ),
+                      const SizedBox(height: 12),
+                      Center(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: state.isProcessing ? null : cubit.resendOtp,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                            child: Text(
+                              "Didn't get a code? Resend",
+                              style: AppTextStyles.bodySm.copyWith(color: colors.ink2, fontSize: 13),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -267,15 +337,15 @@ class _LoginViewState extends State<_LoginView> {
                     const SizedBox(height: 16),
                     AuthFormField(
                       label: 'Email',
-                      controller: controller,
+                      controller: emailController,
                       keyboardType: TextInputType.emailAddress,
                       leadingIcon: Icons.mail_outline,
                     ),
                     const SizedBox(height: 16),
                     AppButton(
-                      label: state.isSubmitting ? 'Sending…' : 'Send reset link',
+                      label: state.isSubmitting ? 'Sending…' : 'Send reset code',
                       fullWidth: true,
-                      onPressed: state.isSubmitting ? null : () => cubit.forgotPassword(controller.text),
+                      onPressed: state.isSubmitting ? null : () => cubit.forgotPassword(emailController.text),
                     ),
                   ],
                 );

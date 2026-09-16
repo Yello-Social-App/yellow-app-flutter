@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -16,8 +17,7 @@ const List<(Color bg, Color fg)> kAvatarPalette = [
   (Color(0xFF211E16), Color(0xFFF7F5F0)),
 ];
 
-(Color bg, Color fg) avatarColorsForSeed(int seed) =>
-    kAvatarPalette[seed % kAvatarPalette.length];
+(Color bg, Color fg) avatarColorsForSeed(int seed) => kAvatarPalette[seed % kAvatarPalette.length];
 
 /// Deterministic palette index for a real backend id/username: the backend
 /// has no "avatar color" concept, so real users get a stable pseudo-random
@@ -72,17 +72,20 @@ class AppAvatar extends StatelessWidget {
         color: bg,
         border: Border.all(color: colors.ink, width: borderWidth),
         image: hasImage
-            ? DecorationImage(image: NetworkImage(imageUrl!), fit: BoxFit.cover)
+            ? DecorationImage(
+                image: ResizeImage(
+                  CachedNetworkImageProvider(imageUrl!),
+                  width: (size * MediaQuery.devicePixelRatioOf(context)).round(),
+                ),
+                fit: BoxFit.cover,
+              )
             : null,
       ),
       child: hasImage
           ? null
           : Text(
               initials,
-              style: AppTextStyles.titleSm.copyWith(
-                color: fg,
-                fontSize: size * 0.30,
-              ),
+              style: AppTextStyles.titleSm.copyWith(color: fg, fontSize: size * 0.30),
             ),
     );
 

@@ -22,6 +22,17 @@ class RegistrationResponse {
   final String message;
 }
 
+/// A raw `VerifyOtpResponse` — the backend discriminates on [purpose]
+/// rather than sending one fixed shape: a `REGISTER`-purpose account gets
+/// a session [tokens] pair, a `RESET_PASSWORD`-purpose one gets a one-time
+/// [resetToken] instead. Exactly one of the two is non-null.
+class VerifyOtpResult {
+  const VerifyOtpResult({required this.purpose, this.tokens, this.resetToken});
+  final String purpose;
+  final TokenPair? tokens;
+  final String? resetToken;
+}
+
 abstract interface class AuthRemoteDataSource {
   Future<RegistrationResponse> register({
     required String email,
@@ -29,7 +40,12 @@ abstract interface class AuthRemoteDataSource {
     required String username,
     String? fullName,
   });
-  Future<TokenPair> verifyOtp({required String email, required String code});
+  Future<VerifyOtpResult> verifyOtp({required String email, required String code});
+
+  /// `POST /auth/resend-otp` — re-sends whichever code the account
+  /// currently needs (registration or password-reset); always resolves,
+  /// even for an unknown email (see `AuthRepository.resendOtp` doc).
+  Future<void> resendOtp(String email);
   Future<TokenPair> login({required String email, required String password});
   Future<void> logout();
   Future<void> forgotPassword(String email);
@@ -48,63 +64,61 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     required String password,
     required String username,
     String? fullName,
-  }) =>
-      _guard(() async {
-        final res = await _dio.post<Map<String, dynamic>>(
-          VersionedEndpoints.register(),
-          data: {
-            'email': email,
-            'password': password,
-            'username': username,
-            if (fullName != null) 'fullName': fullName,
-          },
-        );
-        final data = ApiEnvelope.data(res);
-        return RegistrationResponse(
-          userId: data['userId'] as String,
-          email: data['email'] as String,
-          message: data['message'] as String? ?? '',
-        );
-      });
+  }) => _guard(() async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      VersionedEndpoints.register(),
+      data: {'email': email, 'password': password, 'username': username, 'fullName': ?fullName},
+    );
+    final data = ApiEnvelope.data(res);
+    return RegistrationResponse(
+      userId: data['userId'] as String,
+      email: data['email'] as String,
+      message: data['message'] as String? ?? '',
+    );
+  });
 
   @override
-  Future<TokenPair> verifyOtp({required String email, required String code}) => _guard(() async {
-        final res = await _dio.post<Map<String, dynamic>>(
-          VersionedEndpoints.verifyOtp(),
-          data: {'email': email, 'code': code},
-        );
-        return _toTokenPair(ApiEnvelope.data(res));
-      });
+  Future<VerifyOtpResult> verifyOtp({required String email, required String code}) => _guard(() async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      VersionedEndpoints.verifyOtp(),
+      data: {'email': email, 'code': code},
+    );
+    final data = ApiEnvelope.data(res);
+    final purpose = data['purpose'] as String;
+    return VerifyOtpResult(
+      purpose: purpose,
+      tokens: purpose == 'REGISTER' ? _toTokenPair(data) : null,
+      resetToken: purpose == 'RESET_PASSWORD' ? data['resetToken'] as String? : null,
+    );
+  });
+
+  @override
+  Future<void> resendOtp(String email) =>
+      _guard(() => _dio.post<void>(VersionedEndpoints.resendOtp(), data: {'email': email}));
 
   @override
   Future<TokenPair> login({required String email, required String password}) => _guard(() async {
-        final res = await _dio.post<Map<String, dynamic>>(
-          VersionedEndpoints.login(),
-          data: {'email': email, 'password': password},
-        );
-        return _toTokenPair(ApiEnvelope.data(res));
-      });
+    final res = await _dio.post<Map<String, dynamic>>(
+      VersionedEndpoints.login(),
+      data: {'email': email, 'password': password},
+    );
+    return _toTokenPair(ApiEnvelope.data(res));
+  });
 
-  TokenPair _toTokenPair(Map<String, dynamic> json) => TokenPair(
-        accessToken: json['accessToken'] as String,
-        refreshToken: json['refreshToken'] as String,
-      );
+  TokenPair _toTokenPair(Map<String, dynamic> json) =>
+      TokenPair(accessToken: json['accessToken'] as String, refreshToken: json['refreshToken'] as String);
 
   @override
   Future<void> logout() => _guard(() => _dio.post<void>(VersionedEndpoints.logout()));
 
   @override
-  Future<void> forgotPassword(String email) => _guard(
-        () => _dio.post<void>(VersionedEndpoints.forgotPassword(), data: {'email': email}),
-      );
+  Future<void> forgotPassword(String email) =>
+      _guard(() => _dio.post<void>(VersionedEndpoints.forgotPassword(), data: {'email': email}));
 
   @override
   Future<void> resetPassword({required String token, required String newPassword}) => _guard(
-        () => _dio.post<void>(
-          VersionedEndpoints.resetPassword(),
-          data: {'token': token, 'newPassword': newPassword},
-        ),
-      );
+    () => _dio.post<void>(VersionedEndpoints.resetPassword(), data: {'token': token, 'newPassword': newPassword}),
+  );
 
   Future<T> _guard<T>(Future<T> Function() body) async {
     try {

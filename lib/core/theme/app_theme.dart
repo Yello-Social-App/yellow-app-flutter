@@ -74,6 +74,19 @@ abstract final class AppTheme {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
       ),
+      // Material 3 defaults every modal bottom sheet to a 640px max width,
+      // centering it with the scaffold background showing as gutters on
+      // either side once the viewport exceeds that. This app already has its
+      // own single width-capping mechanism for wide viewports
+      // (`ResponsiveContent`, capped at `AppBreakpoints.maxContentWidth` =
+      // 600 — see `shared/widgets/responsive_content.dart`), so a second,
+      // wider, Material-chosen cap here only fights that between 600-640px
+      // (e.g. an unfolded foldable's ~673px-wide inner screen still hits it)
+      // and makes every bottom sheet in the app (`showReactionBreakdownSheet`,
+      // `showReactorsSheet`, `showPostOptionsSheet`, etc. — all designed
+      // full-bleed) render narrower than the design intends. Remove the cap
+      // here so `ResponsiveContent` stays the one source of truth.
+      bottomSheetTheme: const BottomSheetThemeData(constraints: BoxConstraints()),
       iconTheme: IconThemeData(color: colors.ink),
       extensions: [colors],
     );

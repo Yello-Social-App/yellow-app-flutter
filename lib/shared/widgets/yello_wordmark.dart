@@ -51,9 +51,15 @@ import 'package:google_fonts/google_fonts.dart';
 /// pixels 1:1, which is the standard assumption but not something this
 /// sandbox can actually confirm renders at the intended size/weight.
 class YelloWordmark extends StatelessWidget {
-  const YelloWordmark({super.key, this.fontSize = 52});
+  const YelloWordmark({super.key, this.fontSize = 52, this.text = 'yello'});
 
   final double fontSize;
+
+  /// The word this mark draws. Defaults to the literal brand wordmark
+  /// ('yello'); other screens (Signals, Inbox) pass their own page title
+  /// here to get the same bold stroked-fill + dot brand treatment instead
+  /// of duplicating the stroke/fill `Stack` for each one.
+  final String text;
 
   static const _fill = Color(0xFFF4C542);
   static const _ink = Color(0xFF14120C);
@@ -63,12 +69,6 @@ class YelloWordmark extends StatelessWidget {
   static const _strokeWidthRatio = 5.0 / 52;
   static const _dotDiameterRatio = 16.4 / 52;
   static const _gapRatio = 4.1 / 52;
-  // Geist Black's descent as a fraction of font size (measured off an
-  // earlier raster build; independent of line-height, so still applies at
-  // any size) — shifts the dot up from a plain bottom-aligned Row so its
-  // bottom edge lines up with the text baseline instead of the deeper
-  // bottom of the "y"'s descender.
-  static const _descentRatio = 0.1575;
 
   @override
   Widget build(BuildContext context) {
@@ -93,7 +93,7 @@ class YelloWordmark extends StatelessWidget {
           children: [
             // Stroke painted first (behind) ...
             Text(
-              'yello',
+              text,
               style: base.copyWith(
                 foreground: Paint()
                   ..style = PaintingStyle.stroke
@@ -105,7 +105,7 @@ class YelloWordmark extends StatelessWidget {
             // ... fill painted second (in front, `paint-order: stroke
             // fill`), covering the inner half of the stroke so only a
             // ~2.5px-at-52px outer ring remains visible.
-            Text('yello', style: base.copyWith(color: _fill)),
+            Text(text, style: base.copyWith(color: _fill)),
           ],
         ),
         SizedBox(width: gap),
