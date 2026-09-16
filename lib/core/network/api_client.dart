@@ -26,6 +26,12 @@ class ApiClient {
     required NetworkInfo networkInfo,
     required TokenRefreshService tokenRefreshService,
   }) : dio = Dio(
+          // No `X-Api-Version` header: the backend takes its version from
+          // the URL path segment (see [EndpointResolver]) and ignores the
+          // header entirely. It is also absent from the server's
+          // `CORS_ALLOWED_ORIGINS` allow-list (Accept, Authorization,
+          // Content-Type, X-Requested-With), so sending it would fail
+          // preflight for any browser client sharing this contract.
           BaseOptions(
             baseUrl: AppConfig.baseUrl,
             connectTimeout: ApiConstants.connectTimeout,
@@ -33,7 +39,6 @@ class ApiClient {
             sendTimeout: ApiConstants.sendTimeout,
             headers: {
               ApiConstants.headerContentType: ApiConstants.contentTypeJson,
-              ApiConstants.headerApiVersion: 'v2',
             },
           ),
         ) {

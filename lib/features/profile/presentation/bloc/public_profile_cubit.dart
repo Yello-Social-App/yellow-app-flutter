@@ -38,9 +38,14 @@ class PublicProfileState extends Equatable {
   final List<PostEntity> posts;
   final FriendStatus friendStatus;
 
-  /// Set only when [friendStatus] is [FriendStatus.incomingRequest] — the
-  /// friendship id `AcceptFriendRequestUseCase`/`DeclineFriendRequestUseCase`
-  /// need, not the same as [user]'s id.
+  /// Set only when [friendStatus] is [FriendStatus.incomingRequest] — the id
+  /// `AcceptFriendRequestUseCase`/`DeclineFriendRequestUseCase` need.
+  ///
+  /// That is the requesting user's own id, so it always equals [user]'s id:
+  /// the API has no friendship-row id and addresses every request route by
+  /// user (`POST /friends/requests/{user}/accept`). It stays a separate
+  /// nullable field because its presence is also what says "there is an
+  /// incoming request here to act on".
   final String? incomingRequestId;
   final bool friendActionBusy;
   final String? errorMessage;
@@ -130,9 +135,15 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
     emit(state.copyWith(status: PublicProfileStatus.loading));
 
     final meResult = await _getMe(const NoParams());
+    // `PublicProfilePage` is pushed on every avatar/username tap and popped
+    // freely — a pop while this multi-step chain is in flight closes this
+    // factory cubit before it resolves. Same guard `ReactorsCubit.load()`
+    // documents.
+    if (isClosed) return;
     final myId = meResult.fold((_) => null, (me) => me.id);
 
     final userResult = await _getUser(userId);
+    if (isClosed) return;
     if (userResult.isLeft()) {
       emit(
         state.copyWith(status: PublicProfileStatus.error, errorMessage: userResult.fold((l) => l.message, (_) => null)),
@@ -142,7 +153,9 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
     final user = userResult.fold((_) => null, (r) => r)!;
 
     final postsResult = await _getUserPosts(GetUserPostsParams(userId: userId));
+    if (isClosed) return;
     if (myId != null) await _seedMyRepostIds(myId);
+    if (isClosed) return;
     final posts = _withMyReposts(postsResult.fold((_) => <PostEntity>[], (page) => page.posts));
 
     if (myId != null && myId == userId) {
@@ -153,6 +166,7 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
     }
 
     final friendStatus = await _resolveFriendStatus();
+    if (isClosed) return;
     emit(
       state.copyWith(
         status: PublicProfileStatus.loaded,
@@ -186,6 +200,8 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
   Future<void> sendFriendRequest() async {
     emit(state.copyWith(friendActionBusy: true));
     final result = await _sendFriendRequest(UserIdParams(userId));
+    // Same closed-page race as `load()`.
+    if (isClosed) return;
     result.fold(
       (failure) => emit(state.copyWith(friendActionBusy: false, errorMessage: failure.message)),
       (_) => emit(state.copyWith(friendActionBusy: false, friendStatus: FriendStatus.requestSent)),
@@ -197,6 +213,8 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
     if (requestId == null) return false;
     emit(state.copyWith(friendActionBusy: true));
     final result = await _acceptFriendRequest(RequestIdParams(requestId));
+    // Same closed-page race as `load()`.
+    if (isClosed) return false;
     return result.fold(
       (failure) {
         emit(state.copyWith(friendActionBusy: false, errorMessage: failure.message));
@@ -214,6 +232,8 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
     if (requestId == null) return false;
     emit(state.copyWith(friendActionBusy: true));
     final result = await _declineFriendRequest(RequestIdParams(requestId));
+    // Same closed-page race as `load()`.
+    if (isClosed) return false;
     return result.fold(
       (failure) {
         emit(state.copyWith(friendActionBusy: false, errorMessage: failure.message));
@@ -229,6 +249,8 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
   Future<void> unfriend() async {
     emit(state.copyWith(friendActionBusy: true));
     final result = await _unfriend(UserIdParams(userId));
+    // Same closed-page race as `load()`.
+    if (isClosed) return;
     result.fold(
       (failure) => emit(state.copyWith(friendActionBusy: false, errorMessage: failure.message)),
       (_) => emit(state.copyWith(friendActionBusy: false, friendStatus: FriendStatus.none)),
@@ -237,16 +259,19 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
 
   Future<void> toggleLike(PostEntity post) async {
     final result = await _likePost(post);
+    if (isClosed) return;
     result.fold((_) {}, (updated) => _replacePost(post.id, (_) => updated));
   }
 
   Future<void> react(PostEntity post, ReactionType type) async {
     final result = await _reactToPost(ReactToPostParams(post: post, type: type));
+    if (isClosed) return;
     result.fold((_) {}, (updated) => _replacePost(post.id, (_) => updated));
   }
 
   Future<void> toggleSave(String postId) async {
     final result = await _toggleSave(PostIdParams(postId));
+    if (isClosed) return;
     result.fold((_) {}, (saved) => _replacePost(postId, (p) => p.copyWith(savedByMe: saved)));
   }
 
@@ -291,12 +316,14 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
         final myRepostId = _myRepostIds[post.id];
         if (myRepostId == null) return;
         final result = await _deletePost(myRepostId);
+        if (isClosed) return;
         result.fold((_) {}, (_) {
           _myRepostIds.remove(post.id);
           _replacePost(post.id, (p) => p.copyWith(repostCount: p.repostCount - 1, repostedByMe: false));
         });
       } else {
         final result = await _repost(RepostParams(postId: post.id));
+        if (isClosed) return;
         result.fold((_) {}, (newPost) {
           _myRepostIds[post.id] = newPost.id;
           _replacePost(post.id, (p) => p.copyWith(repostCount: p.repostCount + 1, repostedByMe: true));

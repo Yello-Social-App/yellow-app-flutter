@@ -18,6 +18,7 @@ import '../../domain/entities/comment_entity.dart';
 import '../../domain/entities/post_entity.dart';
 import '../bloc/feed_cubit.dart';
 import '../bloc/post_detail_cubit.dart';
+import '../widgets/post_card.dart';
 import '../widgets/post_image_carousel.dart';
 import '../widgets/post_options_sheet.dart';
 import '../widgets/reaction_breakdown_sheet.dart';
@@ -263,139 +264,48 @@ class _Loaded extends StatelessWidget {
     // Pull-to-refresh is currently the only way to pick up a comment (or a
     // reaction count) someone else added after this page opened — there's
     // no live/polling update, same as the rest of the app.
+    // Lazily built (`ListView.builder`, not a fully materialized `children:`
+    // list) so a post with a long comment thread only pays to build/layout/
+    // paint the comments actually on screen (plus Flutter's small cache
+    // extent) instead of every comment and reply up front. This matters
+    // because there's no scoped `buildWhen`/selector above this widget —
+    // liking/replying to/deleting *any* comment re-emits `PostDetailState`
+    // and rebuilds this whole `_Loaded` tree, so without laziness here every
+    // one of those actions would also rebuild every off-screen comment.
+    const headerItemCount = 2; // index 0: the post itself, 1: "COMMENTS · N"
+    final itemCount =
+        headerItemCount + topLevelComments.length + orphanReplies.length + (state.hasMoreComments ? 1 : 0);
+
     return RefreshIndicator(
       onRefresh: cubit.refresh,
       color: colors.ink,
       backgroundColor: colors.surf,
-      child: ListView(
+      child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 96),
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              color: colors.surf,
-              border: Border.all(color: colors.line, width: 1.5),
-              borderRadius: BorderRadius.circular(AppRadii.xxl),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(AppRadii.md),
-                    onTap: () => context.pushNamed(RouteNames.userProfile, pathParameters: {'userId': post.authorId}),
-                    child: Row(
-                      children: [
-                        AppAvatar(
-                          initials: post.authorUsername.initials,
-                          seed: avatarSeedForId(post.authorId),
-                          imageUrl: post.authorAvatarUrl,
-                          size: 44,
-                        ),
-                        const SizedBox(width: 11),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                post.authorUsername,
-                                style: AppTextStyles.titleMd.copyWith(fontSize: 15, color: colors.ink),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '@${post.authorUsername} · ${Formatters.relativeShort(post.createdAt)}',
-                                style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (post.content.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-                    child: Text(post.content, style: AppTextStyles.body.copyWith(fontSize: 16, color: colors.ink)),
-                  ),
-                if (post.hasImages)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    // A single photo follows its own aspect ratio at the
-                    // card's fixed width instead of a fixed box; two or more
-                    // become a swipeable carousel with a page indicator.
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(AppRadii.lg),
-                      child: PostImageCarousel(imageUrls: post.imageUrls, placeholderHeight: 300),
-                    ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      _LikeButton(
-                        post: post,
-                        onTap: cubit.toggleLike,
-                        onLongPress: () async {
-                          final picked = await showReactionPicker(context, current: post.viewerReactionType);
-                          if (picked != null) cubit.react(picked);
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      _Chip(icon: Icons.mode_comment_outlined, label: '${state.comments.length}'),
-                      const Spacer(),
-                      AppIconButton(icon: const Icon(Icons.repeat), size: 40, onPressed: () {}),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 18, 4, 10),
-            child: Text(
-              'COMMENTS · ${state.comments.length}',
-              style: AppTextStyles.eyebrow.copyWith(color: colors.ink2),
-            ),
-          ),
-          for (final comment in topLevelComments) ...[
-            _CommentRow(
+        itemCount: itemCount,
+        itemBuilder: (context, index) {
+          if (index == 0) return _PostHeaderCard(post: post, cubit: cubit);
+          if (index == 1) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(4, 18, 4, 10),
+              child: Text('COMMENTS · ${post.commentCount}', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
+            );
+          }
+          final commentIndex = index - headerItemCount;
+          if (commentIndex < topLevelComments.length) {
+            final comment = topLevelComments[commentIndex];
+            return _CommentThread(
               comment: comment,
-              canDelete: state.canDeleteComment(comment),
-              onDelete: () => _confirmDeleteComment(context, cubit, comment.id),
-              onQuickLike: () => cubit.reactToComment(comment.id, ReactionType.like),
-              onReact: (type) => cubit.reactToComment(comment.id, type),
-              onReply: () => onStartReply(comment),
-              onViewReactions: () => showReactionBreakdownSheet(
-                context,
-                fetch: () => cubit.getCommentReactionSummary(comment.id),
-                targetType: 'COMMENT',
-                targetId: comment.id,
-              ),
-            ),
-            for (final reply in repliesTo(comment.id))
-              Padding(
-                padding: const EdgeInsets.only(left: 32),
-                child: _CommentRow(
-                  comment: reply,
-                  isReply: true,
-                  canDelete: state.canDeleteComment(reply),
-                  onDelete: () => _confirmDeleteComment(context, cubit, reply.id),
-                  onQuickLike: () => cubit.reactToComment(reply.id, ReactionType.like),
-                  onReact: (type) => cubit.reactToComment(reply.id, type),
-                  onReply: () => onStartReply(comment, mentionUsername: reply.authorUsername),
-                  onViewReactions: () => showReactionBreakdownSheet(
-                    context,
-                    fetch: () => cubit.getCommentReactionSummary(reply.id),
-                    targetType: 'COMMENT',
-                    targetId: reply.id,
-                  ),
-                ),
-              ),
-          ],
-          for (final orphan in orphanReplies)
-            _CommentRow(
+              replies: repliesTo(comment.id),
+              state: state,
+              cubit: cubit,
+              onStartReply: onStartReply,
+            );
+          }
+          final orphanIndex = commentIndex - topLevelComments.length;
+          if (orphanIndex < orphanReplies.length) {
+            final orphan = orphanReplies[orphanIndex];
+            return _CommentRow(
               comment: orphan,
               canDelete: state.canDeleteComment(orphan),
               onDelete: () => _confirmDeleteComment(context, cubit, orphan.id),
@@ -408,9 +318,114 @@ class _Loaded extends StatelessWidget {
                 targetType: 'COMMENT',
                 targetId: orphan.id,
               ),
+            );
+          }
+          return _LoadMoreComments(loading: state.isLoadingMoreComments, onTap: cubit.loadMoreComments);
+        },
+      ),
+    );
+  }
+}
+
+/// The post itself — item 0 of `_Loaded`'s comments `ListView.builder`,
+/// pulled out to its own widget so that builder's `itemBuilder` stays
+/// readable instead of a large inline block for just one of its item types.
+class _PostHeaderCard extends StatelessWidget {
+  const _PostHeaderCard({required this.post, required this.cubit});
+
+  final PostEntity post;
+  final PostDetailCubit cubit;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surf,
+        border: Border.all(color: colors.line, width: 1.5),
+        borderRadius: BorderRadius.circular(AppRadii.xxl),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(AppRadii.md),
+              onTap: () => context.pushNamed(RouteNames.userProfile, pathParameters: {'userId': post.authorId}),
+              child: Row(
+                children: [
+                  AppAvatar(
+                    initials: post.authorUsername.initials,
+                    seed: avatarSeedForId(post.authorId),
+                    imageUrl: post.authorAvatarUrl,
+                    size: 44,
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          post.authorUsername,
+                          style: AppTextStyles.titleMd.copyWith(fontSize: 15, color: colors.ink),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '@${post.authorUsername} · ${Formatters.relativeShort(post.createdAt)}',
+                          style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          if (state.hasMoreComments)
-            _LoadMoreComments(loading: state.isLoadingMoreComments, onTap: cubit.loadMoreComments),
+          ),
+          if (post.content.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+              child: Text(post.content, style: AppTextStyles.body.copyWith(fontSize: 16, color: colors.ink)),
+            ),
+          if (post.hasImages)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              // A single photo follows its own aspect ratio at the card's
+              // fixed width instead of a fixed box; two or more become a
+              // swipeable carousel with a page indicator.
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadii.lg),
+                child: PostImageCarousel(imageUrls: post.imageUrls, placeholderHeight: 300),
+              ),
+            ),
+          // Facebook-style "shared post" embed — see `RepostedPostPreview`'s
+          // doc for why this can't be skipped: a repost's own content/images
+          // are almost always empty.
+          if (post.isRepost)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: RepostedPostPreview(original: post.originalPost!),
+            ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                _LikeButton(
+                  post: post,
+                  onTap: cubit.toggleLike,
+                  onLongPress: () async {
+                    final picked = await showReactionPicker(context, current: post.viewerReactionType);
+                    if (picked != null) cubit.react(picked);
+                  },
+                ),
+                const SizedBox(width: 8),
+                _Chip(icon: Icons.mode_comment_outlined, label: '${post.commentCount}'),
+                const Spacer(),
+                _RepostButton(post: post, onTap: cubit.toggleRepost),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -542,6 +557,7 @@ class _CommentRow extends StatelessWidget {
                   Text(comment.content, style: AppTextStyles.bodySm.copyWith(color: colors.ink2)),
                   const SizedBox(height: 8),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       InkWell(
                         onTap: onQuickLike,
@@ -599,6 +615,193 @@ class _CommentRow extends StatelessWidget {
   }
 }
 
+/// One top-level comment's reply block, each reply linked to the one above
+/// it by a thread line — see `_ReplyThreadPainter`. Pulled out of `_Loaded`
+/// so the line-drawing has index access (first/last-of-group) without an
+/// awkward local variable inside `_Loaded.build`'s list literal.
+/// Parent comment plus its reply group, threaded together: draws the
+/// lead-in segment from the parent's own avatar down into the reply group
+/// (see `_ThreadLeadInPainter`) so the connector reads as one continuous
+/// line from the original comment rather than starting partway down.
+/// Renders the parent alone, with no line, when it has no replies.
+class _CommentThread extends StatelessWidget {
+  const _CommentThread({
+    required this.comment,
+    required this.replies,
+    required this.state,
+    required this.cubit,
+    required this.onStartReply,
+  });
+
+  final CommentEntity comment;
+  final List<CommentEntity> replies;
+  final PostDetailState state;
+  final PostDetailCubit cubit;
+  final void Function(CommentEntity topLevelParent, {String? mentionUsername}) onStartReply;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final parentRow = _CommentRow(
+      comment: comment,
+      canDelete: state.canDeleteComment(comment),
+      onDelete: () => _confirmDeleteComment(context, cubit, comment.id),
+      onQuickLike: () => cubit.reactToComment(comment.id, ReactionType.like),
+      onReact: (type) => cubit.reactToComment(comment.id, type),
+      onReply: () => onStartReply(comment),
+      onViewReactions: () => showReactionBreakdownSheet(
+        context,
+        fetch: () => cubit.getCommentReactionSummary(comment.id),
+        targetType: 'COMMENT',
+        targetId: comment.id,
+      ),
+    );
+    if (replies.isEmpty) return parentRow;
+
+    return Column(
+      children: [
+        Stack(
+          children: [
+            // The avatar is top-aligned in the parent's Row, so its bottom
+            // edge sits at a fixed y no matter how tall the card grows below
+            // it (wrapped comment text, reactions) — safe to draw through
+            // since that column is otherwise blank space beside the bubble.
+            Positioned.fill(
+              child: CustomPaint(painter: _ThreadLeadInPainter(color: colors.line)),
+            ),
+            parentRow,
+          ],
+        ),
+        _ReplyGroup(replies: replies, topLevelParent: comment, state: state, cubit: cubit, onStartReply: onStartReply),
+      ],
+    );
+  }
+}
+
+/// The straight lead-in segment of the thread line: from the parent
+/// comment's avatar bottom down through the rest of its card to where
+/// `_ReplyThreadPainter` picks up and curls into the first reply's avatar.
+class _ThreadLeadInPainter extends CustomPainter {
+  const _ThreadLeadInPainter({required this.color});
+
+  final Color color;
+
+  static const double _trunkX = 19;
+  static const double _avatarBottom = 38;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(const Offset(_trunkX, _avatarBottom), Offset(_trunkX, size.height), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ThreadLeadInPainter oldPainter) => oldPainter.color != color;
+}
+
+class _ReplyGroup extends StatelessWidget {
+  const _ReplyGroup({
+    required this.replies,
+    required this.topLevelParent,
+    required this.state,
+    required this.cubit,
+    required this.onStartReply,
+  });
+
+  final List<CommentEntity> replies;
+  final CommentEntity topLevelParent;
+  final PostDetailState state;
+  final PostDetailCubit cubit;
+  final void Function(CommentEntity topLevelParent, {String? mentionUsername}) onStartReply;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Column(
+      children: [
+        for (var i = 0; i < replies.length; i++)
+          Stack(
+            children: [
+              // Painted behind the row; purely decorative so it never
+              // intercepts the row's own taps (Like/Reply/avatar).
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _ReplyThreadPainter(color: colors.line, continuesBelow: i < replies.length - 1),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 32),
+                child: _CommentRow(
+                  comment: replies[i],
+                  isReply: true,
+                  canDelete: state.canDeleteComment(replies[i]),
+                  onDelete: () => _confirmDeleteComment(context, cubit, replies[i].id),
+                  onQuickLike: () => cubit.reactToComment(replies[i].id, ReactionType.like),
+                  onReact: (type) => cubit.reactToComment(replies[i].id, type),
+                  onReply: () => onStartReply(topLevelParent, mentionUsername: replies[i].authorUsername),
+                  onViewReactions: () => showReactionBreakdownSheet(
+                    context,
+                    fetch: () => cubit.getCommentReactionSummary(replies[i].id),
+                    targetType: 'COMMENT',
+                    targetId: replies[i].id,
+                  ),
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+/// Draws one reply's thread connector: a vertical trunk aligned under the
+/// parent comment's 38px avatar (center x = 19), branching right into this
+/// reply's own 30px avatar (top-aligned with the row, so center y = 15).
+/// [continuesBelow] extends the trunk past the branch so it reaches the next
+/// reply's painter and the whole group reads as one unbroken line; the last
+/// reply in a group passes `false` so the line stops at its own avatar
+/// instead of trailing past it.
+class _ReplyThreadPainter extends CustomPainter {
+  const _ReplyThreadPainter({required this.color, required this.continuesBelow});
+
+  final Color color;
+  final bool continuesBelow;
+
+  static const double _trunkX = 19;
+  static const double _branchY = 15;
+  static const double _gutterWidth = 32;
+  static const double _cornerRadius = 6;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    // Vertical trunk down to just above the branch, then a rounded curl
+    // into this reply's avatar instead of a sharp elbow.
+    final branch = Path()
+      ..moveTo(_trunkX, 0)
+      ..lineTo(_trunkX, _branchY - _cornerRadius)
+      ..quadraticBezierTo(_trunkX, _branchY, _trunkX + _cornerRadius, _branchY)
+      ..lineTo(_gutterWidth, _branchY);
+    canvas.drawPath(branch, paint);
+
+    if (continuesBelow) {
+      canvas.drawLine(Offset(_trunkX, _branchY), Offset(_trunkX, size.height), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ReplyThreadPainter oldPainter) =>
+      oldPainter.color != color || oldPainter.continuesBelow != continuesBelow;
+}
+
 class _LikeButton extends StatelessWidget {
   const _LikeButton({required this.post, required this.onTap, required this.onLongPress});
   final PostEntity post;
@@ -637,6 +840,46 @@ class _LikeButton extends StatelessWidget {
               Text(
                 Formatters.compactCount(post.reactionTotal),
                 style: AppTextStyles.button.copyWith(color: reacted != null ? Colors.white : colors.ink2),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Mirrors the feed card's repost pill (`post_card.dart`'s `_Pill` with
+/// `Icons.repeat`) — same green active state and count, wired to
+/// `PostDetailCubit.toggleRepost` instead of `FeedCubit.toggleRepost`.
+class _RepostButton extends StatelessWidget {
+  const _RepostButton({required this.post, required this.onTap});
+  final PostEntity post;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final reposted = post.repostedByMe;
+    return Material(
+      color: reposted ? colors.grn : Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+        side: BorderSide(color: reposted ? colors.grn : colors.line, width: 1.5),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.repeat, size: 16, color: reposted ? Colors.white : colors.ink2),
+              const SizedBox(width: 8),
+              Text(
+                Formatters.compactCount(post.repostCount),
+                style: AppTextStyles.button.copyWith(color: reposted ? Colors.white : colors.ink2),
               ),
             ],
           ),

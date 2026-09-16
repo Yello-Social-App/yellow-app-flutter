@@ -136,6 +136,12 @@ class ProfileCubit extends Cubit<ProfileState> {
     emit(state.copyWith(status: ProfileStatus.loading));
 
     final meResult = await _getMe(const NoParams());
+    // While Profile is normally kept alive across tab switches, this
+    // factory cubit is still closed by a `BlocProvider` on genuine pop
+    // (e.g. re-entering via a fresh push after sign-out) — a pop mid-chain
+    // closes it before this resolves. Same guard `ReactorsCubit.load()`
+    // documents.
+    if (isClosed) return;
     if (meResult.isLeft()) {
       emit(state.copyWith(status: ProfileStatus.error, errorMessage: meResult.fold((l) => l.message, (_) => null)));
       return;
@@ -143,14 +149,18 @@ class ProfileCubit extends Cubit<ProfileState> {
     final user = meResult.fold((_) => null, (r) => r)!;
 
     final postsResult = await _getUserPosts(GetUserPostsParams(userId: user.id));
+    if (isClosed) return;
     final myPosts = postsResult.fold((_) => <PostEntity>[], (page) => page.posts);
 
     final friendsResult = await _getFriends(const PageParams());
+    if (isClosed) return;
     final connections = friendsResult.fold((_) => 0, (page) => page.friendships.length);
 
     final savedPosts = await _loadSavedPosts();
+    if (isClosed) return;
 
     await _seedMyRepostIds(user.id);
+    if (isClosed) return;
 
     emit(
       state.copyWith(
@@ -185,6 +195,7 @@ class ProfileCubit extends Cubit<ProfileState> {
   /// same convention as [uploadAvatar] below.
   Future<bool> updateProfile({String? username, String? fullName, String? bio}) async {
     final result = await _updateProfile(UpdateProfileParams(username: username, fullName: fullName, bio: bio));
+    if (isClosed) return false;
     return result.fold(
       (failure) {
         emit(state.copyWith(errorMessage: failure.message));
@@ -204,6 +215,7 @@ class ProfileCubit extends Cubit<ProfileState> {
   Future<bool> uploadAvatar(File file) async {
     emit(state.copyWith(isUploadingAvatar: true));
     final result = await _updateAvatar(file);
+    if (isClosed) return false;
     return result.fold(
       (failure) {
         emit(state.copyWith(isUploadingAvatar: false, errorMessage: failure.message));
@@ -218,6 +230,7 @@ class ProfileCubit extends Cubit<ProfileState> {
 
   Future<void> toggleLike(PostEntity post) async {
     final result = await _likePost(post);
+    if (isClosed) return;
     result.fold((_) {}, (updated) => _replacePost(post.id, (_) => updated));
   }
 
@@ -225,11 +238,13 @@ class ProfileCubit extends Cubit<ProfileState> {
   /// reaction-picker path (see [toggleLike] for the plain single-tap path).
   Future<void> react(PostEntity post, ReactionType type) async {
     final result = await _reactToPost(ReactToPostParams(post: post, type: type));
+    if (isClosed) return;
     result.fold((_) {}, (updated) => _replacePost(post.id, (_) => updated));
   }
 
   Future<void> toggleSave(String postId) async {
     final result = await _toggleSave(PostIdParams(postId));
+    if (isClosed) return;
     result.fold((_) {}, (saved) => _replacePost(postId, (p) => p.copyWith(savedByMe: saved)));
   }
 
@@ -270,6 +285,7 @@ class ProfileCubit extends Cubit<ProfileState> {
         final myRepostId = _myRepostIds[post.id];
         if (myRepostId == null) return;
         final result = await _deletePost(myRepostId);
+        if (isClosed) return;
         result.fold((_) {}, (_) {
           _myRepostIds.remove(post.id);
           emit(state.copyWith(myPosts: state.myPosts.where((p) => p.id != myRepostId).toList()));
@@ -277,6 +293,7 @@ class ProfileCubit extends Cubit<ProfileState> {
         });
       } else {
         final result = await _repost(RepostParams(postId: post.id));
+        if (isClosed) return;
         result.fold((_) {}, (newPost) {
           _myRepostIds[post.id] = newPost.id;
           _replacePost(post.id, (p) => p.copyWith(repostCount: p.repostCount + 1, repostedByMe: true));

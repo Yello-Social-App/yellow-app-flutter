@@ -65,15 +65,39 @@ class PostCard extends StatelessWidget {
         color: colors.surf,
         border: Border.all(color: colors.line, width: 1.5),
         borderRadius: BorderRadius.circular(AppRadii.xxl),
+        // The page background is now flat white, same as this card's own
+        // fill (`colors.surf`) — without this the hairline border above was
+        // the *only* thing separating a card from the page. A soft drop
+        // shadow gives the card real depth again ("floating" on the page)
+        // instead of leaning on the border alone.
+        boxShadow: [
+          BoxShadow(
+            color: colors.ink.withValues(alpha: 0.06),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _Header(post: post, onOpen: onOpen, onMore: onMore),
-          if (post.isRepost) _RepostBadge(original: post.originalPost!),
-          if (!post.hasImages) _TextBody(post: post) else _PhotoBody(post: post, onOpen: onOpen),
-          _Actions(post: post, onLike: onLike, onReact: onReact, onSave: onSave, onRepost: onRepost, onOpen: onOpen),
+          if (post.isRepost)
+            _RepostedLabel(username: post.originalPost!.authorUsername),
+          if (!post.hasImages)
+            _TextBody(post: post)
+          else
+            _PhotoBody(post: post, onOpen: onOpen),
+          if (post.isRepost) RepostedPostPreview(original: post.originalPost!),
+          _Actions(
+            post: post,
+            onLike: onLike,
+            onReact: onReact,
+            onSave: onSave,
+            onRepost: onRepost,
+            onOpen: onOpen,
+          ),
         ],
       ),
     );
@@ -81,7 +105,11 @@ class PostCard extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.post, required this.onOpen, required this.onMore});
+  const _Header({
+    required this.post,
+    required this.onOpen,
+    required this.onMore,
+  });
   final PostEntity post;
   final VoidCallback onOpen;
 
@@ -98,7 +126,10 @@ class _Header extends StatelessWidget {
           Expanded(
             child: InkWell(
               borderRadius: BorderRadius.circular(AppRadii.md),
-              onTap: () => context.pushNamed(RouteNames.userProfile, pathParameters: {'userId': post.authorId}),
+              onTap: () => context.pushNamed(
+                RouteNames.userProfile,
+                pathParameters: {'userId': post.authorId},
+              ),
               child: Row(
                 children: [
                   AppAvatar(
@@ -114,13 +145,17 @@ class _Header extends StatelessWidget {
                       children: [
                         Text(
                           post.authorUsername,
-                          style: AppTextStyles.titleMd.copyWith(color: colors.ink),
+                          style: AppTextStyles.titleMd.copyWith(
+                            color: colors.ink,
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 4),
                         Text(
                           '@${post.authorUsername} · ${Formatters.relativeShort(post.createdAt)}',
-                          style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
+                          style: AppTextStyles.metaMono.copyWith(
+                            color: colors.ink2,
+                          ),
                         ),
                       ],
                     ),
@@ -147,9 +182,9 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _RepostBadge extends StatelessWidget {
-  const _RepostBadge({required this.original});
-  final PostEntity original;
+class _RepostedLabel extends StatelessWidget {
+  const _RepostedLabel({required this.username});
+  final String username;
 
   @override
   Widget build(BuildContext context) {
@@ -162,12 +197,113 @@ class _RepostBadge extends StatelessWidget {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              'Reposted from @${original.authorUsername}',
+              'Reposted from @$username',
               overflow: TextOverflow.ellipsis,
               style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Facebook-style "shared post" embed: the original post's author, content
+/// and images inside a compact, tappable card nested inside the repost's
+/// own card. A repost's own [PostEntity.content]/[PostEntity.hasImages] are
+/// almost always empty — this app's repost action (`FeedCubit.toggleRepost`)
+/// is a plain one-tap share with no quote/comment compose step — so without
+/// this, [PostCard] rendered nothing below the "Reposted from" line for the
+/// overwhelming majority of reposts: an empty [_TextBody] and no indication
+/// of what was actually shared. Reused as-is by [PostDetailPage] so a
+/// repost's detail view isn't missing the same content.
+class RepostedPostPreview extends StatelessWidget {
+  const RepostedPostPreview({super.key, required this.original});
+  final PostEntity original;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+      child: Material(
+        color: colors.surf,
+        borderRadius: BorderRadius.circular(AppRadii.lg),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => context.pushNamed(
+            RouteNames.postDetail,
+            pathParameters: {'postId': original.id},
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: colors.line2, width: 1.5),
+              borderRadius: BorderRadius.circular(AppRadii.lg),
+            ),
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    AppAvatar(
+                      initials: original.authorUsername.initials,
+                      seed: avatarSeedForId(original.authorId),
+                      imageUrl: original.authorAvatarUrl,
+                      size: 26,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            original.authorUsername,
+                            style: AppTextStyles.titleSm.copyWith(
+                              color: colors.ink,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            Formatters.relativeShort(original.createdAt),
+                            style: AppTextStyles.metaMono.copyWith(
+                              color: colors.ink2,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                if (original.content.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text.rich(
+                    TextSpan(
+                      children: _contentSpans(
+                        original.content,
+                        AppTextStyles.body.copyWith(color: colors.ink),
+                        colors.yel,
+                      ),
+                    ),
+                    maxLines: 6,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                if (original.hasImages) ...[
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadii.md),
+                    child: PostImageCarousel(
+                      imageUrls: original.imageUrls,
+                      placeholderHeight: 180,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -179,12 +315,18 @@ final RegExp _hashtagPattern = RegExp(r'#\w+');
 /// Splits [text] on `#hashtag` runs: everything else keeps [style] as-is
 /// (no background at all), each hashtag gets that same [style] plus
 /// [tagBackground] painted behind just that word.
-List<InlineSpan> _contentSpans(String text, TextStyle style, Color tagBackground) {
+List<InlineSpan> _contentSpans(
+  String text,
+  TextStyle style,
+  Color tagBackground,
+) {
   final spans = <InlineSpan>[];
   var last = 0;
   for (final match in _hashtagPattern.allMatches(text)) {
     if (match.start > last) {
-      spans.add(TextSpan(text: text.substring(last, match.start), style: style));
+      spans.add(
+        TextSpan(text: text.substring(last, match.start), style: style),
+      );
     }
     spans.add(
       TextSpan(
@@ -210,7 +352,13 @@ class _TextBody extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
       child: Text.rich(
-        TextSpan(children: _contentSpans(post.content, AppTextStyles.quote.copyWith(color: colors.ink), colors.yel)),
+        TextSpan(
+          children: _contentSpans(
+            post.content,
+            AppTextStyles.body.copyWith(color: colors.ink),
+            colors.yel,
+          ),
+        ),
       ),
     );
   }
@@ -230,7 +378,15 @@ class _PhotoBody extends StatelessWidget {
         if (post.content.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-            child: Text(post.content, style: AppTextStyles.body.copyWith(color: colors.ink)),
+            child: Text.rich(
+              TextSpan(
+                children: _contentSpans(
+                  post.content,
+                  AppTextStyles.body.copyWith(color: colors.ink),
+                  colors.yel,
+                ),
+              ),
+            ),
           ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -246,7 +402,9 @@ class _PhotoBody extends StatelessWidget {
             // was technically being drawn. `decoration` still supplies the
             // rounded-rect clip shape; `foregroundDecoration` paints the
             // same-radius border on top of the (clipped) image instead.
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(AppRadii.lg)),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadii.lg),
+            ),
             foregroundDecoration: BoxDecoration(
               border: Border.all(color: colors.line, width: 1.5),
               borderRadius: BorderRadius.circular(AppRadii.lg),
@@ -278,7 +436,10 @@ class _Actions extends StatelessWidget {
   final VoidCallback onOpen;
 
   Future<void> _pickReaction(BuildContext context) async {
-    final picked = await showReactionPicker(context, current: post.viewerReactionType);
+    final picked = await showReactionPicker(
+      context,
+      current: post.viewerReactionType,
+    );
     if (picked != null) onReact(picked);
   }
 
@@ -299,7 +460,8 @@ class _Actions extends StatelessWidget {
             label: Formatters.compactCount(post.reactionTotal),
             iconBuilder: (fg) => AnimatedSwitcher(
               duration: const Duration(milliseconds: 180),
-              transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+              transitionBuilder: (child, anim) =>
+                  ScaleTransition(scale: anim, child: child),
               child: reacted == null || reacted == ReactionType.like
                   ? Icon(
                       reacted == null ? Icons.favorite_border : Icons.favorite,
@@ -307,7 +469,11 @@ class _Actions extends StatelessWidget {
                       size: 15,
                       color: fg,
                     )
-                  : Text(reacted.emoji, key: ValueKey(reacted), style: const TextStyle(fontSize: 13)),
+                  : Text(
+                      reacted.emoji,
+                      key: ValueKey(reacted),
+                      style: const TextStyle(fontSize: 13),
+                    ),
             ),
           ),
           const SizedBox(width: 7),
@@ -317,7 +483,8 @@ class _Actions extends StatelessWidget {
             background: Colors.transparent,
             foreground: colors.ink2,
             label: Formatters.compactCount(post.commentCount),
-            iconBuilder: (fg) => Icon(Icons.mode_comment_outlined, size: 14, color: fg),
+            iconBuilder: (fg) =>
+                Icon(Icons.mode_comment_outlined, size: 14, color: fg),
           ),
           const SizedBox(width: 7),
           _Pill(
@@ -335,7 +502,11 @@ class _Actions extends StatelessWidget {
             background: post.savedByMe ? colors.yel : Colors.transparent,
             foreground: post.savedByMe ? colors.onYel : colors.ink2,
             label: post.savedByMe ? 'Saved' : 'Save',
-            iconBuilder: (fg) => Icon(post.savedByMe ? Icons.bookmark : Icons.bookmark_border, size: 13, color: fg),
+            iconBuilder: (fg) => Icon(
+              post.savedByMe ? Icons.bookmark : Icons.bookmark_border,
+              size: 13,
+              color: fg,
+            ),
           ),
         ],
       ),
@@ -381,7 +552,10 @@ class _Pill extends StatelessWidget {
             children: [
               iconBuilder(foreground),
               const SizedBox(width: 7),
-              Text(label, style: AppTextStyles.button.copyWith(color: foreground)),
+              Text(
+                label,
+                style: AppTextStyles.button.copyWith(color: foreground),
+              ),
             ],
           ),
         ),

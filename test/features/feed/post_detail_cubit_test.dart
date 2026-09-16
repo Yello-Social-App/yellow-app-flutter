@@ -17,6 +17,7 @@ import 'package:yello_social_app/features/feed/domain/usecases/like_post_usecase
 import 'package:yello_social_app/features/feed/domain/usecases/react_usecases.dart';
 import 'package:yello_social_app/features/feed/domain/usecases/update_post_usecase.dart';
 import 'package:yello_social_app/features/feed/presentation/bloc/post_detail_cubit.dart';
+import 'package:yello_social_app/features/profile/domain/repositories/profile_repository.dart';
 import 'package:yello_social_app/features/profile/domain/usecases/profile_usecases.dart';
 
 import '../../helpers/mock_data.dart';
@@ -45,6 +46,10 @@ class _MockGetShareLink extends Mock implements GetShareLinkUseCase {}
 
 class _MockGetMe extends Mock implements GetMeUseCase {}
 
+class _MockRepost extends Mock implements RepostUseCase {}
+
+class _MockGetUserPosts extends Mock implements GetUserPostsUseCase {}
+
 void main() {
   late _MockGetPostDetail getPostDetail;
   late _MockGetComments getComments;
@@ -58,10 +63,14 @@ void main() {
   late _MockDeleteComment deleteComment;
   late _MockGetShareLink getShareLink;
   late _MockGetMe getMe;
+  late _MockRepost repost;
+  late _MockGetUserPosts getUserPosts;
 
   setUpAll(() {
     registerFallbackValue(const PostIdParams('p1'));
     registerFallbackValue(buildPost());
+    registerFallbackValue(const RepostParams(postId: 'p1'));
+    registerFallbackValue(const GetUserPostsParams(userId: 'u1'));
   });
 
   setUp(() {
@@ -77,7 +86,14 @@ void main() {
     deleteComment = _MockDeleteComment();
     getShareLink = _MockGetShareLink();
     getMe = _MockGetMe();
+    repost = _MockRepost();
+    getUserPosts = _MockGetUserPosts();
     when(() => getMe(const NoParams())).thenAnswer((_) async => Right(buildUser()));
+    // Empty by default — `load()`'s repost-recovery scan (`_seedMyRepostId`)
+    // stops on the first "no more pages" response, same as an account with
+    // no reposts at all. Tests that care about an existing repost override
+    // this.
+    when(() => getUserPosts(any())).thenAnswer((_) async => const Right(UserPostsPage(posts: [], hasMore: false)));
   });
 
   PostDetailCubit buildCubit() => PostDetailCubit(
@@ -94,6 +110,8 @@ void main() {
     deleteComment: deleteComment,
     getShareLink: getShareLink,
     getMe: getMe,
+    repost: repost,
+    getUserPosts: getUserPosts,
   );
 
   blocTest<PostDetailCubit, PostDetailState>(
@@ -117,16 +135,17 @@ void main() {
   blocTest<PostDetailCubit, PostDetailState>(
     'toggleLike replaces state.post with the repository result',
     build: buildCubit,
-    seed: () => PostDetailState(status: PostDetailStatus.loaded, post: buildPost(id: 'p1', likeCount: 0)),
+    seed: () => PostDetailState(
+      status: PostDetailStatus.loaded,
+      post: buildPost(id: 'p1', likeCount: 0),
+    ),
     act: (cubit) {
       when(
         () => likePost(any()),
       ).thenAnswer((_) async => Right(buildPost(id: 'p1', likeCount: 1, viewerReaction: 'LIKE')));
       return cubit.toggleLike();
     },
-    expect: () => [
-      predicate<PostDetailState>((s) => s.post?.likedByMe == true && s.post?.likeCount == 1),
-    ],
+    expect: () => [predicate<PostDetailState>((s) => s.post?.likedByMe == true && s.post?.likeCount == 1)],
   );
 
   blocTest<PostDetailCubit, PostDetailState>(
@@ -135,7 +154,10 @@ void main() {
     'like than the feed for the very same post, because one real tap on '
     'the like button produced two "add LIKE" requests)',
     build: buildCubit,
-    seed: () => PostDetailState(status: PostDetailStatus.loaded, post: buildPost(id: 'p1', likeCount: 0)),
+    seed: () => PostDetailState(
+      status: PostDetailStatus.loaded,
+      post: buildPost(id: 'p1', likeCount: 0),
+    ),
     act: (cubit) async {
       final pending = Completer<Either<Failure, PostEntity>>();
       when(() => likePost(any())).thenAnswer((_) => pending.future);
@@ -145,5 +167,89 @@ void main() {
       await Future.wait([first, second]);
     },
     verify: (_) => verify(() => likePost(any())).called(1),
+  );
+
+  blocTest<PostDetailCubit, PostDetailState>(
+    'toggleRepost creates a repost and flips repostedByMe/repostCount',
+    build: buildCubit,
+    seed: () => PostDetailState(
+      status: PostDetailStatus.loaded,
+      post: buildPost(id: 'p1', repostCount: 2),
+    ),
+    act: (cubit) {
+      when(() => repost(any())).thenAnswer(
+        (_) async => Right(
+          buildPost(
+            id: 'r1',
+            originalPost: buildPost(id: 'p1'),
+          ),
+        ),
+      );
+      return cubit.toggleRepost();
+    },
+    expect: () => [predicate<PostDetailState>((s) => s.post?.repostedByMe == true && s.post?.repostCount == 3)],
+  );
+
+  blocTest<PostDetailCubit, PostDetailState>(
+    'toggleRepost cancels an existing repost via the id recovered by load()',
+    build: buildCubit,
+    act: (cubit) async {
+      when(
+        () => getPostDetail(any()),
+      ).thenAnswer((_) async => Right(PostDetail(buildPost(id: 'p1', repostCount: 3), const [], false)));
+      // Simulates a repost made in an earlier session — recovered by
+      // `_seedMyRepostId` scanning the viewer's own posts.
+      when(() => getUserPosts(any())).thenAnswer(
+        (_) async => Right(
+          UserPostsPage(
+            posts: [
+              buildPost(
+                id: 'r1',
+                originalPost: buildPost(id: 'p1'),
+              ),
+            ],
+            hasMore: false,
+          ),
+        ),
+      );
+      await cubit.load();
+      when(() => deletePost('r1')).thenAnswer((_) async => const Right(null));
+      await cubit.toggleRepost();
+    },
+    expect: () => [
+      predicate<PostDetailState>((s) => s.status == PostDetailStatus.loading),
+      predicate<PostDetailState>((s) => s.status == PostDetailStatus.loaded && s.post?.repostedByMe == false),
+      predicate<PostDetailState>((s) => s.currentUserId == 'u1'),
+      // load() recovers the earlier-session repost.
+      predicate<PostDetailState>((s) => s.post?.repostedByMe == true),
+      // toggleRepost() cancels it.
+      predicate<PostDetailState>((s) => s.post?.repostedByMe == false && s.post?.repostCount == 2),
+    ],
+    verify: (_) => verify(() => deletePost('r1')).called(1),
+  );
+
+  blocTest<PostDetailCubit, PostDetailState>(
+    'toggleRepost ignores a second tap while the first is still in flight',
+    build: buildCubit,
+    seed: () => PostDetailState(
+      status: PostDetailStatus.loaded,
+      post: buildPost(id: 'p1', repostCount: 0),
+    ),
+    act: (cubit) async {
+      final pending = Completer<Either<Failure, PostEntity>>();
+      when(() => repost(any())).thenAnswer((_) => pending.future);
+      final first = cubit.toggleRepost();
+      final second = cubit.toggleRepost();
+      pending.complete(
+        Right(
+          buildPost(
+            id: 'r1',
+            originalPost: buildPost(id: 'p1'),
+          ),
+        ),
+      );
+      await Future.wait([first, second]);
+    },
+    verify: (_) => verify(() => repost(any())).called(1),
   );
 }

@@ -14,6 +14,7 @@ import '../../../../core/theme/theme_cubit.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/app_warning_dialog.dart';
 import '../../../../shared/widgets/error_view.dart';
@@ -91,6 +92,22 @@ class _ProfileView extends StatelessWidget {
                                 Colors.transparent,
                               ],
                             ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 12,
+                        right: 14,
+                        child: SafeArea(
+                          bottom: false,
+                          child: AppIconButton(
+                            icon: const Icon(Icons.notifications_outlined),
+                            onPressed: () =>
+                                context.pushNamed(RouteNames.notificationPreferences),
+                            backgroundColor: Colors.black.withValues(alpha: 0.35),
+                            borderColor: Colors.white.withValues(alpha: 0.5),
+                            iconColor: Colors.white,
+                            size: 38,
                           ),
                         ),
                       ),

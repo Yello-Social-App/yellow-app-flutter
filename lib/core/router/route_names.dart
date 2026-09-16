@@ -21,4 +21,5 @@ abstract final class RouteNames {
   static const String createPost = 'create-post';
   static const String search = 'search';
   static const String sharedPosts = 'shared-posts';
+  static const String notificationPreferences = 'notification-preferences';
 }

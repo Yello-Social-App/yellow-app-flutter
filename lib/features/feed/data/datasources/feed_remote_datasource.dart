@@ -20,7 +20,7 @@ class ReactionSummary {
   final String? viewerReaction;
 }
 
-/// Live implementation against `dev.yello-api.cachewraith.com`
+/// Live implementation against `api.yello.cachewraith.com`
 /// (`/v3/api-docs`). Every call goes through [ApiClient] so auth headers,
 /// retry, and cert pinning apply uniformly.
 abstract interface class FeedRemoteDataSource {
@@ -126,7 +126,7 @@ class FeedRemoteDataSourceImpl implements FeedRemoteDataSource {
     );
     final envelope = ApiEnvelope.page(res);
     return (
-      comments: envelope.content.map(CommentModel.fromJson).toList(),
+      comments: envelope.content.expand(CommentModel.withRepliesFromJson).toList(),
       hasMore: envelope.hasMore,
     );
   });
@@ -216,11 +216,14 @@ class FeedRemoteDataSourceImpl implements FeedRemoteDataSource {
     // `content`/`visibility` are QUERY params on this endpoint; only
     // `images` lives in the multipart body — an array field that takes
     // one entry per attached photo (see `UpdatePostRequest`'s sibling
-    // schema in the spec).
+    // schema in the spec). The spec documents the field name as `images[]`
+    // (bracket notation) — the backend's multipart parser only builds an
+    // array from a bracketed key, so a plain `images` key is read as a
+    // scalar and rejected as "not an array", even for a single photo.
     final form = FormData();
     for (final image in images) {
       form.files.add(
-        MapEntry('images', await MultipartFile.fromFile(image.path)),
+        MapEntry('images[]', await MultipartFile.fromFile(image.path)),
       );
     }
     final res = await _dio.post<Map<String, dynamic>>(

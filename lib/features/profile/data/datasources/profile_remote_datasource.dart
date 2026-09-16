@@ -38,9 +38,9 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
         final res = await _dio.put<Map<String, dynamic>>(
           VersionedEndpoints.me(),
           data: {
-            if (username != null) 'username': username,
-            if (fullName != null) 'fullName': fullName,
-            if (bio != null) 'bio': bio,
+            'username': ?username,
+            'fullName': ?fullName,
+            'bio': ?bio,
           },
         );
         return UserModel.fromJson(ApiEnvelope.data(res));

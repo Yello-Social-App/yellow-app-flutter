@@ -18,11 +18,18 @@ const List<String> kPrePublishChecks = [
   "I'd still be glad this is on my profile next month.",
 ];
 
-/// Suggested tags from the mockup's "TAGS" panel. The backend has no tag
-/// field on `PostResponse`, so selected tags are appended to the post
-/// content as hashtags on publish (see [CreatePostCubit.publish]) rather
-/// than dropped.
+/// Suggested tags from the mockup's "TAGS" panel — a starting point, not a
+/// closed set: the "Add tag" button lets the user pick a tag outside this
+/// pool too (see [CreatePostCubit.addTag]), and the panel renders any of
+/// those alongside it. The backend has no tag field on `PostResponse`, so
+/// selected tags are appended to the post content as hashtags on publish
+/// (see [CreatePostCubit.publish]) rather than dropped.
 const List<String> kTagPool = ['light', 'concrete', 'site', 'notes', 'process'];
+
+/// Longest custom tag the "Add tag" dialog accepts (matches its `TextField`'s
+/// `maxLength`) — keeps a single wild hashtag from dominating the post
+/// content appended in [CreatePostCubit.publish].
+const int kMaxTagLength = 24;
 
 class CreatePostState extends Equatable {
   const CreatePostState({
@@ -94,6 +101,18 @@ class CreatePostCubit extends Cubit<CreatePostState> {
     emit(state.copyWith(pickedTags: tags));
   }
 
+  /// Adds a user-typed tag from the "Add tag" dialog — normalized the same
+  /// way [kTagPool] entries already are (no leading `#`, lowercase, no
+  /// internal whitespace) so it hashtags cleanly on publish, then capped to
+  /// [kMaxTagLength]. A no-op if that normalizes to empty or duplicates a
+  /// tag already picked (pool or custom).
+  void addTag(String raw) {
+    final tag = raw.trim().replaceFirst(RegExp(r'^#+'), '').replaceAll(RegExp(r'\s+'), '').toLowerCase();
+    if (tag.isEmpty || state.pickedTags.contains(tag)) return;
+    final capped = tag.length > kMaxTagLength ? tag.substring(0, kMaxTagLength) : tag;
+    emit(state.copyWith(pickedTags: [...state.pickedTags, capped]));
+  }
+
   void toggleCheck(int index) {
     final checked = {...state.checked};
     checked.contains(index) ? checked.remove(index) : checked.add(index);
@@ -123,9 +142,12 @@ class CreatePostCubit extends Cubit<CreatePostState> {
     final result = await _createPost(
       CreatePostParams(content: content, visibility: state.visibility, images: state.images),
     );
+    // The create-post screen can be backed out of while a multipart upload
+    // is still in flight, closing this factory cubit before it resolves —
+    // same guard `ReactorsCubit.load()` documents.
+    if (isClosed) return;
     result.fold(
-      (failure) =>
-          emit(state.copyWith(status: CreatePostStatus.error, errorMessage: failure.message)),
+      (failure) => emit(state.copyWith(status: CreatePostStatus.error, errorMessage: failure.message)),
       (post) => emit(state.copyWith(status: CreatePostStatus.published, publishedPost: post)),
     );
   }

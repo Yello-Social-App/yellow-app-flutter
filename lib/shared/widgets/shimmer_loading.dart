@@ -70,6 +70,15 @@ class ShimmerPostCard extends StatelessWidget {
         color: colors.surf,
         borderRadius: BorderRadius.circular(AppRadii.xxl),
         border: Border.all(color: colors.line, width: 1.5),
+        // Matches PostCard's own floating shadow so the loading skeleton
+        // doesn't visibly "pop" flat the instant real posts swap in.
+        boxShadow: [
+          BoxShadow(
+            color: colors.ink.withValues(alpha: 0.06),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

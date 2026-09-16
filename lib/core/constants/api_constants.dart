@@ -9,8 +9,10 @@ abstract final class ApiConstants {
   static const int maxRetries = 2;
   static const Duration retryBaseDelay = Duration(milliseconds: 500);
 
+  // No `headerApiVersion`: API version is carried by the URL path segment
+  // (see `EndpointResolver`), and the server's CORS allow-list accepts only
+  // Accept, Authorization, Content-Type and X-Requested-With.
   static const String headerAuthorization = 'Authorization';
-  static const String headerApiVersion = 'X-Api-Version';
   static const String headerRequestId = 'X-Request-Id';
   static const String headerContentType = 'Content-Type';
   static const String contentTypeJson = 'application/json';
@@ -19,7 +21,7 @@ abstract final class ApiConstants {
   /// PLACEHOLDER — replace with the real backend's leaf/intermediate pins
   /// before shipping prod (see `core/security/certificate_pinning.dart`).
   static const Map<String, List<String>> pinnedCertificates = {
-    // 'api.yello.social': [
+    // 'api.yello.cachewraith.com': [
     //   'sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
     // ],
   };

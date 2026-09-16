@@ -11,7 +11,8 @@ import '../../features/auth/domain/usecases/password_reset_usecases.dart';
 import '../../features/auth/domain/usecases/register_usecase.dart';
 import '../../features/auth/domain/usecases/verify_otp_usecase.dart';
 import '../../features/auth/presentation/bloc/auth_cubit.dart';
-import '../../features/chat/data/datasources/chat_local_datasource.dart';
+import '../../features/chat/data/datasources/chat_remote_datasource.dart';
+import '../../features/chat/data/datasources/user_directory.dart';
 import '../../features/chat/data/repositories/chat_repository_impl.dart';
 import '../../features/chat/domain/repositories/chat_repository.dart';
 import '../../features/chat/domain/usecases/chat_usecases.dart';
@@ -52,6 +53,7 @@ import '../../features/notification/data/datasources/notification_remote_datasou
 import '../../features/notification/data/repositories/notification_repository_impl.dart';
 import '../../features/notification/domain/repositories/notification_repository.dart';
 import '../../features/notification/domain/usecases/notification_usecases.dart';
+import '../../features/notification/presentation/bloc/notification_preferences_cubit.dart';
 import '../../features/notification/presentation/bloc/notifications_cubit.dart';
 import '../../features/profile/data/datasources/profile_remote_datasource.dart';
 import '../../features/profile/data/repositories/profile_repository_impl.dart';
@@ -126,7 +128,10 @@ void _registerAuth() {
   sl.registerLazySingleton(() => LoginUseCase(sl()));
   sl.registerLazySingleton(() => RegisterUseCase(sl()));
   sl.registerLazySingleton(() => VerifyOtpUseCase(sl()));
-  sl.registerLazySingleton(() => LogoutUseCase(sl()));
+  sl.registerLazySingleton(() => ResendOtpUseCase(sl()));
+  // (authRepository, notificationRepository, secureStorage) — see the
+  // usecase's own doc for why logout reaches into the notification feature.
+  sl.registerLazySingleton(() => LogoutUseCase(sl(), sl(), sl()));
   sl.registerLazySingleton(() => ForgotPasswordUseCase(sl()));
   sl.registerLazySingleton(() => ResetPasswordUseCase(sl()));
 
@@ -135,6 +140,7 @@ void _registerAuth() {
     () => AuthCubit(
       register: sl(),
       verifyOtp: sl(),
+      resendOtp: sl(),
       login: sl(),
       logout: sl(),
       forgotPassword: sl(),
@@ -154,31 +160,56 @@ void _registerFriends() {
   sl.registerLazySingleton(() => DeclineFriendRequestUseCase(sl()));
   sl.registerLazySingleton(() => UnfriendUseCase(sl()));
 
+  // Routes the client previously had no methods for at all, though the
+  // backend has always served them. No UI yet — the data layer is ready
+  // whenever a "blocked users" screen is.
+  sl.registerLazySingleton(() => CancelFriendRequestUseCase(sl()));
+  sl.registerLazySingleton(() => GetBlockedUsersUseCase(sl()));
+  sl.registerLazySingleton(() => BlockUserUseCase(sl()));
+  sl.registerLazySingleton(() => UnblockUserUseCase(sl()));
+
   sl.registerFactory(
     () => FriendsCubit(getFriends: sl(), getRequests: sl(), acceptRequest: sl(), declineRequest: sl(), unfriend: sl()),
   );
 }
 
 void _registerNotifications() {
+  // `yello-notify` is a third service on the same host — see `NotifyRoutes`
+  // (in the data source below) for why it reuses `ApiClient` but not
+  // `VersionedEndpoints`.
   sl.registerLazySingleton<NotificationRemoteDataSource>(() => NotificationRemoteDataSourceImpl(sl()));
-  sl.registerLazySingleton<NotificationRepository>(() => NotificationRepositoryImpl(sl(), sl()));
+  sl.registerLazySingleton<NotificationRepository>(() => NotificationRepositoryImpl(sl(), sl(), sl()));
 
-  sl.registerLazySingleton(() => GetNotificationsUseCase(sl()));
+  sl.registerLazySingleton(() => GetInboxUseCase(sl()));
   sl.registerLazySingleton(() => GetUnreadNotificationCountUseCase(sl()));
-  sl.registerLazySingleton(() => MarkAllNotificationsReadUseCase(sl()));
   sl.registerLazySingleton(() => MarkNotificationReadUseCase(sl()));
+  sl.registerLazySingleton(() => MarkAllNotificationsReadUseCase(sl()));
+  sl.registerLazySingleton(() => DeleteNotificationUseCase(sl()));
+  sl.registerLazySingleton(() => RegisterDeviceUseCase(sl()));
+  sl.registerLazySingleton(() => UnregisterDeviceUseCase(sl()));
+  sl.registerLazySingleton(() => GetNotificationPreferencesUseCase(sl()));
+  sl.registerLazySingleton(() => UpdateNotificationPreferencesUseCase(sl()));
 
-  sl.registerFactory(
+  // Long-lived: backs both the Signals tab *and* the bottom-nav unread
+  // badge (`BottomNavBar` resolves the same instance via
+  // `sl<NotificationsCubit>()`) — see the cubit's own class doc for why a
+  // factory here would silently break that badge.
+  sl.registerLazySingleton(
     () => NotificationsCubit(
-      getNotifications: sl(),
-      markAllRead: sl(),
+      getInbox: sl(),
+      getUnreadCount: sl(),
       markRead: sl(),
+      markAllRead: sl(),
+      deleteNotification: sl(),
       acceptFriendRequest: sl(),
       declineFriendRequest: sl(),
       getFriendRequests: sl(),
       getFriends: sl(),
     ),
   );
+
+  // Factory: the settings screen has no reason to keep state once popped.
+  sl.registerFactory(() => NotificationPreferencesCubit(getPreferences: sl(), updatePreferences: sl()));
 }
 
 void _registerProfile() {
@@ -246,19 +277,37 @@ void _registerProfile() {
 }
 
 void _registerChat() {
-  sl.registerLazySingleton(() => ChatLocalDataSource());
-  sl.registerLazySingleton<ChatRepository>(() => ChatRepositoryImpl(sl()));
+  // `yello-chat` is a second service on the same host, so it reuses
+  // [ApiClient] — and with it the bearer header and refresh-on-401 — but
+  // shares none of yello-api's `/v1` prefix or response envelope. See
+  // `ChatRoutes`.
+  sl.registerLazySingleton<ChatRemoteDataSource>(() => ChatRemoteDataSourceImpl(sl()));
+
+  // Chat participants arrive as bare user ids; this resolves them to names
+  // and avatars through yello-api and caches them for the session.
+  sl.registerLazySingleton(() => UserDirectory(sl()));
+
+  // (remote, directory, getMe, networkInfo)
+  sl.registerLazySingleton<ChatRepository>(() => ChatRepositoryImpl(sl(), sl(), sl(), sl()));
 
   sl.registerLazySingleton(() => GetConversationsUseCase(sl()));
   sl.registerLazySingleton(() => GetMessagesUseCase(sl()));
   sl.registerLazySingleton(() => SendMessageUseCase(sl()));
+  sl.registerLazySingleton(() => MarkReadUseCase(sl()));
+  sl.registerLazySingleton(() => StartDirectConversationUseCase(sl()));
 
   // Long-lived: the Inbox list (and unread counts) survives tab switches.
   sl.registerLazySingleton(() => MessagesCubit(sl()));
 
   sl.registerFactoryParam<ChatCubit, String, void>(
-    (conversationId, _) =>
-        ChatCubit(conversationId: conversationId, getMessages: sl(), sendMessage: sl(), repository: sl()),
+    (conversationId, _) => ChatCubit(
+      conversationId: conversationId,
+      getMessages: sl(),
+      sendMessage: sl(),
+      markRead: sl(),
+      repository: sl(),
+      inbox: sl(),
+    ),
   );
 }
 
@@ -326,6 +375,8 @@ void _registerFeed() {
       deleteComment: sl(),
       getShareLink: sl(),
       getMe: sl(),
+      repost: sl(),
+      getUserPosts: sl(),
     ),
   );
 

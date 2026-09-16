@@ -31,6 +31,14 @@ abstract final class AppConstants {
   /// session; any other value (including absent) means it may.
   static const String secureKeyRememberMe = 'auth.remember_me';
 
+  /// The FCM token last successfully registered via `PUT
+  /// /notifications/v1/devices` (see `NotificationRepositoryImpl`).
+  /// `LogoutUseCase` reads this to call `POST /devices/unregister` before
+  /// the session's own tokens are discarded, per `yello-notify`'s
+  /// documented client flow — without a push SDK wired up yet, this simply
+  /// stays unset and the unregister step is a no-op.
+  static const String secureKeyPushToken = 'notify.push_token';
+
   static const String prefsKeyThemeMode = 'settings.theme_mode';
   static const String prefsKeyOnboardingSeen = 'settings.onboarding_seen';
 }

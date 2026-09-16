@@ -76,18 +76,18 @@ class StoryCubit extends Cubit<StoryState> {
 
   Future<void> start(int initialUserIndex) async {
     final result = await _getStories(const NoParams());
-    result.fold(
-      (failure) => emit(state.copyWith(status: StoryStatus.error, errorMessage: failure.message)),
-      (stories) {
-        if (stories.isEmpty || initialUserIndex >= stories.length) {
-          emit(state.copyWith(status: StoryStatus.finished));
-          return;
-        }
-        emit(StoryState(status: StoryStatus.playing, stories: stories, userIndex: initialUserIndex));
-        _markCurrentSeen();
-        _runSegment();
-      },
-    );
+    // The story viewer can be backed out of before this resolves, closing
+    // this factory cubit — same guard `ReactorsCubit.load()` documents.
+    if (isClosed) return;
+    result.fold((failure) => emit(state.copyWith(status: StoryStatus.error, errorMessage: failure.message)), (stories) {
+      if (stories.isEmpty || initialUserIndex >= stories.length) {
+        emit(state.copyWith(status: StoryStatus.finished));
+        return;
+      }
+      emit(StoryState(status: StoryStatus.playing, stories: stories, userIndex: initialUserIndex));
+      _markCurrentSeen();
+      _runSegment();
+    });
   }
 
   /// Fire-and-forget — flips the current user's tray to seen without
@@ -140,11 +140,7 @@ class StoryCubit extends Cubit<StoryState> {
     }
     if (state.userIndex > 0) {
       final prevUser = state.stories[state.userIndex - 1];
-      emit(state.copyWith(
-        userIndex: state.userIndex - 1,
-        segmentIndex: prevUser.segments.length - 1,
-        progress: 0,
-      ));
+      emit(state.copyWith(userIndex: state.userIndex - 1, segmentIndex: prevUser.segments.length - 1, progress: 0));
       _markCurrentSeen();
       _runSegment();
       return;

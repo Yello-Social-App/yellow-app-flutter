@@ -35,34 +35,26 @@ class AuthRepositoryImpl implements AuthRepository {
     required String password,
     required String username,
     String? fullName,
-  }) =>
-      _run(() async {
-        final res = await _remote.register(
-          email: email,
-          password: password,
-          username: username,
-          fullName: fullName,
-        );
-        await _local.setLastEmail(email);
-        return RegistrationResult(userId: res.userId, email: res.email, message: res.message);
-      });
+  }) => _run(() async {
+    final res = await _remote.register(email: email, password: password, username: username, fullName: fullName);
+    await _local.setLastEmail(email);
+    return RegistrationResult(userId: res.userId, email: res.email, message: res.message);
+  });
 
   @override
-  Future<Either<Failure, void>> verifyOtp({required String email, required String code}) =>
-      _run(() async {
-        final tokens = await _remote.verifyOtp(email: email, code: code);
-        await _sessionManager.startSession(
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
-        );
-      });
+  Future<Either<Failure, String?>> verifyOtp({required String email, required String code}) => _run(() async {
+    final result = await _remote.verifyOtp(email: email, code: code);
+    if (result.purpose == 'RESET_PASSWORD') return result.resetToken;
+    final tokens = result.tokens!;
+    await _sessionManager.startSession(accessToken: tokens.accessToken, refreshToken: tokens.refreshToken);
+    return null;
+  });
 
   @override
-  Future<Either<Failure, void>> login({
-    required String email,
-    required String password,
-    bool rememberMe = true,
-  }) =>
+  Future<Either<Failure, void>> resendOtp(String email) => _run(() => _remote.resendOtp(email));
+
+  @override
+  Future<Either<Failure, void>> login({required String email, required String password, bool rememberMe = true}) =>
       _run(() async {
         final tokens = await _remote.login(email: email, password: password);
         await _local.setLastEmail(email);
@@ -75,15 +67,15 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<Either<Failure, void>> logout() => _run(() async {
-        try {
-          await _remote.logout();
-        } finally {
-          // The session ends locally even if the server-side revoke call
-          // fails (offline logout, expired token) — the user's intent to
-          // sign out shouldn't be blocked by a network error.
-          await _sessionManager.endSession();
-        }
-      });
+    try {
+      await _remote.logout();
+    } finally {
+      // The session ends locally even if the server-side revoke call
+      // fails (offline logout, expired token) — the user's intent to
+      // sign out shouldn't be blocked by a network error.
+      await _sessionManager.endSession();
+    }
+  });
 
   @override
   Future<Either<Failure, void>> forgotPassword(String email) => _run(() => _remote.forgotPassword(email));

@@ -75,7 +75,7 @@ class AppColors extends ThemeExtension<AppColors> {
   final Color slot;
 
   static const light = AppColors(
-    bg: Color(0xFFFBFAF6),
+    bg: Color(0xFFFFFFFF),
     surf: Color(0xFFFFFFFF),
     surf2: Color(0xFFF5F2EA),
     ink: Color(0xFF14120C),

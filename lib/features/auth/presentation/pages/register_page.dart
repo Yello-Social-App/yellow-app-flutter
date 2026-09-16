@@ -11,6 +11,7 @@ import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../bloc/auth_cubit.dart';
 import '../widgets/auth_form_field.dart';
 import '../widgets/auth_hero.dart';
+import '../widgets/otp_code_field.dart';
 import '../widgets/toggle_switch.dart';
 
 /// Sign-up screen, in the same illustrated-hero layout as `login_page.dart`
@@ -248,7 +249,7 @@ class _DetailsCardState extends State<_DetailsCard> {
                     _passwordTouched &&
                         _passwordController.text.isNotEmpty &&
                         !_passwordLooksValid
-                    ? 'At least $_minPasswordLength characters.'
+                    ? '- At least One UPPERCASE letters, \n- $_minPasswordLength characters with numbers and Symbols\n  (@,#,\$,%,^,&,*).\n- Example: Password123@'
                     : null,
                 helperColor: colors.red,
                 trailing: GestureDetector(
@@ -359,66 +360,108 @@ class _OtpCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        AuthHero(
-          icon: Icons.password_outlined,
-          badgeA: Icons.mail_outline,
-          badgeB: Icons.badge_outlined,
-          filled: false,
-          leading: _BackButton(onTap: () => context.read<AuthCubit>().reset()),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Check your email',
-                style: AppTextStyles.displayXl.copyWith(
-                  color: colors.ink,
-                  fontSize: 32,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Enter the 6-digit code we sent to $email.',
-                style: AppTextStyles.bodySm.copyWith(
-                  color: colors.ink2,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 28),
-              AuthFormField(
-                label: 'Verification code',
-                controller: controller,
-                keyboardType: TextInputType.number,
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) =>
-                    context.read<AuthCubit>().verifyOtp(controller.text),
-                leadingIcon: Icons.password_outlined,
-              ),
-              const SizedBox(height: 24),
-              BlocBuilder<AuthCubit, AuthState>(
-                builder: (context, state) {
-                  return AppButton(
-                    label: state.isSubmitting
-                        ? 'Verifying…'
-                        : 'Verify & continue',
-                    fullWidth: true,
-                    onPressed: state.isSubmitting
-                        ? null
-                        : () => context.read<AuthCubit>().verifyOtp(
-                            controller.text,
-                          ),
-                  );
-                },
-              ),
-            ],
+    return BlocListener<AuthCubit, AuthState>(
+      // Scoped to this step only — [resendOtp] deliberately never touches
+      // `status`, so this never fires the outer `_RegisterView` listener's
+      // success/failure handling (see `AuthState.infoMessage`'s doc).
+      listenWhen: (prev, curr) =>
+          curr.status == AuthStatus.awaitingOtp &&
+          (curr.infoMessage != prev.infoMessage ||
+              curr.errorMessage != prev.errorMessage),
+      listener: (context, state) {
+        if (state.infoMessage != null) {
+          AppStatusSnackbar.showSuccess(context, message: state.infoMessage!);
+        } else if (state.errorMessage != null) {
+          AppStatusSnackbar.showError(context, message: state.errorMessage!);
+        }
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AuthHero(
+            icon: Icons.password_outlined,
+            badgeA: Icons.mail_outline,
+            badgeB: Icons.badge_outlined,
+            filled: false,
+            leading: _BackButton(
+              onTap: () => context.read<AuthCubit>().reset(),
+            ),
           ),
-        ),
-      ],
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Check your email',
+                  style: AppTextStyles.displayXl.copyWith(
+                    color: colors.ink,
+                    fontSize: 32,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Enter the 6-digit code we sent to $email.',
+                  style: AppTextStyles.bodySm.copyWith(
+                    color: colors.ink2,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                OtpCodeField(
+                  controller: controller,
+                  onCompleted: (code) =>
+                      context.read<AuthCubit>().verifyOtp(code),
+                ),
+                const SizedBox(height: 24),
+                BlocBuilder<AuthCubit, AuthState>(
+                  builder: (context, state) {
+                    return AppButton(
+                      label: state.isSubmitting
+                          ? 'Verifying…'
+                          : 'Verify & continue',
+                      fullWidth: true,
+                      onPressed: state.isSubmitting
+                          ? null
+                          : () => context.read<AuthCubit>().verifyOtp(
+                              controller.text,
+                            ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                BlocBuilder<AuthCubit, AuthState>(
+                  builder: (context, state) {
+                    return Center(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: state.isProcessing
+                            ? null
+                            : () => context.read<AuthCubit>().resendOtp(),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 10,
+                            horizontal: 4,
+                          ),
+                          child: Text(
+                            state.isProcessing
+                                ? 'Resending…'
+                                : "Didn't get a code? Resend",
+                            style: AppTextStyles.button.copyWith(
+                              color: colors.yeld,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

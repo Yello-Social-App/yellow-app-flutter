@@ -163,6 +163,18 @@ class FeedCubit extends Cubit<FeedState> {
     );
   }
 
+  /// Drops back to [FeedState]'s initial values and forgets in-flight
+  /// bookkeeping — called when the signed-in identity changes (see
+  /// `bootstrap.dart`'s `SessionManager` listener) so the next `load()`
+  /// after a different account signs in doesn't short-circuit on this
+  /// singleton's leftover `status: loaded` from the previous account.
+  void reset() {
+    _myRepostIds.clear();
+    _pendingReactions.clear();
+    _pendingReposts.clear();
+    emit(const FeedState());
+  }
+
   Future<void> loadMore() async {
     if (!state.hasMore || state.isLoadingMore || state.nextCursor == null) return;
     emit(state.copyWith(isLoadingMore: true));
@@ -229,26 +241,57 @@ class FeedCubit extends Cubit<FeedState> {
   /// equatable UI state.
   final Set<String> _pendingReactions = {};
 
+  /// Flips the pill immediately on tap (see [_predictReaction]) rather than
+  /// waiting on the full `POST /reactions` round trip against the live
+  /// backend just to show what the tap already implies — that wait was
+  /// reported as the like/repost buttons feeling "slow". The real response
+  /// still wins the moment it arrives; a failed request rolls back to
+  /// [post] unchanged instead of leaving an unconfirmed guess on screen.
   Future<void> toggleLike(PostEntity post) async {
     if (!_pendingReactions.add(post.id)) return;
+    _replace(post.id, (current) => _predictReaction(current, ReactionType.like));
     try {
       final result = await _likePost(post);
-      result.fold((_) {}, (updated) => _replace(post.id, (_) => updated));
+      result.fold((_) => _replace(post.id, (_) => post), (updated) => _replace(post.id, (_) => updated));
     } finally {
       _pendingReactions.remove(post.id);
     }
   }
 
   /// Sets/switches/removes [post]'s reaction to [type] — the long-press
-  /// reaction-picker path (see [toggleLike] for the plain single-tap path).
+  /// reaction-picker path (see [toggleLike] for the plain single-tap path
+  /// and its identical optimistic-update reasoning).
   Future<void> react(PostEntity post, ReactionType type) async {
     if (!_pendingReactions.add(post.id)) return;
+    _replace(post.id, (current) => _predictReaction(current, type));
     try {
       final result = await _reactToPost(ReactToPostParams(post: post, type: type));
-      result.fold((_) {}, (updated) => _replace(post.id, (_) => updated));
+      result.fold((_) => _replace(post.id, (_) => post), (updated) => _replace(post.id, (_) => updated));
     } finally {
       _pendingReactions.remove(post.id);
     }
+  }
+
+  /// Predicts the toggle-reaction endpoint's own add/change/remove decision
+  /// (`FeedRepositoryImpl.reactToPost`'s doc: the server always decides from
+  /// the viewer's *current* reaction) so [toggleLike]/[react] can apply it
+  /// locally the instant a tap lands. Purely a UI guess — the awaited
+  /// response is still the source of truth and overwrites this the moment
+  /// it lands.
+  PostEntity _predictReaction(PostEntity post, ReactionType type) {
+    final current = post.viewerReactionType;
+    final next = current == type ? null : type;
+    final counts = Map<String, int>.from(post.reactionCounts);
+    if (current != null) {
+      final left = (counts[current.wireValue] ?? 1) - 1;
+      if (left > 0) {
+        counts[current.wireValue] = left;
+      } else {
+        counts.remove(current.wireValue);
+      }
+    }
+    if (next != null) counts[next.wireValue] = (counts[next.wireValue] ?? 0) + 1;
+    return post.copyWith(reactionCounts: counts, viewerReaction: next?.wireValue);
   }
 
   Future<void> toggleSave(String postId) async {
@@ -323,24 +366,28 @@ class FeedCubit extends Cubit<FeedState> {
   /// repost (found via [_myRepostIds]) if they have. Replaces the plain
   /// "always create another repost" `repostPost` this used to be — that
   /// let repeated taps pile up unbounded reposts with no way back.
+  ///
+  /// Flips the pill/count optimistically before the create/delete request
+  /// even goes out — same reasoning as [toggleLike]'s doc — and rolls back
+  /// to [post] unchanged if that request fails.
   Future<void> toggleRepost(PostEntity post) async {
     if (!_pendingReposts.add(post.id)) return;
     try {
       if (post.repostedByMe) {
         final myRepostId = _myRepostIds[post.id];
         if (myRepostId == null) return;
+        _replace(post.id, (p) => p.copyWith(repostCount: p.repostCount - 1, repostedByMe: false));
         final result = await _deletePost(myRepostId);
-        result.fold((_) {}, (_) {
+        result.fold((_) => _replace(post.id, (_) => post), (_) {
           _myRepostIds.remove(post.id);
           removePost(myRepostId);
-          _replace(post.id, (p) => p.copyWith(repostCount: p.repostCount - 1, repostedByMe: false));
         });
       } else {
+        _replace(post.id, (p) => p.copyWith(repostCount: p.repostCount + 1, repostedByMe: true));
         final result = await _repost(RepostParams(postId: post.id));
-        result.fold((_) {}, (newPost) {
+        result.fold((_) => _replace(post.id, (_) => post), (newPost) {
           _myRepostIds[post.id] = newPost.id;
           prependPost(newPost);
-          _replace(post.id, (p) => p.copyWith(repostCount: p.repostCount + 1, repostedByMe: true));
         });
       }
     } finally {
