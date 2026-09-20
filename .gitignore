@@ -46,3 +46,6 @@ app.*.map.json
 
 # Backend repo nested in this project - not part of the Flutter app repo
 /yello_social_app_backend/
+
+# Claude Code local overrides (machine-specific, not shared)
+.claude/settings.local.json

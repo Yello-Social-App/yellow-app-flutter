@@ -6,6 +6,46 @@ single message asks for.
 
 ---
 
+## Start here — the read order
+
+This repo carries its own durable context. Read it before searching `lib/`;
+re-deriving it by grepping 220 Dart files burns the context you'll need for
+the actual work, and lands on a slightly different answer every time.
+
+| # | File | What it gives you |
+|---|---|---|
+| 1 | `AGENTS.md` | The hard rules, shared with every other AI tool |
+| 2 | `docs/ARCHITECTURE.md` | Layers, request lifecycle, where new code goes |
+| 3 | `docs/CODEMAP.md` | Generated index: every file, route, DI registration |
+| 4 | `docs/GOTCHAS.md` | What already broke on-device — read before any UI work |
+| 5 | `docs/BACKEND.md` | Endpoints, envelope, gaps that are permanent |
+| 6 | `docs/DECISIONS.md` | Why it is this way, so you don't "fix" a decision |
+
+Then open only the files `CODEMAP.md` points you at. Within a session, trust
+what you've already read — don't reopen a file to re-confirm something you
+established earlier.
+
+`AGENTS.md` holds everything that isn't Claude-specific, so the rules stay the
+same whichever assistant is driving. Where the two files overlap, fix
+`AGENTS.md` and let this one defer to it.
+
+**Keeping them true is part of the change, not overhead:**
+
+| When you… | Also do this |
+|---|---|
+| Add/move/delete a file, route, or DI registration | `bash tool/codemap.sh` |
+| Make a user-visible change | `CHANGELOG.md` entry under `[Unreleased]` |
+| Make a non-trivial design choice | Append an ADR to `docs/DECISIONS.md` |
+| Lose time to a non-obvious trap | Add it to `docs/GOTCHAS.md` |
+| Find the backend differs from the docs | Correct `docs/BACKEND.md` |
+
+`bash tool/codemap.sh --check` exits non-zero when the committed map is stale.
+
+Slash commands wired up for this project: `/prime` (load context), `/codemap`,
+`/changelog`, `/adr`, `/feature`, `/review`, `/preflight`.
+
+---
+
 ## 0. Workflow
 
 **You act as a senior developer with write access, not just a reviewer.**
@@ -154,13 +194,17 @@ finding in a Flutter codebase:
 
 - **Mobile-only** (Android/iOS). Do not propose or verify via web/Windows/macOS/Linux
   builds, and don't suggest re-adding those platform folders.
-- **Real live backend**, not mocked: `https://dev.yello-api.cachewraith.com`
-  (`/v3/api-docs` for the current OpenAPI spec). **Chat and Stories have no
-  backend at all** (intentionally local/mock — `ChatLocalDataSource`,
-  `StoryLocalDataSource`), and neither does bookmarking a post
-  (`shared_preferences`-backed). Don't propose "wire this up to the API" for
-  those three without checking the spec first — the gap is by design, not an
-  oversight.
+- **Real live backend**, not mocked: `https://api.yello.cachewraith.com`
+  (Swagger UI at `/docs`, raw OpenAPI at `/docs/json?api-docs.json`). Two
+  satellite services share the host: `yello-chat` (`/ws/...`) and
+  `yello-notify` (`/notifications/v1/...` — version *after* the resource,
+  which is why both keep their own route holders instead of going through
+  `VersionedEndpoints`).
+- **Stories and saved posts have no backend at all** — no `/stories` resource
+  exists, and bookmarking is `shared_preferences`-backed on-device. Both are
+  permanent client-side stand-ins, not placeholders waiting to be wired up.
+  **Chat does have a backend** (`yello-chat`), despite what older notes said.
+  Full contract and the gap list: `docs/BACKEND.md`.
 - Some backend limitations aren't fixable client-side (e.g. comment replies
   can be created but never listed back by any endpoint; no per-notification
   "already responded" field; feed-list vs. single-post endpoints can briefly
@@ -176,6 +220,7 @@ finding in a Flutter codebase:
 ## 5. Always fine to do freely
 
 Reading files, searching the codebase, running `flutter analyze`, `flutter
-test`, `flutter pub get`/`outdated`, fetching the live API spec, writing up
-findings, and — per §0 — making the actual code changes once you know what
-they should be.
+test`, `flutter pub get`/`outdated`, `bash tool/codemap.sh` and
+`tool/codemap.sh --check`, fetching the live API spec, writing up findings,
+and — per §0 — making the actual code changes once you know what they should
+be.
