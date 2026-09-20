@@ -16,12 +16,21 @@ abstract final class NotificationTypes {
   static const friendRequestReceived = 'FRIEND_REQUEST_RECEIVED';
   static const friendRequestAccepted = 'FRIEND_REQUEST_ACCEPTED';
 
-  /// Push-only — the notify service never writes this to the inbox (no
-  /// `CHAT_MESSAGE` row is ever returned by `GET /notifications/v1`), so it
-  /// never actually reaches [NotificationEntity]. Listed for parity with a
-  /// tapped push's `data.type` and with the mute list on the preferences
-  /// screen, which covers it too.
+  /// Chat activity is excluded from Signals, even if returned by the inbox.
   static const chatMessage = 'CHAT_MESSAGE';
+
+  /// Post and friend activity shown in Signals. Notification recipients are
+  /// determined by the notification service.
+  static const signalTypes = {
+    postCreated,
+    postCommented,
+    commentReplied,
+    postReposted,
+    postReacted,
+    commentReacted,
+    friendRequestReceived,
+    friendRequestAccepted,
+  };
 
   /// All nine wire values, in the order the preferences screen lists them.
   static const all = [
@@ -58,6 +67,7 @@ class NotificationEntity extends Equatable {
 
   final String id;
   final String type;
+  bool get isSignal => NotificationTypes.signalTypes.contains(type);
   final String title;
   final String body;
 

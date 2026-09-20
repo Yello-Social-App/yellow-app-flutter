@@ -1,9 +1,12 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app.dart';
 import 'core/config/app_config.dart';
 import 'core/di/injection.dart';
+import 'core/notifications/push_notification_service.dart';
 import 'core/security/root_jailbreak_detector.dart';
 import 'core/security/session_manager.dart';
 import 'core/utils/logger.dart';
@@ -20,6 +23,21 @@ import 'features/feed/presentation/bloc/feed_cubit.dart';
 /// (`sl<ApiClient>()` is lazy, but nothing stops an early resolution).
 Future<void> bootstrap({required String baseUrl}) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Push notifications (FCM) — must run before `configureDependencies()`
+  // registers anything that touches `FirebaseMessaging`/`FlutterLocalNotifications`,
+  // and before the first frame so a cold-start push tap has a ready app.
+  // Relies on the native config files (`android/app/google-services.json`,
+  // `ios/Runner/GoogleService-Info.plist`) rather than a generated
+  // `firebase_options.dart` — swap to `Firebase.initializeApp(options:
+  // DefaultFirebaseOptions.currentPlatform)` if this app later adopts the
+  // FlutterFire CLI (`flutterfire configure`).
+  await Firebase.initializeApp();
+
+  // Must be registered before the first frame — a push that arrives while
+  // the app is fully killed re-enters Dart through this top-level handler
+  // in its own isolate, not through `bootstrap()`.
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
   // Every screen in this app (stories, the floating bottom nav, the feed
   // app bar, the profile header's overlap layout) is hand-positioned for
@@ -38,6 +56,12 @@ Future<void> bootstrap({required String baseUrl}) async {
   AppConfig.init(baseUrl: baseUrl);
 
   await configureDependencies();
+
+  // Requests notification permission, registers this device's FCM token
+  // with `yello-notify`, and starts showing pushes that arrive in the
+  // foreground. Needs `configureDependencies()` to have already registered
+  // `PushNotificationService` in `sl`.
+  await sl<PushNotificationService>().init();
 
   // Every logout path (see `AuthRepositoryImpl.logout`) ends in
   // `SessionManager.endSession()` firing this — the one point in the app

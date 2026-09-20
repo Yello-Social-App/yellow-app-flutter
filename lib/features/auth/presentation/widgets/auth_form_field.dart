@@ -92,7 +92,7 @@ class AuthFormField extends StatelessWidget {
                     ),
                     decoration: InputDecoration(
                       isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 17),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 7.5),
                       hintText: placeholder ?? label,
                       hintStyle: AppTextStyles.body.copyWith(
                         fontSize: 15,

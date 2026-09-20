@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/di/injection.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../features/chat/presentation/bloc/messages_cubit.dart';
 import '../../../../features/feed/presentation/bloc/feed_cubit.dart';
-import '../../../../features/notification/presentation/bloc/notifications_cubit.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
+import 'explore_sheet.dart';
 
-/// The bottom nav: Feed, Signals, a raised "+" create button, Inbox, then
+/// The bottom nav: Feed, Explore, a raised "+" create button, Inbox, then
 /// Profile — five equal-width slots, with a short yellow accent line sitting
 /// on the bar's top edge above whichever tab is selected, topped with a
 /// small arrowhead that pops down toward that tab's icon (restyled to our
@@ -18,11 +19,12 @@ import '../../../../shared/widgets/app_avatar.dart';
 /// Laid out as a flat, full-width bar flush with the screen edges — no side
 /// margins, no rounded corners, no drop shadow — matching the plain strip
 /// look of e.g. Facebook's bottom nav, rather than the floating rounded pill
-/// this used to be. The background is white (was the dark "ink" shell
-/// token); inactive icons/labels, the unread dot's border and the Profile
-/// avatar's dim ring all flipped from a white-on-dark tint to an ink-on-white
-/// one to stay visible against it. The active yellow and the accent-line
-/// indicator are unchanged in color — only its edge moved.
+/// this used to be. Colors come from the [AppColors] theme extension rather
+/// than hard-coded constants, so the bar follows the app's light/dark toggle
+/// instead of staying white-on-ink in dark mode: the background is `surf`,
+/// the top hairline `line2`, inactive icons/labels + the Profile avatar's
+/// dim ring `ink3`, the unread dot `red` ringed in `surf`, and the active
+/// tint + accent-line indicator `yel`.
 ///
 /// Circle (branch index 1, the friends screen) is intentionally not shown
 /// here — its route/branch still exists in the router for later use, it's
@@ -38,10 +40,19 @@ import '../../../../shared/widgets/app_avatar.dart';
 /// with a circular border that glows yellow while this tab is active and
 /// sits dim otherwise, matching the other tabs' icon-turns-yellow treatment.
 ///
-/// `currentIndex` is a router *branch* index (Feed 0, Inbox 2, Signals 3,
-/// Profile 4 — Circle's branch 1 is skipped), which doesn't match this bar's
-/// left-to-right slot order, so [_slotForBranch] maps branch -> visual slot
-/// so the indicator lands under the right tab.
+/// **Slot 2 is Explore, not a tab.** Signals used to sit there; it traded
+/// places with the feed app bar's Explore button, so Signals is now reached
+/// from that app bar (`goBranch(3)`) and this slot opens [showExploreSheet]
+/// instead. Communities and Showcase have no router branch of their own —
+/// the sheet's rows `push` over the shell — so this slot is a launcher
+/// button, not a destination: it never lights up as the active tab, and the
+/// indicator stays wherever it was. That also means the Signals unread dot
+/// no longer lives in this bar; the app bar's own Signals button carries it.
+///
+/// `currentIndex` is a router *branch* index (Feed 0, Inbox 2, Profile 4 —
+/// Circle's branch 1 and Signals' branch 3 have no slot here), which doesn't
+/// match this bar's left-to-right slot order, so [_slotForBranch] maps
+/// branch -> visual slot so the indicator lands under the right tab.
 class BottomNavBar extends StatelessWidget {
   const BottomNavBar({
     super.key,
@@ -54,17 +65,19 @@ class BottomNavBar extends StatelessWidget {
   final void Function(int branchIndex) onTabSelected;
   final VoidCallback onCreate;
 
+  /// The brand yellow and the cream glyph sitting on it are deliberately
+  /// theme-independent — the raised "+" button is a brand mark and reads the
+  /// same on either background. Every other color in this bar now comes from
+  /// [AppColors] so the bar follows the light/dark token set.
   static const _yel = Color(0xFFF4C542);
-  static const _ink = Color(0xFF14120C);
-  static const _red = Color(0xFFE4574F);
-  static const _bg = Colors.white;
-  static const _slot = Color(0xFFEDE9DF);
-  static const _surf2 = Color(0xFFF5F2EA);
+  static const _onYelGlyph = Color(0xFFEDE9DF);
 
   static const _barHeight = 62.0;
   static const _slotCount = 5;
-  // Visual left-to-right order is Feed, Signals, Create, Inbox, Profile.
-  static const _slotForBranch = {0: 0, 3: 1, 2: 3, 4: 4};
+  // Visual left-to-right order is Feed, Explore, Create, Inbox, Profile.
+  // Explore (slot 1) is deliberately absent: it opens a sheet rather than
+  // activating a branch, so no branch index ever maps onto it.
+  static const _slotForBranch = {0: 0, 2: 3, 4: 4};
 
   @override
   Widget build(BuildContext context) {
@@ -76,16 +89,18 @@ class BottomNavBar extends StatelessWidget {
     // indicator), matching a normal full-bleed nav bar instead of leaving a
     // gap of page background showing underneath it.
     final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final c = AppColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: _bg,
-        // An ink hairline rather than the old yellow tint — same family the
-        // app's light-surface dividers already use elsewhere (see
-        // `AppColors.line`), since a pale yellow line barely shows up on
-        // white.
-        border: Border(top: BorderSide(color: _ink.withValues(alpha: 0.12))),
+        color: c.surf,
+        // A neutral hairline rather than the old yellow tint — the same
+        // divider token the app's surfaces already use elsewhere, since a
+        // pale yellow line barely shows up against either background.
+        border: Border(top: BorderSide(color: c.line2)),
         // Floats the bar above the page content now that the page
-        // background is flat white too (see `AppColors.light.bg`) — a
+        // background is flat and near-tonal with the bar (see
+        // `AppColors.light.bg` / `AppColors.dark.bg`) — a
         // negative `dy` casts the shadow upward, onto the content behind the
         // bar, matching a normal bottom-nav elevation cue. This is a plain
         // `DecoratedBox` built once per `BottomNavBar` rebuild — not an
@@ -98,7 +113,9 @@ class BottomNavBar extends StatelessWidget {
         // this sandbox.
         boxShadow: [
           BoxShadow(
-            color: _ink.withValues(alpha: 0.08),
+            // Always a black scrim, never the ink token — `ink` is near-white
+            // in dark mode, which would turn this into a glow.
+            color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.08),
             blurRadius: 16,
             offset: const Offset(0, -4),
           ),
@@ -128,7 +145,7 @@ class BottomNavBar extends StatelessWidget {
                           selectedCenter: animatedCenter,
                           slotWidth: slotWidth,
                           barHeight: _barHeight,
-                          color: _yel,
+                          color: c.yel,
                         ),
                       ),
                     ),
@@ -151,20 +168,16 @@ class BottomNavBar extends StatelessWidget {
                         ),
                         SizedBox(
                           width: slotWidth,
-                          child:
-                              BlocBuilder<
-                                NotificationsCubit,
-                                NotificationsState
-                              >(
-                                bloc: sl<NotificationsCubit>(),
-                                builder: (context, state) => _NavItem(
-                                  icon: Icons.favorite_border,
-                                  label: 'Signals',
-                                  active: currentIndex == 3,
-                                  dot: state.unreadCount > 0,
-                                  onTap: () => onTabSelected(3),
-                                ),
-                              ),
+                          child: _NavItem(
+                            icon: Icons.widgets_outlined,
+                            label: 'Explore',
+                            // Never active — see the class doc. It opens the
+                            // sheet in place rather than going through
+                            // `onTabSelected`, which only speaks branch
+                            // indices.
+                            active: false,
+                            onTap: () => showExploreSheet(context),
+                          ),
                         ),
                         SizedBox(
                           width: slotWidth,
@@ -188,7 +201,7 @@ class BottomNavBar extends StatelessWidget {
                                     height: 45,
                                     child: Icon(
                                       Icons.add,
-                                      color: _slot,
+                                      color: _onYelGlyph,
                                       size: 22,
                                     ),
                                   ),
@@ -274,16 +287,15 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Was a white tint (readable over the old dark "ink" bar background) —
-    // flipped to an ink tint now the bar is white, landing close to the
-    // app's `ink3` tertiary-text token.
-    final fg = active
-        ? BottomNavBar._yel
-        : BottomNavBar._ink.withValues(alpha: 0.45);
+    // The tertiary-ink token: dark-on-light in light mode, light-on-dark in
+    // dark mode, so inactive tabs stay legible either way.
+    final c = AppColors.of(context);
+    final fg = active ? c.yel : c.ink3;
 
     return Semantics(
       selected: active,
       label: label,
+      value: dot ? 'Unread notifications' : null,
       button: true,
       child: InkResponse(
         onTap: onTap,
@@ -316,15 +328,11 @@ class _NavItem extends StatelessWidget {
                             height: 8,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: BottomNavBar._red,
-                              // Matches the bar's own background (white, was
-                              // near-black to match the old dark bar) so the
-                              // dot still reads as cut into it rather than
+                              color: c.red,
+                              // Matches the bar's own background so the dot
+                              // still reads as cut into it rather than
                               // pasted on top.
-                              border: Border.all(
-                                color: BottomNavBar._bg,
-                                width: 1,
-                              ),
+                              border: Border.all(color: c.surf, width: 1),
                             ),
                           ),
                         ),
@@ -387,20 +395,15 @@ class _ProfileAvatarIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     return AnimatedContainer(
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeOutBack,
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        // Same white-to-ink tint flip as _NavItem's inactive icons above,
-        // for the same reason.
-        border: Border.all(
-          color: active
-              ? BottomNavBar._yel
-              : BottomNavBar._ink.withValues(alpha: 0.35),
-          width: 1.6,
-        ),
+        // Same theme-driven tint as _NavItem's inactive icons above.
+        border: Border.all(color: active ? c.yel : c.ink3, width: 1.6),
       ),
       child: AppAvatar(
         initials: initials,

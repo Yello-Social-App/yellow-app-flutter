@@ -106,6 +106,7 @@ class _NotificationsView extends StatelessWidget {
               color: colors.ink,
               backgroundColor: colors.surf,
               child: ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
                 itemCount: itemCount,
                 itemBuilder: (context, index) {
@@ -113,14 +114,14 @@ class _NotificationsView extends StatelessWidget {
                   final bodyIndex = index - 1;
 
                   if (bodyIndex < bodyCount && (loadingEmpty || errorEmpty || state.items.isEmpty)) {
-                    if (loadingEmpty) return const ShimmerPostCard();
+                    if (loadingEmpty) return const ShimmerListCard();
                     if (errorEmpty) {
                       return ErrorView(message: state.errorMessage ?? 'Could not load your notifications.', onRetry: cubit.refresh);
                     }
                     return Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
-                        "Nothing yet — you'll see reactions, comments and requests here.",
+                        "Nothing yet — you'll see likes, comments, reposts, friends' posts and friend requests here.",
                         textAlign: TextAlign.center,
                         style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
                       ),

@@ -29,10 +29,8 @@ class NotificationsState extends Equatable {
   final String? nextCursor;
   final bool isLoadingMore;
 
-  /// From `GET /unread-count` — kept as its own field rather than derived
-  /// from [items] because the badge must be right (and paintable) before
-  /// any inbox page has loaded, and chat pushes are excluded from this
-  /// count server-side, something a locally-derived count could never know.
+  /// Counts unread Signals across all pages, excluding chat and other
+  /// activity hidden from this screen, independently of the loaded [items].
   final int unreadCount;
 
   final String? errorMessage;
@@ -136,17 +134,37 @@ class NotificationsCubit extends Cubit<NotificationsState> {
   final GetFriendsUseCase _getFriends;
 
   static const _pageSize = 20;
+  Future<void>? _refreshTask;
+  bool _refreshAgain = false;
+  bool _refreshingUnreadCount = false;
+  int _generation = 0;
 
   Future<void> load() async {
-    if (state.status == NotificationsStatus.loaded) return;
+    if (state.status == NotificationsStatus.loaded || state.status == NotificationsStatus.loading) return;
     await refresh();
   }
 
-  /// Client flow per the service's own docs: paint the badge from a cheap
-  /// `unread-count` call, then load the first inbox page — done together
-  /// here since this cubit backs both the badge and the Signals screen.
-  Future<void> refresh() async {
-    emit(state.copyWith(status: NotificationsStatus.loading));
+  /// Refresh the filtered unread count and first Signals page together.
+  Future<void> refresh({bool queueIfLoading = false}) {
+    if (isClosed) return Future.value();
+    if (_refreshTask != null) {
+      if (queueIfLoading) _refreshAgain = true;
+      return Future.value();
+    }
+    _refreshAgain = true;
+    return _refreshTask ??= _drainRefreshes().whenComplete(() => _refreshTask = null);
+  }
+
+  Future<void> _drainRefreshes() async {
+    while (_refreshAgain && !isClosed) {
+      _refreshAgain = false;
+      await _refreshOnce();
+    }
+  }
+
+  Future<void> _refreshOnce() async {
+    final generation = ++_generation;
+    emit(state.copyWith(status: NotificationsStatus.loading, isLoadingMore: false));
 
     final results = await Future.wait<dynamic>([
       _getUnreadCount(const NoParams()),
@@ -155,7 +173,7 @@ class NotificationsCubit extends Cubit<NotificationsState> {
     // A pop while this is in flight closes this factory-turned-singleton's
     // subscribers, but not the cubit itself — still guard against emitting
     // into a disposed instance the same way every other cubit here does.
-    if (isClosed) return;
+    if (isClosed || generation != _generation) return;
 
     final countResult = results[0] as Either<Failure, int>;
     final pageResult = results[1] as Either<Failure, NotificationsPage>;
@@ -171,36 +189,45 @@ class NotificationsCubit extends Cubit<NotificationsState> {
     }
 
     final alreadyResponded = await _precomputeRespondedIds(page!.items);
-    if (isClosed) return;
+    if (isClosed || generation != _generation) return;
     emit(
       state.copyWith(
         status: NotificationsStatus.loaded,
         items: page!.items,
         nextCursor: page!.nextCursor,
+        isLoadingMore: false,
         unreadCount: unread,
         respondedRequestIds: alreadyResponded,
       ),
     );
   }
 
-  /// Just the badge — cheap enough to call from anywhere the count might
-  /// have gone stale (e.g. a future app-foreground hook) without pulling a
-  /// full inbox page along with it.
+  /// Refresh just the badge without replacing the currently loaded rows.
   Future<void> refreshUnreadCount() async {
-    final result = await _getUnreadCount(const NoParams());
-    if (isClosed) return;
-    result.fold(
-      (failure) => appLogger.w('refreshUnreadCount failed — ${failure.message}'),
-      (count) => emit(state.copyWith(unreadCount: count)),
-    );
+    if (isClosed || _refreshingUnreadCount || _refreshTask != null) return;
+    _refreshingUnreadCount = true;
+    final generation = _generation;
+    final previousCount = state.unreadCount;
+    try {
+      final result = await _getUnreadCount(const NoParams());
+      // Don't overwrite a newer refresh or a local mark-as-read update.
+      if (isClosed || generation != _generation || state.unreadCount != previousCount) return;
+      result.fold(
+        (failure) => appLogger.w('refreshUnreadCount failed — ${failure.message}'),
+        (count) => emit(state.copyWith(unreadCount: count)),
+      );
+    } finally {
+      _refreshingUnreadCount = false;
+    }
   }
 
   Future<void> loadMore() async {
-    if (!state.hasMore || state.isLoadingMore) return;
+    if (isClosed || state.status == NotificationsStatus.loading || !state.hasMore || state.isLoadingMore) return;
+    final generation = _generation;
     emit(state.copyWith(isLoadingMore: true));
 
     final result = await _getInbox(GetInboxParams(size: _pageSize, cursor: state.nextCursor));
-    if (isClosed) return;
+    if (isClosed || generation != _generation) return;
     result.fold(
       (_) => emit(state.copyWith(isLoadingMore: false)),
       (page) => emit(

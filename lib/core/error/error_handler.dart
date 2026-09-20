@@ -3,6 +3,39 @@ import 'package:dio/dio.dart';
 import 'exceptions.dart';
 import 'failures.dart';
 
+/// Every value of the backend's `ErrorCode` enum, as named constants so call
+/// sites branch on one of these instead of an inline string literal that
+/// silently stops matching when the spec renames a code.
+///
+/// Kept in the spec's own order (see the `ErrorCode` schema in
+/// `/docs/json?api-docs.json`). Clients branch on `code`, never on
+/// `message` — the message is human copy and may be reworded at any time.
+abstract final class ApiErrorCodes {
+  static const String validationFailed = 'VALIDATION_FAILED';
+  static const String resourceNotFound = 'RESOURCE_NOT_FOUND';
+  static const String emailAlreadyUsed = 'EMAIL_ALREADY_USED';
+  static const String usernameAlreadyUsed = 'USERNAME_ALREADY_USED';
+  static const String invalidCredentials = 'INVALID_CREDENTIALS';
+  static const String accountNotVerified = 'ACCOUNT_NOT_VERIFIED';
+  static const String accountSuspended = 'ACCOUNT_SUSPENDED';
+  static const String tokenInvalid = 'TOKEN_INVALID';
+  static const String tokenExpired = 'TOKEN_EXPIRED';
+  static const String tokenRevoked = 'TOKEN_REVOKED';
+  static const String rateLimitExceeded = 'RATE_LIMIT_EXCEEDED';
+  static const String accessDenied = 'ACCESS_DENIED';
+  static const String postNotVisible = 'POST_NOT_VISIBLE';
+  static const String communityMembershipRequired = 'COMMUNITY_MEMBERSHIP_REQUIRED';
+  static const String otpInvalid = 'OTP_INVALID';
+  static const String otpTooManyAttempts = 'OTP_TOO_MANY_ATTEMPTS';
+  static const String resetTokenInvalid = 'RESET_TOKEN_INVALID';
+  static const String invalidImage = 'INVALID_IMAGE';
+  static const String alreadyReposted = 'ALREADY_REPOSTED';
+  static const String friendRequestConflict = 'FRIEND_REQUEST_CONFLICT';
+  static const String usernameChangeCooldown = 'USERNAME_CHANGE_COOLDOWN';
+  static const String payloadTooLarge = 'PAYLOAD_TOO_LARGE';
+  static const String internalError = 'INTERNAL_ERROR';
+}
+
 /// Central translation point between transport-level errors and the app's
 /// own [AppException] / [Failure] vocabulary. Interceptors and repositories
 /// call this instead of pattern-matching Dio/platform errors themselves.
@@ -34,7 +67,7 @@ abstract final class ErrorHandler {
         // keeps normal uploads from hitting this).
         final fallback = status == 413
             ? 'That upload is too large. Try fewer or smaller photos.'
-            : 'Server error ($status).';
+            : _messageForCode(code) ?? 'Server error ($status).';
         return ServerException(
           serverMessage ?? fallback,
           statusCode: status,
@@ -69,9 +102,38 @@ abstract final class ErrorHandler {
     return null;
   }
 
+  /// Human copy for the codes whose own server message is either absent
+  /// (a proxy answered before the backend's envelope was built) or too terse
+  /// to show a user as-is. Only consulted when [_extractServerMessage] found
+  /// nothing — the backend's own wording wins whenever it sent any.
+  static String? _messageForCode(String? code) => switch (code) {
+    ApiErrorCodes.communityMembershipRequired => 'Join this community before posting in it.',
+    ApiErrorCodes.usernameChangeCooldown => 'You changed your username recently — try again later.',
+    ApiErrorCodes.payloadTooLarge => 'That upload is too large. Try fewer or smaller photos.',
+    ApiErrorCodes.invalidImage => 'Choose a JPEG, PNG, GIF, or WebP image.',
+    ApiErrorCodes.alreadyReposted => 'You have already reposted this.',
+    ApiErrorCodes.friendRequestConflict => 'There is already a request between you two.',
+    ApiErrorCodes.postNotVisible => 'That post is not visible to you.',
+    ApiErrorCodes.accessDenied => 'You do not have access to that.',
+    ApiErrorCodes.rateLimitExceeded => 'Slow down a moment, then try again.',
+    ApiErrorCodes.resourceNotFound => 'That is no longer there.',
+    _ => null,
+  };
+
   /// Maps a data-layer [AppException] to the domain-facing [Failure] a
   /// repository returns from its `Either<Failure, T>`.
+  ///
+  /// The error `code` is consulted before the exception's Dart type: the
+  /// backend answers a whole family of *user-correctable* rejections with a
+  /// 4xx that would otherwise flatten into a [ServerFailure] ("Something
+  /// went wrong on our end."), which reads as a backend outage for what is
+  /// really "pick a different username". Those become [ValidationFailure]s,
+  /// carrying the server's own message through unchanged.
   static Failure toFailure(Object error) {
+    if (error is AppException) {
+      final mapped = _failureForCode(error);
+      if (mapped != null) return mapped;
+    }
     return switch (error) {
       UnauthorizedException e => AuthFailure(e.message),
       NetworkException e => NetworkFailure(e.message),
@@ -82,4 +144,27 @@ abstract final class ErrorHandler {
       _ => const UnknownFailure(),
     };
   }
+
+  static Failure? _failureForCode(AppException e) => switch (e.code) {
+    ApiErrorCodes.validationFailed ||
+    ApiErrorCodes.emailAlreadyUsed ||
+    ApiErrorCodes.usernameAlreadyUsed ||
+    ApiErrorCodes.usernameChangeCooldown ||
+    ApiErrorCodes.otpInvalid ||
+    ApiErrorCodes.otpTooManyAttempts ||
+    ApiErrorCodes.resetTokenInvalid ||
+    ApiErrorCodes.invalidImage ||
+    ApiErrorCodes.payloadTooLarge ||
+    ApiErrorCodes.alreadyReposted ||
+    ApiErrorCodes.friendRequestConflict ||
+    ApiErrorCodes.communityMembershipRequired ||
+    ApiErrorCodes.rateLimitExceeded => ValidationFailure(e.message),
+    ApiErrorCodes.accountNotVerified ||
+    ApiErrorCodes.accountSuspended ||
+    ApiErrorCodes.invalidCredentials ||
+    ApiErrorCodes.tokenInvalid ||
+    ApiErrorCodes.tokenExpired ||
+    ApiErrorCodes.tokenRevoked => AuthFailure(e.message),
+    _ => null,
+  };
 }

@@ -546,7 +546,7 @@ class _Pill extends StatelessWidget {
         onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(AppRadii.pill),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 9),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

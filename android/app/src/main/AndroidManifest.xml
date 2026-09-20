@@ -1,9 +1,21 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Required at runtime on API 33+ (Android 13) — without it, FCM
+         messages still arrive but the OS silently drops the system-tray
+         notification instead of showing it. PushNotificationService
+         requests it via FirebaseMessaging.instance.requestPermission(). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="Yello."
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Channel a backgrounded/killed-app push is shown under — the OS
+             draws that notification straight from the FCM payload without
+             ever running Dart code, so it needs the channel id natively.
+             Must match `_androidChannel.id` in PushNotificationService. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="yello_default_channel" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

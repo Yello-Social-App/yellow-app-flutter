@@ -1,15 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/di/injection.dart';
+import '../../../../core/notifications/push_notification_service.dart';
+import '../../../../core/security/session_manager.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
+import '../../../../shared/widgets/error_view.dart';
 import '../../domain/entities/conversation_entity.dart';
 import '../../domain/entities/message_entity.dart';
+import '../../domain/repositories/chat_repository.dart';
 import '../bloc/chat_cubit.dart';
 import '../bloc/messages_cubit.dart';
 
@@ -35,12 +41,63 @@ class _ChatView extends StatefulWidget {
   State<_ChatView> createState() => _ChatViewState();
 }
 
-class _ChatViewState extends State<_ChatView> {
+class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
   final _draftController = TextEditingController();
   final _scrollController = ScrollController();
+  Timer? _refreshTimer;
+  StreamSubscription<void>? _pushUpdates;
+  ConversationEntity? _openedConversation;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _pushUpdates = sl<PushNotificationService>().updates.listen(
+      (_) => _refreshLatest(),
+    );
+    _startRefreshTimer();
+    unawaited(_loadConversation());
+  }
+
+  Future<void> _loadConversation() async {
+    final result = await sl<ChatRepository>().getConversation(widget.conversationId);
+    if (!mounted) return;
+    result.fold((_) {}, (conversation) => setState(() => _openedConversation = conversation));
+  }
+
+  void _refreshLatest() {
+    if (!mounted ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
+        ModalRoute.of(context)?.isCurrent != true ||
+        sl<SessionManager>().currentState != SessionState.authenticated) {
+      return;
+    }
+    unawaited(context.read<ChatCubit>().refreshLatest());
+  }
+
+  void _startRefreshTimer() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _refreshLatest(),
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshLatest();
+      _startRefreshTimer();
+    } else {
+      _refreshTimer?.cancel();
+    }
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _refreshTimer?.cancel();
+    _pushUpdates?.cancel();
     _draftController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -51,7 +108,7 @@ class _ChatViewState extends State<_ChatView> {
     for (final c in conversations) {
       if (c.id == widget.conversationId) return c;
     }
-    return null;
+    return _openedConversation;
   }
 
   void _send() {
@@ -73,7 +130,11 @@ class _ChatViewState extends State<_ChatView> {
           children: [
             Container(
               padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: colors.line, width: 1.5))),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: colors.line, width: 1.5),
+                ),
+              ),
               child: Row(
                 children: [
                   AppIconButton(
@@ -94,17 +155,34 @@ class _ChatViewState extends State<_ChatView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(conversation.name, style: AppTextStyles.titleMd.copyWith(fontSize: 15, color: colors.ink)),
+                          Text(
+                            conversation.name,
+                            style: AppTextStyles.titleMd.copyWith(
+                              fontSize: 15,
+                              color: colors.ink,
+                            ),
+                          ),
                           const SizedBox(height: 5),
                           Row(
                             children: [
                               if (conversation.isOnline) ...[
-                                Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: colors.grn)),
+                                Container(
+                                  width: 7,
+                                  height: 7,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: colors.grn,
+                                  ),
+                                ),
                                 const SizedBox(width: 6),
                               ],
                               Text(
-                                conversation.isOnline ? 'ACTIVE NOW' : 'OFFLINE',
-                                style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
+                                conversation.isOnline
+                                    ? 'ACTIVE NOW'
+                                    : 'OFFLINE',
+                                style: AppTextStyles.metaMono.copyWith(
+                                  color: colors.ink2,
+                                ),
                               ),
                             ],
                           ),
@@ -118,6 +196,10 @@ class _ChatViewState extends State<_ChatView> {
             ),
             Expanded(
               child: BlocConsumer<ChatCubit, ChatState>(
+                listenWhen: (previous, current) =>
+                    previous.messages.length != current.messages.length ||
+                    previous.messages.lastOrNull?.id !=
+                        current.messages.lastOrNull?.id,
                 listener: (context, state) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (!_scrollController.hasClients) return;
@@ -132,16 +214,43 @@ class _ChatViewState extends State<_ChatView> {
                   if (state.status == ChatStatus.loading) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  return ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
-                    itemCount: state.messages.length + (state.isTyping ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == state.messages.length) return const _TypingBubble();
-                      final message = state.messages[index];
-                      final showTime = index == state.messages.length - 1 ||
-                          state.messages[index + 1].fromMe != message.fromMe;
-                      return _MessageBubble(message: message, showTime: showTime);
+                  if (state.status == ChatStatus.error) {
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.all(14),
+                      child: ErrorView(
+                        message:
+                            state.errorMessage ??
+                            'Could not load this conversation.',
+                        onRetry: context.read<ChatCubit>().load,
+                      ),
+                    );
+                  }
+                  return BlocBuilder<MessagesCubit, MessagesState>(
+                    bloc: sl<MessagesCubit>(),
+                    builder: (context, inboxState) {
+                      final conversation = inboxState.conversations
+                          .where((item) => item.id == widget.conversationId)
+                          .firstOrNull;
+                      return ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+                        itemCount:
+                            state.messages.length + (state.isTyping ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index == state.messages.length) {
+                            return const _TypingBubble();
+                          }
+                          final message = state.messages[index];
+                          return _MessageBubble(
+                            message: message,
+                            isRead: _isReadByPeers(
+                              message,
+                              state.messages,
+                              conversation,
+                            ),
+                          );
+                        },
+                      );
                     },
                   );
                 },
@@ -149,10 +258,16 @@ class _ChatViewState extends State<_ChatView> {
             ),
             Container(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
-              decoration: BoxDecoration(border: Border(top: BorderSide(color: colors.line, width: 1.5))),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: colors.line, width: 1.5)),
+              ),
               child: Row(
                 children: [
-                  AppIconButton(icon: const Icon(Icons.add), size: 42, onPressed: () {}),
+                  AppIconButton(
+                    icon: const Icon(Icons.add),
+                    size: 42,
+                    onPressed: () {},
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Container(
@@ -168,7 +283,9 @@ class _ChatViewState extends State<_ChatView> {
                         style: AppTextStyles.hint.copyWith(color: colors.ink),
                         decoration: InputDecoration(
                           hintText: 'Message',
-                          hintStyle: AppTextStyles.hint.copyWith(color: colors.ink3),
+                          hintStyle: AppTextStyles.hint.copyWith(
+                            color: colors.ink3,
+                          ),
                           border: InputBorder.none,
                         ),
                       ),
@@ -192,10 +309,36 @@ class _ChatViewState extends State<_ChatView> {
   }
 }
 
+/// Only an actual read-message marker proves a read. `lastReadAt` is the
+/// time of the read action, not the timestamp of the message read.
+bool _isReadByPeers(
+  MessageEntity message,
+  List<MessageEntity> messages,
+  ConversationEntity? conversation,
+) {
+  if (!message.fromMe ||
+      message.status != MessageDeliveryStatus.sent ||
+      conversation == null) {
+    return false;
+  }
+  final peers = conversation.participants
+      .where((peer) => peer.userId != message.senderId)
+      .toList();
+  if (peers.isEmpty) return false;
+  final messageIndex = messages.indexWhere((item) => item.id == message.id);
+  return peers.every((peer) {
+    final readId = peer.lastReadMessageId;
+    if (readId == null) return false;
+    if (readId == message.id) return true;
+    final readIndex = messages.indexWhere((item) => item.id == readId);
+    return messageIndex >= 0 && readIndex > messageIndex;
+  });
+}
+
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message, required this.showTime});
+  const _MessageBubble({required this.message, required this.isRead});
   final MessageEntity message;
-  final bool showTime;
+  final bool isRead;
 
   @override
   Widget build(BuildContext context) {
@@ -204,16 +347,23 @@ class _MessageBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 3),
       child: Column(
-        crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: mine
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
         children: [
           ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.78),
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.sizeOf(context).width * 0.78,
+            ),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
               margin: const EdgeInsets.only(top: 10),
               decoration: BoxDecoration(
                 color: mine ? colors.yel : colors.surf,
-                border: Border.all(color: mine ? colors.ink : colors.line, width: 1.5),
+                border: Border.all(
+                  color: mine ? colors.ink : colors.line,
+                  width: 1.5,
+                ),
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(20),
                   topRight: const Radius.circular(20),
@@ -223,18 +373,29 @@ class _MessageBubble extends StatelessWidget {
               ),
               child: Text(
                 message.text,
-                style: AppTextStyles.body.copyWith(fontSize: 14.5, color: mine ? colors.onYel : colors.ink),
+                style: AppTextStyles.body.copyWith(
+                  fontSize: 14.5,
+                  color: mine ? colors.onYel : colors.ink,
+                ),
               ),
             ),
           ),
-          if (showTime)
-            Padding(
-              padding: const EdgeInsets.only(top: 7),
-              child: Text(
-                _timeLabel(message.sentAt) + (mine ? ' ✓✓' : ''),
-                style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
-              ),
+          Padding(
+            padding: const EdgeInsets.only(top: 7),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _timeLabel(message.sentAt.toLocal()),
+                  style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
+                ),
+                if (mine) ...[
+                  const SizedBox(width: 8),
+                  _DeliveryMark(message: message, isRead: isRead),
+                ],
+              ],
             ),
+          ),
         ],
       ),
     );
@@ -244,6 +405,49 @@ class _MessageBubble extends StatelessWidget {
     final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
     final m = t.minute.toString().padLeft(2, '0');
     return '$h:$m ${t.hour >= 12 ? 'PM' : 'AM'}';
+  }
+}
+
+class _DeliveryMark extends StatelessWidget {
+  const _DeliveryMark({required this.message, required this.isRead});
+  final MessageEntity message;
+  final bool isRead;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final (icon, label) = switch (message.status) {
+      MessageDeliveryStatus.sending => (Icons.schedule, 'Sending'),
+      MessageDeliveryStatus.failed => (
+        Icons.error_outline,
+        'Failed to send. Tap to retry',
+      ),
+      MessageDeliveryStatus.sent =>
+        isRead ? (Icons.done_all, 'Read') : (Icons.check, 'Sent'),
+    };
+    return Semantics(
+      label: label,
+      child: Tooltip(
+        message: label,
+        child: InkWell(
+          onTap: message.status == MessageDeliveryStatus.failed
+              ? () => context.read<ChatCubit>().retry(message)
+              : null,
+          child: Padding(
+            padding: const EdgeInsets.all(3),
+            child: Icon(
+              icon,
+              size: 16,
+              color: message.status == MessageDeliveryStatus.failed
+                  ? colors.red
+                  : isRead
+                  ? colors.grn
+                  : colors.ink2,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -273,7 +477,14 @@ class _TypingBubble extends StatelessWidget {
           children: List.generate(3, (i) {
             return Padding(
               padding: EdgeInsets.only(left: i == 0 ? 0 : 5),
-              child: Container(width: 6, height: 6, decoration: BoxDecoration(shape: BoxShape.circle, color: colors.ink3)),
+              child: Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: colors.ink3,
+                ),
+              ),
             );
           }),
         ),

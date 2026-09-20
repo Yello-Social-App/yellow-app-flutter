@@ -102,17 +102,19 @@ class FriendsRemoteDataSourceImpl implements FriendsRemoteDataSource {
   Future<void> unfriend(String userId) => _guard(() => _dio.delete<void>(VersionedEndpoints.unfriend(userId)));
 
   /// Severs any friendship or pending request and hides both users' posts
-  /// from each other. Idempotent, and never revealed to the other user.
+  /// from each other. Never revealed to the other user.
   @override
   Future<FriendshipModel> blockUser(String userId) => _guard(() async {
-        final res = await _dio.post<Map<String, dynamic>>(VersionedEndpoints.userBlock(userId));
-        return FriendshipModel.fromJson(ApiEnvelope.data(res));
+        final res = await _dio.post<Map<String, dynamic>>(VersionedEndpoints.userBlock(userId), data: <String, dynamic>{});
+        final data = res.data?['data'];
+        return FriendshipModel.fromJson(data is Map<String, dynamic> ? data : {'user': {'id': userId}});
       });
 
   @override
   Future<FriendshipModel> unblockUser(String userId) => _guard(() async {
         final res = await _dio.delete<Map<String, dynamic>>(VersionedEndpoints.userBlock(userId));
-        return FriendshipModel.fromJson(ApiEnvelope.data(res));
+        final data = res.data?['data'];
+        return FriendshipModel.fromJson(data is Map<String, dynamic> ? data : {'user': {'id': userId}});
       });
 
   ({List<FriendshipModel> items, bool hasMore}) _page(Response<Map<String, dynamic>> res) {

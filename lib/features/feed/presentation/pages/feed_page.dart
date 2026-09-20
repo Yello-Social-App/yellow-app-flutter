@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -8,6 +10,7 @@ import '../../../../core/di/injection.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../notification/presentation/bloc/notifications_cubit.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
@@ -111,7 +114,9 @@ class _FeedViewState extends State<_FeedView> {
                     if (state.status == FeedStatus.loading && state.posts.isEmpty)
                       SliverPadding(
                         padding: const EdgeInsets.symmetric(horizontal: 14),
-                        sliver: SliverList.list(children: const [ShimmerPostCard(), ShimmerPostCard()]),
+                        sliver: SliverList.list(
+                          children: const [ShimmerPostCard(), ShimmerPostCard(hasImage: false)],
+                        ),
                       )
                     else if (state.status == FeedStatus.error && state.posts.isEmpty)
                       SliverPadding(
@@ -364,6 +369,13 @@ class _FeedAppBar extends StatelessWidget {
         child: const RepaintBoundary(child: YelloWordmark(fontSize: AppTextStyles.displayXlFontSize)),
       ),
       actions: [
+        // Signals (notifications) sits here rather than in the bottom bar —
+        // it swapped places with the Explore sheet, which moved down to the
+        // nav slot it vacated (see `BottomNavBar`). Branch 3 still exists in
+        // the router, so this is a `goBranch` like Circle below, not a push;
+        // the bar's active-tab indicator simply never lands on it any more.
+        const _SignalsAction(),
+        const SizedBox(width: 8),
         AppIconButton(icon: const Icon(Icons.search), onPressed: () => context.pushNamed(RouteNames.search)),
         const SizedBox(width: 8),
         // Circle (friends) button — the brand-mark icon, not a user photo
@@ -377,6 +389,63 @@ class _FeedAppBar extends StatelessWidget {
         ),
         const SizedBox(width: 14),
       ],
+    );
+  }
+}
+
+/// The app bar's Signals button: the same unread dot `BottomNavBar` used to
+/// paint on this tab, scoped to its own `BlocBuilder` so a notification
+/// arriving repaints a 42px button instead of the whole pinned app bar.
+class _SignalsAction extends StatelessWidget {
+  const _SignalsAction();
+
+  /// `MainShellPage.onTabSelected` silently re-fetches Signals whenever its
+  /// tab is (re)selected — `NotificationsCubit` is a long-lived singleton
+  /// behind a kept-alive branch, so without that it loads exactly once and
+  /// then goes stale for the rest of the app's life. Reaching the branch
+  /// straight from this button bypasses that callback, so the same refresh
+  /// has to happen here.
+  void _openSignals(BuildContext context) {
+    unawaited(sl<NotificationsCubit>().refresh());
+    StatefulNavigationShell.of(context).goBranch(3);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return BlocBuilder<NotificationsCubit, NotificationsState>(
+      bloc: sl<NotificationsCubit>(),
+      buildWhen: (a, b) => (a.unreadCount > 0) != (b.unreadCount > 0),
+      builder: (context, state) => Semantics(
+        label: 'Signals',
+        value: state.unreadCount > 0 ? 'Unread notifications' : null,
+        button: true,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            AppIconButton(
+              icon: const Icon(Icons.favorite_border),
+              onPressed: () => _openSignals(context),
+            ),
+            if (state.unreadCount > 0)
+              Positioned(
+                top: 1,
+                right: 1,
+                child: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: colors.red,
+                    // Ringed in the bar's own background so the dot reads as
+                    // cut into the button rather than pasted on top.
+                    border: Border.all(color: colors.bg, width: 1.5),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

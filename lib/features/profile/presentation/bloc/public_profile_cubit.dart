@@ -13,13 +13,7 @@ import '../../domain/usecases/profile_usecases.dart';
 
 enum PublicProfileStatus { initial, loading, loaded, error }
 
-/// The viewer's relationship to the profile being shown, cross-referenced
-/// client-side from `GET /friends` (accepted) and `GET /friends/requests`
-/// (pending, incoming-to-viewer only) — there is no backend endpoint to list
-/// requests the *viewer* has sent, so [requestSent] is a local, session-only
-/// flag (same category of gap as `NotificationsCubit.respondedRequestIds`,
-/// see memory): it resets on next app start/page revisit and can't be told
-/// apart from [none] at that point.
+/// The viewer's relationship, taken from the API's friendStatus.
 enum FriendStatus { self, friends, incomingRequest, requestSent, none }
 
 class PublicProfileState extends Equatable {
@@ -30,7 +24,10 @@ class PublicProfileState extends Equatable {
     this.friendStatus = FriendStatus.none,
     this.incomingRequestId,
     this.friendActionBusy = false,
+    this.blockedByMe = false,
     this.errorMessage,
+    this.hasMorePosts = false,
+    this.loadingMorePosts = false,
   });
 
   final PublicProfileStatus status;
@@ -48,7 +45,10 @@ class PublicProfileState extends Equatable {
   /// incoming request here to act on".
   final String? incomingRequestId;
   final bool friendActionBusy;
+  final bool blockedByMe;
   final String? errorMessage;
+  final bool hasMorePosts;
+  final bool loadingMorePosts;
 
   PublicProfileState copyWith({
     PublicProfileStatus? status,
@@ -57,21 +57,40 @@ class PublicProfileState extends Equatable {
     FriendStatus? friendStatus,
     Object? incomingRequestId = _unset,
     bool? friendActionBusy,
+    bool? blockedByMe,
     String? errorMessage,
+    bool? hasMorePosts,
+    bool? loadingMorePosts,
   }) {
     return PublicProfileState(
       status: status ?? this.status,
       user: user ?? this.user,
       posts: posts ?? this.posts,
       friendStatus: friendStatus ?? this.friendStatus,
-      incomingRequestId: identical(incomingRequestId, _unset) ? this.incomingRequestId : incomingRequestId as String?,
+      incomingRequestId: identical(incomingRequestId, _unset)
+          ? this.incomingRequestId
+          : incomingRequestId as String?,
       friendActionBusy: friendActionBusy ?? this.friendActionBusy,
+      blockedByMe: blockedByMe ?? this.blockedByMe,
       errorMessage: errorMessage,
+      hasMorePosts: hasMorePosts ?? this.hasMorePosts,
+      loadingMorePosts: loadingMorePosts ?? this.loadingMorePosts,
     );
   }
 
   @override
-  List<Object?> get props => [status, user, posts, friendStatus, incomingRequestId, friendActionBusy, errorMessage];
+  List<Object?> get props => [
+    status,
+    user,
+    posts,
+    friendStatus,
+    incomingRequestId,
+    friendActionBusy,
+    blockedByMe,
+    errorMessage,
+    hasMorePosts,
+    loadingMorePosts,
+  ];
 }
 
 const Object _unset = Object();
@@ -85,6 +104,8 @@ const Object _unset = Object();
 class PublicProfileCubit extends Cubit<PublicProfileState> {
   PublicProfileCubit({
     required this.userId,
+    BlockUserUseCase? blockUser,
+    UnblockUserUseCase? unblockUser,
     required GetMeUseCase getMe,
     required GetUserUseCase getUser,
     required GetUserPostsUseCase getUserPosts,
@@ -99,7 +120,9 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
     required RepostUseCase repost,
     required DeletePostUseCase deletePost,
     required ToggleSaveUseCase toggleSave,
-  }) : _getMe = getMe,
+  }) : _blockUser = blockUser,
+       _unblockUser = unblockUser,
+       _getMe = getMe,
        _getUser = getUser,
        _getUserPosts = getUserPosts,
        _getFriends = getFriends,
@@ -115,6 +138,8 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
        _toggleSave = toggleSave,
        super(const PublicProfileState());
 
+  final BlockUserUseCase? _blockUser;
+  final UnblockUserUseCase? _unblockUser;
   final String userId;
   final GetMeUseCase _getMe;
   final GetUserUseCase _getUser;
@@ -131,7 +156,52 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
   final DeletePostUseCase _deletePost;
   final ToggleSaveUseCase _toggleSave;
 
+  int _postsPage = 0;
+  int _loadVersion = 0;
+
+  Future<void> loadMorePosts() async {
+    if (state.loadingMorePosts ||
+        !state.hasMorePosts ||
+        state.status != PublicProfileStatus.loaded) {
+      return;
+    }
+    final version = _loadVersion;
+    emit(state.copyWith(loadingMorePosts: true));
+    final result = await _getUserPosts(
+      GetUserPostsParams(userId: userId, page: _postsPage + 1),
+    );
+    if (isClosed) return;
+    if (version != _loadVersion) return;
+    result.fold(
+      (failure) => emit(
+        state.copyWith(loadingMorePosts: false, errorMessage: failure.message),
+      ),
+      (page) {
+        _postsPage++;
+        final existingIds = state.posts.map((post) => post.id).toSet();
+        emit(
+          state.copyWith(
+            loadingMorePosts: false,
+            hasMorePosts: page.hasMore,
+            posts: [
+              ...state.posts,
+              ..._withMyReposts(
+                page.posts
+                    .where((post) => !existingIds.contains(post.id))
+                    .toList(),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> load() async {
+    if (state.loadingMorePosts || state.status == PublicProfileStatus.loading) {
+      return;
+    }
+    _loadVersion++;
     emit(state.copyWith(status: PublicProfileStatus.loading));
 
     final meResult = await _getMe(const NoParams());
@@ -146,26 +216,62 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
     if (isClosed) return;
     if (userResult.isLeft()) {
       emit(
-        state.copyWith(status: PublicProfileStatus.error, errorMessage: userResult.fold((l) => l.message, (_) => null)),
+        state.copyWith(
+          status: PublicProfileStatus.error,
+          errorMessage: userResult.fold((l) => l.message, (_) => null),
+        ),
       );
       return;
     }
     final user = userResult.fold((_) => null, (r) => r)!;
 
+    _postsPage = 0;
     final postsResult = await _getUserPosts(GetUserPostsParams(userId: userId));
     if (isClosed) return;
+    emit(
+      state.copyWith(
+        hasMorePosts: postsResult.fold((_) => false, (page) => page.hasMore),
+      ),
+    );
+    if (postsResult.isLeft()) {
+      emit(
+        state.copyWith(
+          status: PublicProfileStatus.error,
+          posts: const [],
+          errorMessage: postsResult.fold(
+            (failure) => failure.message,
+            (_) => null,
+          ),
+        ),
+      );
+      return;
+    }
     if (myId != null) await _seedMyRepostIds(myId);
     if (isClosed) return;
-    final posts = _withMyReposts(postsResult.fold((_) => <PostEntity>[], (page) => page.posts));
+    final posts = _withMyReposts(
+      postsResult.fold((_) => <PostEntity>[], (page) => page.posts),
+    );
 
     if (myId != null && myId == userId) {
       emit(
-        state.copyWith(status: PublicProfileStatus.loaded, user: user, posts: posts, friendStatus: FriendStatus.self),
+        state.copyWith(
+          status: PublicProfileStatus.loaded,
+          user: user,
+          posts: posts,
+          friendStatus: FriendStatus.self,
+        ),
       );
       return;
     }
 
-    final friendStatus = await _resolveFriendStatus();
+    final friendStatus = switch (user.friendStatus) {
+      'SELF' => (FriendStatus.self, null),
+      'FRIENDS' => (FriendStatus.friends, null),
+      'REQUEST_SENT' => (FriendStatus.requestSent, null),
+      'REQUEST_RECEIVED' => (FriendStatus.incomingRequest, userId),
+      'NONE' => (FriendStatus.none, null),
+      _ => await _resolveFriendStatus(),
+    };
     if (isClosed) return;
     emit(
       state.copyWith(
@@ -184,7 +290,10 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
   /// to the viewer. Returns `(status, incomingRequestId)`.
   Future<(FriendStatus, String?)> _resolveFriendStatus() async {
     final friendsResult = await _getFriends(const PageParams());
-    final isFriend = friendsResult.fold((_) => false, (page) => page.friendships.any((f) => f.userId == userId));
+    final isFriend = friendsResult.fold(
+      (_) => false,
+      (page) => page.friendships.any((f) => f.userId == userId),
+    );
     if (isFriend) return (FriendStatus.friends, null);
 
     final requestsResult = await _getFriendRequests(const PageParams());
@@ -192,9 +301,46 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
       (_) => const <FriendshipEntity>[],
       (page) => page.friendships.where((f) => f.userId == userId).toList(),
     );
-    if (incomingMatches.isNotEmpty) return (FriendStatus.incomingRequest, incomingMatches.first.id);
+    if (incomingMatches.isNotEmpty) {
+      return (FriendStatus.incomingRequest, incomingMatches.first.id);
+    }
 
     return (FriendStatus.none, null);
+  }
+
+  Future<bool> setBlocked(bool blocked) async {
+    if (state.friendActionBusy || state.loadingMorePosts) return false;
+    _loadVersion++;
+    final action = blocked ? _blockUser?.call : _unblockUser?.call;
+    if (action == null) return false;
+    emit(state.copyWith(friendActionBusy: true));
+    final result = await action(UserIdParams(userId));
+    if (isClosed) return false;
+    return result.fold(
+      (failure) {
+        emit(
+          state.copyWith(
+            friendActionBusy: false,
+            errorMessage: failure.message,
+          ),
+        );
+        return false;
+      },
+      (_) {
+        emit(
+          state.copyWith(
+            friendActionBusy: false,
+            blockedByMe: blocked,
+            hasMorePosts: false,
+            loadingMorePosts: false,
+            posts: const [],
+            friendStatus: FriendStatus.none,
+            incomingRequestId: null,
+          ),
+        );
+        return true;
+      },
+    );
   }
 
   Future<void> sendFriendRequest() async {
@@ -203,8 +349,15 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
     // Same closed-page race as `load()`.
     if (isClosed) return;
     result.fold(
-      (failure) => emit(state.copyWith(friendActionBusy: false, errorMessage: failure.message)),
-      (_) => emit(state.copyWith(friendActionBusy: false, friendStatus: FriendStatus.requestSent)),
+      (failure) => emit(
+        state.copyWith(friendActionBusy: false, errorMessage: failure.message),
+      ),
+      (_) => emit(
+        state.copyWith(
+          friendActionBusy: false,
+          friendStatus: FriendStatus.requestSent,
+        ),
+      ),
     );
   }
 
@@ -217,11 +370,22 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
     if (isClosed) return false;
     return result.fold(
       (failure) {
-        emit(state.copyWith(friendActionBusy: false, errorMessage: failure.message));
+        emit(
+          state.copyWith(
+            friendActionBusy: false,
+            errorMessage: failure.message,
+          ),
+        );
         return false;
       },
       (_) {
-        emit(state.copyWith(friendActionBusy: false, friendStatus: FriendStatus.friends, incomingRequestId: null));
+        emit(
+          state.copyWith(
+            friendActionBusy: false,
+            friendStatus: FriendStatus.friends,
+            incomingRequestId: null,
+          ),
+        );
         return true;
       },
     );
@@ -236,11 +400,22 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
     if (isClosed) return false;
     return result.fold(
       (failure) {
-        emit(state.copyWith(friendActionBusy: false, errorMessage: failure.message));
+        emit(
+          state.copyWith(
+            friendActionBusy: false,
+            errorMessage: failure.message,
+          ),
+        );
         return false;
       },
       (_) {
-        emit(state.copyWith(friendActionBusy: false, friendStatus: FriendStatus.none, incomingRequestId: null));
+        emit(
+          state.copyWith(
+            friendActionBusy: false,
+            friendStatus: FriendStatus.none,
+            incomingRequestId: null,
+          ),
+        );
         return true;
       },
     );
@@ -252,8 +427,15 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
     // Same closed-page race as `load()`.
     if (isClosed) return;
     result.fold(
-      (failure) => emit(state.copyWith(friendActionBusy: false, errorMessage: failure.message)),
-      (_) => emit(state.copyWith(friendActionBusy: false, friendStatus: FriendStatus.none)),
+      (failure) => emit(
+        state.copyWith(friendActionBusy: false, errorMessage: failure.message),
+      ),
+      (_) => emit(
+        state.copyWith(
+          friendActionBusy: false,
+          friendStatus: FriendStatus.none,
+        ),
+      ),
     );
   }
 
@@ -264,7 +446,9 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
   }
 
   Future<void> react(PostEntity post, ReactionType type) async {
-    final result = await _reactToPost(ReactToPostParams(post: post, type: type));
+    final result = await _reactToPost(
+      ReactToPostParams(post: post, type: type),
+    );
     if (isClosed) return;
     result.fold((_) {}, (updated) => _replacePost(post.id, (_) => updated));
   }
@@ -272,7 +456,10 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
   Future<void> toggleSave(String postId) async {
     final result = await _toggleSave(PostIdParams(postId));
     if (isClosed) return;
-    result.fold((_) {}, (saved) => _replacePost(postId, (p) => p.copyWith(savedByMe: saved)));
+    result.fold(
+      (_) {},
+      (saved) => _replacePost(postId, (p) => p.copyWith(savedByMe: saved)),
+    );
   }
 
   /// The viewer's own repost of a given original post id — see
@@ -287,7 +474,9 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
   /// whoever's profile is being looked at, which may be someone else).
   Future<void> _seedMyRepostIds(String myUserId) async {
     for (var page = 0; page < _maxRepostScanPages; page++) {
-      final result = await _getUserPosts(GetUserPostsParams(userId: myUserId, page: page));
+      final result = await _getUserPosts(
+        GetUserPostsParams(userId: myUserId, page: page),
+      );
       var hasMore = false;
       final failed = result.isLeft();
       result.fold((_) {}, (data) {
@@ -319,14 +508,22 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
         if (isClosed) return;
         result.fold((_) {}, (_) {
           _myRepostIds.remove(post.id);
-          _replacePost(post.id, (p) => p.copyWith(repostCount: p.repostCount - 1, repostedByMe: false));
+          _replacePost(
+            post.id,
+            (p) =>
+                p.copyWith(repostCount: p.repostCount - 1, repostedByMe: false),
+          );
         });
       } else {
         final result = await _repost(RepostParams(postId: post.id));
         if (isClosed) return;
         result.fold((_) {}, (newPost) {
           _myRepostIds[post.id] = newPost.id;
-          _replacePost(post.id, (p) => p.copyWith(repostCount: p.repostCount + 1, repostedByMe: true));
+          _replacePost(
+            post.id,
+            (p) =>
+                p.copyWith(repostCount: p.repostCount + 1, repostedByMe: true),
+          );
         });
       }
     } finally {
@@ -336,10 +533,18 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
 
   /// Re-applies [_myRepostIds] onto freshly-fetched posts — see
   /// `FeedCubit._withMyReposts`'s identical doc for why this is needed.
-  List<PostEntity> _withMyReposts(List<PostEntity> posts) =>
-      posts.map((p) => _myRepostIds.containsKey(p.id) ? p.copyWith(repostedByMe: true) : p).toList();
+  List<PostEntity> _withMyReposts(List<PostEntity> posts) => posts
+      .map(
+        (p) =>
+            _myRepostIds.containsKey(p.id) ? p.copyWith(repostedByMe: true) : p,
+      )
+      .toList();
 
   void _replacePost(String id, PostEntity Function(PostEntity) update) {
-    emit(state.copyWith(posts: state.posts.map((p) => p.id == id ? update(p) : p).toList()));
+    emit(
+      state.copyWith(
+        posts: state.posts.map((p) => p.id == id ? update(p) : p).toList(),
+      ),
+    );
   }
 }

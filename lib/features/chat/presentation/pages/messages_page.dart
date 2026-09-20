@@ -22,12 +22,29 @@ class MessagesPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider.value(value: sl<MessagesCubit>()..load(), child: const _MessagesView());
+    return BlocProvider.value(
+      value: sl<MessagesCubit>()..load(),
+      child: const _MessagesView(),
+    );
   }
 }
 
-class _MessagesView extends StatelessWidget {
+class _MessagesView extends StatefulWidget {
   const _MessagesView();
+
+  @override
+  State<_MessagesView> createState() => _MessagesViewState();
+}
+
+class _MessagesViewState extends State<_MessagesView> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,11 +57,22 @@ class _MessagesView extends StatelessWidget {
         bottom: false,
         child: BlocBuilder<MessagesCubit, MessagesState>(
           builder: (context, state) {
+            final conversations = state.conversations
+                .where(
+                  (conversation) =>
+                      _query.isEmpty ||
+                      conversation.name.toLowerCase().contains(_query) ||
+                      conversation.lastMessagePreview.toLowerCase().contains(
+                        _query,
+                      ),
+                )
+                .toList();
             return RefreshIndicator(
               onRefresh: cubit.refresh,
               color: colors.ink,
               backgroundColor: colors.surf,
               child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
                 children: [
                   Padding(
@@ -57,27 +85,98 @@ class _MessagesView extends StatelessWidget {
                             children: [
                               Text(
                                 '${state.unreadTotal} unread',
-                                style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
+                                style: AppTextStyles.metaMono.copyWith(
+                                  color: colors.ink2,
+                                ),
                               ),
                               const SizedBox(height: 8),
-                              const YelloWordmark(fontSize: AppTextStyles.displayXlFontSize, text: 'Inbox'),
+                              const YelloWordmark(
+                                fontSize: AppTextStyles.displayXlFontSize,
+                                text: 'Inbox',
+                              ),
                             ],
                           ),
                         ),
-                        AppIconButton(icon: const Icon(Icons.edit_outlined), onPressed: () {}),
+                        AppIconButton(
+                          icon: const Icon(Icons.edit_outlined),
+                          onPressed: () {},
+                        ),
                       ],
                     ),
                   ),
-                  if (state.status == MessagesStatus.loading && state.conversations.isEmpty)
-                    const ShimmerPostCard()
-                  else if (state.status == MessagesStatus.error && state.conversations.isEmpty)
-                    ErrorView(message: state.errorMessage ?? 'Could not load your inbox.', onRetry: cubit.refresh)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (value) =>
+                          setState(() => _query = value.trim().toLowerCase()),
+                      textInputAction: TextInputAction.search,
+                      onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                      style: AppTextStyles.body.copyWith(color: colors.ink),
+                      decoration: InputDecoration(
+                        hintText: 'Search chats',
+                        hintStyle: AppTextStyles.body.copyWith(
+                          color: colors.ink3,
+                        ),
+                        prefixIcon: Icon(Icons.search, color: colors.ink2),
+                        suffixIcon: _searchController.text.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: 'Clear search',
+                                icon: Icon(Icons.close, color: colors.ink2),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _query = '');
+                                },
+                              ),
+                        filled: true,
+                        fillColor: colors.surf,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppRadii.pill),
+                          borderSide: BorderSide(
+                            color: colors.line,
+                            width: 1.5,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppRadii.pill),
+                          borderSide: BorderSide(color: colors.ink, width: 1.5),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (state.status == MessagesStatus.loading &&
+                      state.conversations.isEmpty)
+                    const ShimmerListCard()
+                  else if (state.status == MessagesStatus.error &&
+                      state.conversations.isEmpty)
+                    ErrorView(
+                      message:
+                          state.errorMessage ?? 'Could not load your inbox.',
+                      onRetry: cubit.refresh,
+                    )
                   else ...[
-                    if (state.onlineNow.isNotEmpty) ...[
+                    if (_query.isEmpty && state.onlineNow.isNotEmpty) ...[
                       _ActiveNowRail(conversations: state.onlineNow),
                       const SizedBox(height: 16),
                     ],
-                    for (final c in state.conversations) _ConversationRow(conversation: c),
+                    if (_query.isNotEmpty && conversations.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Text(
+                          'No matching chats',
+                          textAlign: TextAlign.center,
+                          style: AppTextStyles.bodySm.copyWith(
+                            color: colors.ink2,
+                          ),
+                        ),
+                      ),
+                    for (final c in conversations)
+                      _ConversationRow(conversation: c),
                   ],
                 ],
               ),
@@ -108,7 +207,10 @@ class _ActiveNowRail extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(left: 4, bottom: 12),
-            child: Text('ACTIVE NOW', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
+            child: Text(
+              'ACTIVE NOW',
+              style: AppTextStyles.eyebrow.copyWith(color: colors.ink2),
+            ),
           ),
           SizedBox(
             height: 84,
@@ -119,18 +221,28 @@ class _ActiveNowRail extends StatelessWidget {
               itemBuilder: (context, index) {
                 final c = conversations[index];
                 return GestureDetector(
-                  onTap: () => context.pushNamed(RouteNames.chat, pathParameters: {'conversationId': c.id}),
+                  onTap: () => context.pushNamed(
+                    RouteNames.chat,
+                    pathParameters: {'conversationId': c.id},
+                  ),
                   child: SizedBox(
                     width: 56,
                     child: Column(
                       children: [
-                        AppAvatar(initials: c.name.initials, seed: c.avatarSeed, size: 52, showOnlineDot: true),
+                        AppAvatar(
+                          initials: c.name.initials,
+                          seed: c.avatarSeed,
+                          size: 52,
+                          showOnlineDot: true,
+                        ),
                         const SizedBox(height: 8),
                         Text(
                           c.firstName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
+                          style: AppTextStyles.metaMono.copyWith(
+                            color: colors.ink2,
+                          ),
                         ),
                       ],
                     ),
@@ -160,16 +272,26 @@ class _ConversationRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadii.lg),
         child: InkWell(
           borderRadius: BorderRadius.circular(AppRadii.lg),
-          onTap: () => context.pushNamed(RouteNames.chat, pathParameters: {'conversationId': conversation.id}),
+          onTap: () => context.pushNamed(
+            RouteNames.chat,
+            pathParameters: {'conversationId': conversation.id},
+          ),
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              border: Border.all(color: unread ? colors.ink : colors.line, width: 1.5),
+              border: Border.all(
+                color: unread ? colors.ink : colors.line,
+                width: 1.5,
+              ),
               borderRadius: BorderRadius.circular(AppRadii.lg),
             ),
             child: Row(
               children: [
-                AppAvatar(initials: conversation.name.initials, seed: conversation.avatarSeed, size: 48),
+                AppAvatar(
+                  initials: conversation.name.initials,
+                  seed: conversation.avatarSeed,
+                  size: 48,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -181,12 +303,18 @@ class _ConversationRow extends StatelessWidget {
                             child: Text(
                               conversation.name,
                               overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.titleMd.copyWith(color: colors.ink),
+                              style: AppTextStyles.titleMd.copyWith(
+                                color: colors.ink,
+                              ),
                             ),
                           ),
                           Text(
-                            Formatters.relativeShort(conversation.lastMessageAt),
-                            style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
+                            Formatters.relativeShort(
+                              conversation.lastMessageAt,
+                            ),
+                            style: AppTextStyles.metaMono.copyWith(
+                              color: colors.ink2,
+                            ),
                           ),
                         ],
                       ),
@@ -197,7 +325,9 @@ class _ConversationRow extends StatelessWidget {
                             child: Text(
                               conversation.lastMessagePreview,
                               overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.bodySm.copyWith(color: unread ? colors.ink : colors.ink3),
+                              style: AppTextStyles.bodySm.copyWith(
+                                color: unread ? colors.ink : colors.ink3,
+                              ),
                             ),
                           ),
                           if (unread) ...[
@@ -205,7 +335,9 @@ class _ConversationRow extends StatelessWidget {
                             Container(
                               constraints: const BoxConstraints(minWidth: 20),
                               height: 20,
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
                                 color: colors.yel,
@@ -214,7 +346,10 @@ class _ConversationRow extends StatelessWidget {
                               ),
                               child: Text(
                                 '${conversation.unreadCount}',
-                                style: AppTextStyles.titleSm.copyWith(fontSize: 10, color: colors.onYel),
+                                style: AppTextStyles.titleSm.copyWith(
+                                  fontSize: 10,
+                                  color: colors.onYel,
+                                ),
                               ),
                             ),
                           ],

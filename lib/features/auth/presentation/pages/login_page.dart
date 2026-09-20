@@ -26,7 +26,10 @@ class LoginPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(create: (_) => sl<AuthCubit>(), child: const _LoginView());
+    return BlocProvider(
+      create: (_) => sl<AuthCubit>(),
+      child: const _LoginView(),
+    );
   }
 }
 
@@ -50,7 +53,9 @@ class _LoginViewState extends State<_LoginView> {
     super.dispose();
   }
 
-  bool get _canSubmit => _emailController.text.trim().isNotEmpty && _passwordController.text.isNotEmpty;
+  bool get _canSubmit =>
+      _emailController.text.trim().isNotEmpty &&
+      _passwordController.text.isNotEmpty;
 
   void _submit(BuildContext context) {
     if (!_canSubmit) return;
@@ -62,7 +67,10 @@ class _LoginViewState extends State<_LoginView> {
   }
 
   void _notAvailable(BuildContext context, String provider) {
-    AppStatusSnackbar.showError(context, message: '$provider sign-in isn\'t available yet.');
+    AppStatusSnackbar.showError(
+      context,
+      message: '$provider sign-in isn\'t available yet.',
+    );
   }
 
   @override
@@ -71,7 +79,9 @@ class _LoginViewState extends State<_LoginView> {
     return Scaffold(
       backgroundColor: colors.bg,
       body: BlocListener<AuthCubit, AuthState>(
-        listenWhen: (prev, curr) => curr.status == AuthStatus.success || curr.status == AuthStatus.failure,
+        listenWhen: (prev, curr) =>
+            curr.status == AuthStatus.success ||
+            curr.status == AuthStatus.failure,
         listener: (context, state) {
           if (state.status == AuthStatus.success) {
             context.goNamed(RouteNames.feed);
@@ -96,13 +106,22 @@ class _LoginViewState extends State<_LoginView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('Login', style: AppTextStyles.displayXl.copyWith(color: colors.ink, fontSize: 36)),
+                      Text(
+                        'Login',
+                        style: AppTextStyles.displayXl.copyWith(
+                          color: colors.ink,
+                          fontSize: 36,
+                        ),
+                      ),
                       const SizedBox(height: 6),
                       Text(
                         'Please sign in to continue.',
-                        style: AppTextStyles.bodySm.copyWith(color: colors.ink2, fontSize: 14),
+                        style: AppTextStyles.bodySm.copyWith(
+                          color: colors.ink2,
+                          fontSize: 14,
+                        ),
                       ),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 20),
                       AuthFormField(
                         label: 'Email address',
                         controller: _emailController,
@@ -123,9 +142,13 @@ class _LoginViewState extends State<_LoginView> {
                         leadingIcon: Icons.lock_outline,
                         onChanged: (_) => setState(() {}),
                         trailing: GestureDetector(
-                          onTap: () => setState(() => _obscurePassword = !_obscurePassword),
+                          onTap: () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
                           child: Icon(
-                            _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                            _obscurePassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
                             size: 19,
                             color: colors.ink3,
                           ),
@@ -136,15 +159,23 @@ class _LoginViewState extends State<_LoginView> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           GestureDetector(
-                            onTap: () => setState(() => _rememberMe = !_rememberMe),
+                            onTap: () =>
+                                setState(() => _rememberMe = !_rememberMe),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                ToggleSwitch(value: _rememberMe, onChanged: (v) => setState(() => _rememberMe = v)),
+                                ToggleSwitch(
+                                  value: _rememberMe,
+                                  onChanged: (v) =>
+                                      setState(() => _rememberMe = v),
+                                ),
                                 const SizedBox(width: 10),
                                 Text(
                                   'Remember me next time',
-                                  style: AppTextStyles.bodySm.copyWith(fontSize: 13, color: colors.ink2),
+                                  style: AppTextStyles.bodySm.copyWith(
+                                    fontSize: 13,
+                                    color: colors.ink2,
+                                  ),
                                 ),
                               ],
                             ),
@@ -158,7 +189,10 @@ class _LoginViewState extends State<_LoginView> {
                           onTap: () => _showForgotPasswordSheet(context),
                           child: Text(
                             'Forgot password?',
-                            style: AppTextStyles.metaMono.copyWith(color: colors.yeld, fontSize: 11),
+                            style: AppTextStyles.metaMono.copyWith(
+                              color: colors.yeld,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
                       ),
@@ -166,9 +200,13 @@ class _LoginViewState extends State<_LoginView> {
                       BlocBuilder<AuthCubit, AuthState>(
                         builder: (context, state) {
                           return AppButton(
-                            label: state.isSubmitting ? 'Signing in…' : 'Sign In',
+                            label: state.isSubmitting
+                                ? 'Signing in…'
+                                : 'Sign In',
                             fullWidth: true,
-                            onPressed: state.isSubmitting || !_canSubmit ? null : () => _submit(context),
+                            onPressed: state.isSubmitting || !_canSubmit
+                                ? null
+                                : () => _submit(context),
                           );
                         },
                       ),
@@ -178,17 +216,26 @@ class _LoginViewState extends State<_LoginView> {
                         children: [
                           Text(
                             "Don't have an account?",
-                            style: AppTextStyles.bodySm.copyWith(color: colors.ink2, fontSize: 13),
+                            style: AppTextStyles.bodySm.copyWith(
+                              color: colors.ink2,
+                              fontSize: 13,
+                            ),
                           ),
                           const SizedBox(width: 4),
                           GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onTap: () => context.pushNamed(RouteNames.register),
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 10,
+                                horizontal: 4,
+                              ),
                               child: Text(
                                 'Sign Up',
-                                style: AppTextStyles.button.copyWith(color: colors.yeld, fontSize: 13),
+                                style: AppTextStyles.button.copyWith(
+                                  color: colors.yeld,
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
                           ),
@@ -197,12 +244,21 @@ class _LoginViewState extends State<_LoginView> {
                       const SizedBox(height: 26),
                       Row(
                         children: [
-                          Expanded(child: Container(height: 1, color: colors.line)),
+                          Expanded(
+                            child: Container(height: 1, color: colors.line),
+                          ),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Text('OR', style: AppTextStyles.metaMono.copyWith(color: colors.ink3)),
+                            child: Text(
+                              'OR',
+                              style: AppTextStyles.metaMono.copyWith(
+                                color: colors.ink3,
+                              ),
+                            ),
                           ),
-                          Expanded(child: Container(height: 1, color: colors.line)),
+                          Expanded(
+                            child: Container(height: 1, color: colors.line),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 18),
@@ -229,7 +285,11 @@ class _LoginViewState extends State<_LoginView> {
   }
 
   Widget _googleIcon() {
-    return SizedBox(width: 20, height: 20, child: CustomPaint(painter: _GoogleGPainter()));
+    return SizedBox(
+      width: 20,
+      height: 20,
+      child: CustomPaint(painter: _GoogleGPainter()),
+    );
   }
 
   /// Two steps in one sheet, same convention as `register_page.dart`'s
@@ -253,10 +313,17 @@ class _LoginViewState extends State<_LoginView> {
       useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: colors.bg,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (sheetContext) {
         return Padding(
-          padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(sheetContext).viewInsets.bottom + 20),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+          ),
           child: BlocProvider.value(
             value: cubit,
             child: BlocConsumer<AuthCubit, AuthState>(
@@ -267,12 +334,21 @@ class _LoginViewState extends State<_LoginView> {
               listener: (context, state) {
                 if (state.status == AuthStatus.passwordResetDone) {
                   Navigator.of(sheetContext).pop();
-                  AppStatusSnackbar.showSuccess(this.context, message: 'Password changed — sign in below.');
+                  AppStatusSnackbar.showSuccess(
+                    this.context,
+                    message: 'Password changed — sign in below.',
+                  );
                   cubit.reset();
                 } else if (state.errorMessage != null) {
-                  AppStatusSnackbar.showError(this.context, message: state.errorMessage!);
+                  AppStatusSnackbar.showError(
+                    this.context,
+                    message: state.errorMessage!,
+                  );
                 } else if (state.infoMessage != null) {
-                  AppStatusSnackbar.showSuccess(this.context, message: state.infoMessage!);
+                  AppStatusSnackbar.showSuccess(
+                    this.context,
+                    message: state.infoMessage!,
+                  );
                 }
               },
               builder: (context, state) {
@@ -281,11 +357,19 @@ class _LoginViewState extends State<_LoginView> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('Enter your code', style: AppTextStyles.titleLg.copyWith(color: colors.ink)),
+                      Text(
+                        'Enter your code',
+                        style: AppTextStyles.titleLg.copyWith(
+                          color: colors.ink,
+                        ),
+                      ),
                       const SizedBox(height: 6),
                       Text(
                         'We sent a 6-digit code to ${state.pendingEmail}. Enter it below with your new password.',
-                        style: AppTextStyles.bodySm.copyWith(color: colors.ink2, fontSize: 13),
+                        style: AppTextStyles.bodySm.copyWith(
+                          color: colors.ink2,
+                          fontSize: 13,
+                        ),
                       ),
                       const SizedBox(height: 16),
                       AuthFormField(
@@ -303,7 +387,9 @@ class _LoginViewState extends State<_LoginView> {
                       ),
                       const SizedBox(height: 16),
                       AppButton(
-                        label: state.isProcessing ? 'Resetting…' : 'Reset password',
+                        label: state.isProcessing
+                            ? 'Resetting…'
+                            : 'Reset password',
                         fullWidth: true,
                         onPressed: state.isProcessing
                             ? null
@@ -318,10 +404,16 @@ class _LoginViewState extends State<_LoginView> {
                           behavior: HitTestBehavior.opaque,
                           onTap: state.isProcessing ? null : cubit.resendOtp,
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 4,
+                            ),
                             child: Text(
                               "Didn't get a code? Resend",
-                              style: AppTextStyles.bodySm.copyWith(color: colors.ink2, fontSize: 13),
+                              style: AppTextStyles.bodySm.copyWith(
+                                color: colors.ink2,
+                                fontSize: 13,
+                              ),
                             ),
                           ),
                         ),
@@ -333,7 +425,10 @@ class _LoginViewState extends State<_LoginView> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('Reset your password', style: AppTextStyles.titleLg.copyWith(color: colors.ink)),
+                    Text(
+                      'Reset your password',
+                      style: AppTextStyles.titleLg.copyWith(color: colors.ink),
+                    ),
                     const SizedBox(height: 16),
                     AuthFormField(
                       label: 'Email',
@@ -343,9 +438,13 @@ class _LoginViewState extends State<_LoginView> {
                     ),
                     const SizedBox(height: 16),
                     AppButton(
-                      label: state.isSubmitting ? 'Sending…' : 'Send reset code',
+                      label: state.isSubmitting
+                          ? 'Sending…'
+                          : 'Send reset code',
                       fullWidth: true,
-                      onPressed: state.isSubmitting ? null : () => cubit.forgotPassword(emailController.text),
+                      onPressed: state.isSubmitting
+                          ? null
+                          : () => cubit.forgotPassword(emailController.text),
                     ),
                   ],
                 );
@@ -359,7 +458,11 @@ class _LoginViewState extends State<_LoginView> {
 }
 
 class _SocialButton extends StatelessWidget {
-  const _SocialButton({required this.label, required this.icon, required this.onTap});
+  const _SocialButton({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
   final String label;
   final Widget icon;
   final VoidCallback onTap;
@@ -377,13 +480,16 @@ class _SocialButton extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(999),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 13),
+          padding: const EdgeInsets.symmetric(vertical: 9),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               icon,
               const SizedBox(width: 10),
-              Text(label, style: AppTextStyles.button.copyWith(color: colors.ink)),
+              Text(
+                label,
+                style: AppTextStyles.button.copyWith(color: colors.ink),
+              ),
             ],
           ),
         ),

@@ -44,6 +44,30 @@ enum ReactionType {
   };
 }
 
+/// The three things a reaction can be attached to — the `{targetType}` path
+/// segment of `/reactions/{targetType}/{targetId}` (the backend's
+/// `TargetType` enum). Previously spelled as bare `'POST'` / `'COMMENT'`
+/// string literals at each call site, which is how `COMMUNITY_POST` could be
+/// added server-side without anything here noticing.
+enum ReactionTargetType {
+  post,
+  comment,
+  communityPost;
+
+  String get wireValue => switch (this) {
+    ReactionTargetType.post => 'POST',
+    ReactionTargetType.comment => 'COMMENT',
+    ReactionTargetType.communityPost => 'COMMUNITY_POST',
+  };
+
+  static ReactionTargetType? fromWire(String? value) => switch (value) {
+    'POST' => ReactionTargetType.post,
+    'COMMENT' => ReactionTargetType.comment,
+    'COMMUNITY_POST' => ReactionTargetType.communityPost,
+    _ => null,
+  };
+}
+
 /// Mirrors the backend's `visibility` enum on `PostResponse` /
 /// `UpdatePostRequest` (`PUBLIC | FRIENDS | PRIVATE`) — the real-data
 /// equivalent of the mockup's Public/Circle/Close audience picker.

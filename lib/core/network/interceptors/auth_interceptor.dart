@@ -71,6 +71,10 @@ class AuthInterceptor extends Interceptor {
       final retryOptions = err.requestOptions
         ..extra[_retriedKey] = true
         ..headers[ApiConstants.headerAuthorization] = 'Bearer $token';
+      // Dio consumes multipart streams on the first attempt. Clone the form
+      // so avatar/cover uploads can be replayed after refreshing the JWT.
+      final body = retryOptions.data;
+      if (body is FormData) retryOptions.data = body.clone();
       final response = await dio.fetch<dynamic>(retryOptions);
       handler.resolve(response);
     } on DioException catch (e) {

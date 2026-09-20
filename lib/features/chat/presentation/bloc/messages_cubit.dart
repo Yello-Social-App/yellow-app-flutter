@@ -65,30 +65,55 @@ class MessagesCubit extends Cubit<MessagesState> {
   MessagesCubit(this._getConversations) : super(const MessagesState());
 
   final GetConversationsUseCase _getConversations;
+  Future<void>? _refreshTask;
+  bool _refreshAgain = false;
+  int _generation = 0;
 
   Future<void> load() async {
-    if (state.status == MessagesStatus.loaded) return;
+    if (state.status != MessagesStatus.initial) return;
     await refresh();
   }
 
-  Future<void> refresh() async {
-    emit(state.copyWith(status: MessagesStatus.loading));
+  Future<void> refresh({bool queueIfLoading = false}) {
+    if (isClosed) return Future.value();
+    if (_refreshTask != null) {
+      if (queueIfLoading) _refreshAgain = true;
+      return Future.value();
+    }
+    _refreshAgain = true;
+    return _refreshTask ??= _drainRefreshes().whenComplete(() => _refreshTask = null);
+  }
+
+  Future<void> _drainRefreshes() async {
+    while (_refreshAgain && !isClosed) {
+      _refreshAgain = false;
+      await _refreshOnce();
+    }
+  }
+
+  Future<void> _refreshOnce() async {
+    final generation = ++_generation;
+    emit(state.copyWith(status: MessagesStatus.loading, isLoadingMore: false));
     final result = await _getConversations(const CursorParams());
+    if (isClosed || generation != _generation) return;
     result.fold(
       (failure) => emit(state.copyWith(status: MessagesStatus.error, errorMessage: failure.message)),
       (page) => emit(state.copyWith(
         status: MessagesStatus.loaded,
         conversations: _sorted(page.conversations),
         nextCursor: page.nextCursor,
+        isLoadingMore: false,
       )),
     );
   }
 
   Future<void> loadMore() async {
-    if (!state.hasMore || state.isLoadingMore) return;
+    if (isClosed || state.status == MessagesStatus.loading || !state.hasMore || state.isLoadingMore) return;
+    final generation = _generation;
     emit(state.copyWith(isLoadingMore: true));
 
     final result = await _getConversations(CursorParams(cursor: state.nextCursor));
+    if (isClosed || generation != _generation) return;
     result.fold(
       (_) => emit(state.copyWith(isLoadingMore: false)),
       (page) => emit(state.copyWith(
@@ -142,5 +167,9 @@ class MessagesCubit extends Cubit<MessagesState> {
 
   /// Same reasoning as `FeedCubit.reset()` — drops this long-lived
   /// singleton back to its initial state on a signed-in-identity change.
-  void reset() => emit(const MessagesState());
+  void reset() {
+    _generation++;
+    _refreshAgain = false;
+    emit(const MessagesState());
+  }
 }

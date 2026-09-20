@@ -55,7 +55,7 @@ void main() {
     expect(size.height, lessThan(150), reason: 'the nav bar must stay compact, not stretch to fill the screen');
   });
 
-  // Regression test for a real bug: on a narrow phone width, "Signals" and
+  // Regression test for a real bug: on a narrow phone width, "Explore" and
   // "Profile" didn't fit their Expanded tab slice and wrapped onto a 2nd
   // line. Labels must shrink (via FittedBox) instead of wrapping.
   testWidgets('keeps every label on a single line even on a narrow screen', (tester) async {
@@ -76,7 +76,7 @@ void main() {
 
     expect(tester.takeException(), isNull);
 
-    for (final label in ['Feed', 'Signals', 'Inbox', 'Profile']) {
+    for (final label in ['Feed', 'Explore', 'Inbox', 'Profile']) {
       // A label wrapped onto a 2nd line would roughly double this height;
       // FittedBox instead keeps the Text's own layout pinned to one line
       // (it scales the *painted* result down, it doesn't let Text wrap).
