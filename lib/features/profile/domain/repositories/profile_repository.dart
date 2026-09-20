@@ -18,11 +18,24 @@ class UserPostsPage {
 /// `features/auth` — see that entity's doc for why.
 abstract interface class ProfileRepository {
   Future<Either<Failure, UserEntity>> getMe();
-  Future<Either<Failure, UserEntity>> updateProfile({String? username, String? fullName, String? bio});
+  Future<Either<Failure, UserEntity>> updateProfile({
+    String? username,
+    String? fullName,
+    String? bio,
+    bool clearFullName = false,
+    bool clearBio = false,
+    File? avatar,
+    File? cover,
+    bool? removeAvatar,
+    bool? removeCover,
+  });
 
-  /// Replaces the signed-in user's avatar (`PUT /users/me/avatar`, multipart)
+  /// Replaces the signed-in user's avatar (`POST /users/me`, multipart)
   /// and returns the updated `UserEntity` (its new `avatarUrl`).
   Future<Either<Failure, UserEntity>> updateAvatar(File file);
   Future<Either<Failure, PublicUserEntity>> getUser(String userId);
-  Future<Either<Failure, UserPostsPage>> getUserPosts(String userId, {int page = 0});
+  Future<Either<Failure, UserPostsPage>> getUserPosts(
+    String userId, {
+    int page = 0,
+  });
 }

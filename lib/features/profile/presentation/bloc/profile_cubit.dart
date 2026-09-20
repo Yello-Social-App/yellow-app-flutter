@@ -27,6 +27,8 @@ class ProfileState extends Equatable {
     this.savedPosts = const [],
     this.tab = ProfileTab.posts,
     this.errorMessage,
+    this.hasMorePosts = false,
+    this.loadingMorePosts = false,
     this.isUploadingAvatar = false,
   });
 
@@ -37,10 +39,14 @@ class ProfileState extends Equatable {
   final List<PostEntity> savedPosts;
   final ProfileTab tab;
   final String? errorMessage;
+  final bool hasMorePosts;
+  final bool loadingMorePosts;
   final bool isUploadingAvatar;
 
-  List<PostEntity> get originalPosts => myPosts.where((p) => !p.isRepost).toList();
-  List<PostEntity> get repostedPosts => myPosts.where((p) => p.isRepost).toList();
+  List<PostEntity> get originalPosts =>
+      myPosts.where((p) => !p.isRepost).toList();
+  List<PostEntity> get repostedPosts =>
+      myPosts.where((p) => p.isRepost).toList();
 
   List<PostEntity> get activeTabPosts => switch (tab) {
     ProfileTab.posts => originalPosts,
@@ -56,6 +62,8 @@ class ProfileState extends Equatable {
     List<PostEntity>? savedPosts,
     ProfileTab? tab,
     String? errorMessage,
+    bool? hasMorePosts,
+    bool? loadingMorePosts,
     bool? isUploadingAvatar,
   }) {
     return ProfileState(
@@ -66,6 +74,8 @@ class ProfileState extends Equatable {
       savedPosts: savedPosts ?? this.savedPosts,
       tab: tab ?? this.tab,
       errorMessage: errorMessage,
+      hasMorePosts: hasMorePosts ?? this.hasMorePosts,
+      loadingMorePosts: loadingMorePosts ?? this.loadingMorePosts,
       isUploadingAvatar: isUploadingAvatar ?? this.isUploadingAvatar,
     );
   }
@@ -79,6 +89,8 @@ class ProfileState extends Equatable {
     savedPosts,
     tab,
     errorMessage,
+    hasMorePosts,
+    loadingMorePosts,
     isUploadingAvatar,
   ];
 }
@@ -106,7 +118,6 @@ class ProfileCubit extends Cubit<ProfileState> {
        _getUserPosts = getUserPosts,
        _getSavedPostIds = getSavedPostIds,
        _getPost = getPost,
-       _getFriends = getFriends,
        _likePost = likePost,
        _reactToPost = reactToPost,
        _repost = repost,
@@ -120,12 +131,52 @@ class ProfileCubit extends Cubit<ProfileState> {
   final GetUserPostsUseCase _getUserPosts;
   final GetSavedPostIdsUseCase _getSavedPostIds;
   final GetPostUseCase _getPost;
-  final GetFriendsUseCase _getFriends;
   final LikePostUseCase _likePost;
   final ReactToPostUseCase _reactToPost;
   final RepostUseCase _repost;
   final DeletePostUseCase _deletePost;
   final ToggleSaveUseCase _toggleSave;
+
+  int _postsPage = 0;
+  int _loadVersion = 0;
+
+  Future<void> loadMorePosts() async {
+    if (state.loadingMorePosts ||
+        !state.hasMorePosts ||
+        state.status != ProfileStatus.loaded) {
+      return;
+    }
+    final version = _loadVersion;
+    emit(state.copyWith(loadingMorePosts: true));
+    final result = await _getUserPosts(
+      GetUserPostsParams(userId: state.user!.id, page: _postsPage + 1),
+    );
+    if (isClosed) return;
+    if (version != _loadVersion) return;
+    result.fold(
+      (failure) => emit(
+        state.copyWith(loadingMorePosts: false, errorMessage: failure.message),
+      ),
+      (page) {
+        _postsPage++;
+        final existingIds = state.myPosts.map((post) => post.id).toSet();
+        emit(
+          state.copyWith(
+            loadingMorePosts: false,
+            hasMorePosts: page.hasMore,
+            myPosts: [
+              ...state.myPosts,
+              ..._withMyReposts(
+                page.posts
+                    .where((post) => !existingIds.contains(post.id))
+                    .toList(),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   Future<void> load() async {
     if (state.status == ProfileStatus.loaded) return;
@@ -133,6 +184,8 @@ class ProfileCubit extends Cubit<ProfileState> {
   }
 
   Future<void> refresh() async {
+    if (state.loadingMorePosts || state.status == ProfileStatus.loading) return;
+    _loadVersion++;
     emit(state.copyWith(status: ProfileStatus.loading));
 
     final meResult = await _getMe(const NoParams());
@@ -143,18 +196,30 @@ class ProfileCubit extends Cubit<ProfileState> {
     // documents.
     if (isClosed) return;
     if (meResult.isLeft()) {
-      emit(state.copyWith(status: ProfileStatus.error, errorMessage: meResult.fold((l) => l.message, (_) => null)));
+      emit(
+        state.copyWith(
+          status: ProfileStatus.error,
+          errorMessage: meResult.fold((l) => l.message, (_) => null),
+        ),
+      );
       return;
     }
     final user = meResult.fold((_) => null, (r) => r)!;
 
-    final postsResult = await _getUserPosts(GetUserPostsParams(userId: user.id));
+    _postsPage = 0;
+    final postsResult = await _getUserPosts(
+      GetUserPostsParams(userId: user.id),
+    );
     if (isClosed) return;
-    final myPosts = postsResult.fold((_) => <PostEntity>[], (page) => page.posts);
-
-    final friendsResult = await _getFriends(const PageParams());
-    if (isClosed) return;
-    final connections = friendsResult.fold((_) => 0, (page) => page.friendships.length);
+    emit(
+      state.copyWith(
+        hasMorePosts: postsResult.fold((_) => false, (page) => page.hasMore),
+      ),
+    );
+    final myPosts = postsResult.fold(
+      (_) => <PostEntity>[],
+      (page) => page.posts,
+    );
 
     final savedPosts = await _loadSavedPosts();
     if (isClosed) return;
@@ -167,7 +232,7 @@ class ProfileCubit extends Cubit<ProfileState> {
         status: ProfileStatus.loaded,
         user: user,
         myPosts: _withMyReposts(myPosts),
-        connectionsCount: connections,
+        connectionsCount: user.friendsCount,
         savedPosts: _withMyReposts(savedPosts),
       ),
     );
@@ -175,8 +240,12 @@ class ProfileCubit extends Cubit<ProfileState> {
 
   /// Re-applies [_myRepostIds] onto freshly-fetched posts — see
   /// `FeedCubit._withMyReposts`'s identical doc for why this is needed.
-  List<PostEntity> _withMyReposts(List<PostEntity> posts) =>
-      posts.map((p) => _myRepostIds.containsKey(p.id) ? p.copyWith(repostedByMe: true) : p).toList();
+  List<PostEntity> _withMyReposts(List<PostEntity> posts) => posts
+      .map(
+        (p) =>
+            _myRepostIds.containsKey(p.id) ? p.copyWith(repostedByMe: true) : p,
+      )
+      .toList();
 
   Future<List<PostEntity>> _loadSavedPosts() async {
     final idsResult = await _getSavedPostIds(const NoParams());
@@ -193,36 +262,83 @@ class ProfileCubit extends Cubit<ProfileState> {
 
   /// Returns success so the page can show a snackbar on either outcome,
   /// same convention as [uploadAvatar] below.
-  Future<bool> updateProfile({String? username, String? fullName, String? bio}) async {
-    final result = await _updateProfile(UpdateProfileParams(username: username, fullName: fullName, bio: bio));
+  Future<bool> updateProfile({
+    String? username,
+    String? fullName,
+    String? bio,
+    bool clearFullName = false,
+    bool clearBio = false,
+    File? avatar,
+    File? cover,
+    bool? removeAvatar,
+    bool? removeCover,
+  }) async {
+    if (state.isUploadingAvatar) return false;
+    emit(state.copyWith(isUploadingAvatar: true));
+    final result = await _updateProfile(
+      UpdateProfileParams(
+        username: username,
+        fullName: fullName,
+        bio: bio,
+        clearFullName: clearFullName,
+        clearBio: clearBio,
+        avatar: avatar,
+        cover: cover,
+        removeAvatar: removeAvatar,
+        removeCover: removeCover,
+      ),
+    );
     if (isClosed) return false;
     return result.fold(
       (failure) {
-        emit(state.copyWith(errorMessage: failure.message));
+        emit(
+          state.copyWith(
+            isUploadingAvatar: false,
+            errorMessage: failure.message,
+          ),
+        );
         return false;
       },
       (user) {
-        emit(state.copyWith(user: user, errorMessage: null));
+        emit(
+          state.copyWith(
+            isUploadingAvatar: false,
+            user: user,
+            errorMessage: null,
+          ),
+        );
         return true;
       },
     );
   }
 
-  /// Uploads a new avatar (`PUT /users/me/avatar`, multipart) and swaps it
+  /// Uploads a new avatar (`POST /users/me`, multipart) and swaps it
   /// into `state.user` on success. [isUploadingAvatar] just gates the UI's
   /// own busy affordance. Returns success so the page can show a snackbar on
   /// failure, same convention as `PostDetailCubit.updatePost`/`deletePost`.
   Future<bool> uploadAvatar(File file) async {
+    if (state.isUploadingAvatar) return false;
     emit(state.copyWith(isUploadingAvatar: true));
     final result = await _updateAvatar(file);
     if (isClosed) return false;
     return result.fold(
       (failure) {
-        emit(state.copyWith(isUploadingAvatar: false, errorMessage: failure.message));
+        emit(
+          state.copyWith(
+            isUploadingAvatar: false,
+            errorMessage: failure.message,
+          ),
+        );
         return false;
       },
       (user) {
-        emit(state.copyWith(isUploadingAvatar: false, user: user, errorMessage: null));
+        emit(
+          state.copyWith(
+            isUploadingAvatar: false,
+            user: user,
+            errorMessage: null,
+          ),
+        );
         return true;
       },
     );
@@ -237,7 +353,9 @@ class ProfileCubit extends Cubit<ProfileState> {
   /// Sets/switches/removes [post]'s reaction to [type] — the long-press
   /// reaction-picker path (see [toggleLike] for the plain single-tap path).
   Future<void> react(PostEntity post, ReactionType type) async {
-    final result = await _reactToPost(ReactToPostParams(post: post, type: type));
+    final result = await _reactToPost(
+      ReactToPostParams(post: post, type: type),
+    );
     if (isClosed) return;
     result.fold((_) {}, (updated) => _replacePost(post.id, (_) => updated));
   }
@@ -245,7 +363,10 @@ class ProfileCubit extends Cubit<ProfileState> {
   Future<void> toggleSave(String postId) async {
     final result = await _toggleSave(PostIdParams(postId));
     if (isClosed) return;
-    result.fold((_) {}, (saved) => _replacePost(postId, (p) => p.copyWith(savedByMe: saved)));
+    result.fold(
+      (_) {},
+      (saved) => _replacePost(postId, (p) => p.copyWith(savedByMe: saved)),
+    );
   }
 
   /// The viewer's own repost of a given original post id — see
@@ -258,7 +379,9 @@ class ProfileCubit extends Cubit<ProfileState> {
   /// `FeedCubit._seedMyRepostIds`'s identical doc for the full reasoning.
   Future<void> _seedMyRepostIds(String myUserId) async {
     for (var page = 0; page < _maxRepostScanPages; page++) {
-      final result = await _getUserPosts(GetUserPostsParams(userId: myUserId, page: page));
+      final result = await _getUserPosts(
+        GetUserPostsParams(userId: myUserId, page: page),
+      );
       var hasMore = false;
       final failed = result.isLeft();
       result.fold((_) {}, (data) {
@@ -288,15 +411,27 @@ class ProfileCubit extends Cubit<ProfileState> {
         if (isClosed) return;
         result.fold((_) {}, (_) {
           _myRepostIds.remove(post.id);
-          emit(state.copyWith(myPosts: state.myPosts.where((p) => p.id != myRepostId).toList()));
-          _replacePost(post.id, (p) => p.copyWith(repostCount: p.repostCount - 1, repostedByMe: false));
+          emit(
+            state.copyWith(
+              myPosts: state.myPosts.where((p) => p.id != myRepostId).toList(),
+            ),
+          );
+          _replacePost(
+            post.id,
+            (p) =>
+                p.copyWith(repostCount: p.repostCount - 1, repostedByMe: false),
+          );
         });
       } else {
         final result = await _repost(RepostParams(postId: post.id));
         if (isClosed) return;
         result.fold((_) {}, (newPost) {
           _myRepostIds[post.id] = newPost.id;
-          _replacePost(post.id, (p) => p.copyWith(repostCount: p.repostCount + 1, repostedByMe: true));
+          _replacePost(
+            post.id,
+            (p) =>
+                p.copyWith(repostCount: p.repostCount + 1, repostedByMe: true),
+          );
           emit(state.copyWith(myPosts: [newPost, ...state.myPosts]));
         });
       }
@@ -310,7 +445,10 @@ class ProfileCubit extends Cubit<ProfileState> {
   void _replacePost(String id, PostEntity Function(PostEntity) update) {
     PostEntity applyTo(PostEntity p) => p.id == id ? update(p) : p;
     emit(
-      state.copyWith(myPosts: state.myPosts.map(applyTo).toList(), savedPosts: state.savedPosts.map(applyTo).toList()),
+      state.copyWith(
+        myPosts: state.myPosts.map(applyTo).toList(),
+        savedPosts: state.savedPosts.map(applyTo).toList(),
+      ),
     );
   }
 }

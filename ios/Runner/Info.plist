@@ -28,6 +28,15 @@
 		<true/>
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>Yello needs access to your photos so you can attach one to a post.</string>
+		<!-- Lets a push still reach firebaseMessagingBackgroundHandler while the
+		     app is backgrounded (not killed) rather than only on next foreground.
+		     Requires the "Background Modes" > "Remote notifications" capability
+		     to also be turned on in Xcode (Signing & Capabilities) — this plist
+		     entry alone isn't picked up by a build unless that's enabled there too. -->
+		<key>UIBackgroundModes</key>
+		<array>
+			<string>remote-notification</string>
+		</array>
 		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>

@@ -4,6 +4,7 @@ class CommentModel extends CommentEntity {
   const CommentModel({
     required super.id,
     required super.postId,
+    super.communityPostId,
     required super.authorId,
     required super.authorUsername,
     super.authorAvatarUrl,
@@ -19,6 +20,7 @@ class CommentModel extends CommentEntity {
     return CommentModel(
       id: json['id'] as String,
       postId: json['postId'] as String? ?? '',
+      communityPostId: json['communityPostId'] as String?,
       authorId: author['id'] as String? ?? '',
       authorUsername: author['username'] as String? ?? 'unknown',
       authorAvatarUrl: author['avatarUrl'] as String?,
@@ -30,10 +32,10 @@ class CommentModel extends CommentEntity {
     );
   }
 
-  /// Parses one top-level `CommentResponse` *and* flattens its nested
-  /// `replies` (an array of full `CommentResponse` objects, per the
-  /// `/posts/{id}/comments` schema) into the same flat list — the rest of
-  /// this app (`PostDetailCubit`/`post_detail_page.dart`'s `_Loaded`) models
+  /// Parses one top-level `Comment` *and* flattens its nested `replies` (an
+  /// array of full `Comment` objects, per the comments-page schema) into the
+  /// same flat list — the rest of this app (`PostDetailCubit`/
+  /// `post_detail_page.dart`'s `_Loaded`, and `CommunityPostCubit`) models
   /// comments as one flat list where a reply is just identified by its own
   /// `parentCommentId` (Facebook-style 2-level grouping), so this is where
   /// the backend's nested shape gets flattened to match. Without this, every

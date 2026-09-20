@@ -80,10 +80,9 @@ class FeedRepositoryImpl implements FeedRepository {
   @override
   Future<Either<Failure, CommentEntity>> reactToComment(CommentEntity comment, ReactionType type) => _run(() async {
     final summary = await _remote.reactToComment(comment.id, type: type.wireValue);
-    return comment.copyWith(
-      reactionCount: summary.counts.values.fold<int>(0, (a, b) => a + b),
-      viewerReaction: summary.viewerReaction,
-    );
+    // `summary.total` is the server's own sum — see `ReactionSummary.total`
+    // for why re-folding `counts` locally under-counts.
+    return comment.copyWith(reactionCount: summary.total, viewerReaction: summary.viewerReaction);
   });
 
   @override
@@ -114,8 +113,8 @@ class FeedRepositoryImpl implements FeedRepository {
   });
 
   @override
-  Future<Either<Failure, PostEntity>> repost(String postId, {String? content}) =>
-      _run(() => _remote.repost(postId, content: content));
+  Future<Either<Failure, PostEntity>> repost(String postId, {String? content, PostVisibility? visibility}) =>
+      _run(() => _remote.repost(postId, content: content, visibility: visibility));
 
   @override
   Future<Either<Failure, bool>> toggleSave(String postId) => _run(() => _bookmarks.toggle(postId));
@@ -132,8 +131,21 @@ class FeedRepositoryImpl implements FeedRepository {
   }) => _run(() => _remote.createPost(content: content, visibility: visibility, images: images));
 
   @override
-  Future<Either<Failure, PostEntity>> updatePost(String postId, {String? content, PostVisibility? visibility}) =>
-      _run(() => _remote.updatePost(postId, content: content, visibility: visibility));
+  Future<Either<Failure, PostEntity>> updatePost(
+    String postId, {
+    String? content,
+    PostVisibility? visibility,
+    List<File> images = const [],
+    List<String> removeImageIds = const [],
+  }) => _run(
+    () => _remote.updatePost(
+      postId,
+      content: content,
+      visibility: visibility,
+      images: images,
+      removeImageIds: removeImageIds,
+    ),
+  );
 
   @override
   Future<Either<Failure, void>> deletePost(String postId) => _run(() => _remote.deletePost(postId));
@@ -142,5 +154,20 @@ class FeedRepositoryImpl implements FeedRepository {
   Future<Either<Failure, void>> deleteComment(String commentId) => _run(() => _remote.deleteComment(commentId));
 
   @override
-  Future<Either<Failure, String>> getShareLink(String postId) => _run(() => _remote.getShareLink(postId));
+  Future<Either<Failure, CommentEntity>> editComment(String commentId, String content) =>
+      _run(() => _remote.editComment(commentId, content));
+
+  /// No `/posts/{id}/share-link` route exists (it 404s) — the URL is a field
+  /// on the post itself, so this re-reads the post and hands back its
+  /// `shareUrl`. See the contract's own doc for when a caller can skip this
+  /// entirely.
+  @override
+  Future<Either<Failure, String>> getShareLink(String postId) => _run(() async {
+    final post = await _remote.getPost(postId);
+    final url = post.shareUrl;
+    if (url == null || url.isEmpty) {
+      throw const AppException('That post has no share link.');
+    }
+    return url;
+  });
 }

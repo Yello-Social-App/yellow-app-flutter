@@ -81,7 +81,13 @@ abstract interface class FeedRepository {
 
   /// Reposts [postId], optionally with added [content] — returns the newly
   /// created repost `PostEntity` (its `originalPost` is the source post).
-  Future<Either<Failure, PostEntity>> repost(String postId, {String? content});
+  /// [visibility] sets the repost's *own* audience and defaults server-side
+  /// when omitted; it does not change the original post's.
+  Future<Either<Failure, PostEntity>> repost(
+    String postId, {
+    String? content,
+    PostVisibility? visibility,
+  });
 
   /// Device-local bookmark toggle — see class doc. Returns the new saved
   /// state.
@@ -97,8 +103,16 @@ abstract interface class FeedRepository {
     List<File> images = const [],
   });
 
-  /// Edits a post you own (`PUT /posts/{id}`) — only non-null fields change.
-  Future<Either<Failure, PostEntity>> updatePost(String postId, {String? content, PostVisibility? visibility});
+  /// Edits a post you own (`PUT /posts/{id}`) — only what's passed changes.
+  /// [images] appends new photos and [removeImageIds] drops existing ones by
+  /// `PostEntity.images`' `id`; both may be sent in the same call.
+  Future<Either<Failure, PostEntity>> updatePost(
+    String postId, {
+    String? content,
+    PostVisibility? visibility,
+    List<File> images = const [],
+    List<String> removeImageIds = const [],
+  });
 
   /// Deletes a post you own (`DELETE /posts/{id}`).
   Future<Either<Failure, void>> deletePost(String postId);
@@ -107,6 +121,18 @@ abstract interface class FeedRepository {
   /// (`DELETE /comments/{id}`).
   Future<Either<Failure, void>> deleteComment(String commentId);
 
-  /// The post's canonical public URL (`GET /posts/{id}/share-link`).
+  /// Rewrites your own comment's text (`PUT /comments/{id}`). Unlike
+  /// [deleteComment], this is the commenter's alone — a post author or
+  /// moderator may remove someone's comment but not reword it.
+  Future<Either<Failure, CommentEntity>> editComment(String commentId, String content);
+
+  /// The post's canonical public URL.
+  ///
+  /// There is no `/posts/{id}/share-link` route — that path answers
+  /// `404 RESOURCE_NOT_FOUND` on the live backend. Every `Post` already
+  /// carries a ready-made `shareUrl`, so this reads that field, re-fetching
+  /// the post when the caller only has an id. A caller that already holds
+  /// the `PostEntity` should read [PostEntity.shareUrl] directly and skip
+  /// the round-trip.
   Future<Either<Failure, String>> getShareLink(String postId);
 }

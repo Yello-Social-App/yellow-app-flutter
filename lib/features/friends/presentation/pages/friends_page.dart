@@ -71,7 +71,7 @@ class _FriendsView extends StatelessWidget {
                     ),
                   ),
                   if (state.status == FriendsStatus.loading && state.friends.isEmpty) ...[
-                    const ShimmerPostCard(),
+                    const ShimmerListCard(),
                   ] else if (state.status == FriendsStatus.error && state.friends.isEmpty) ...[
                     ErrorView(
                       message: state.errorMessage ?? 'Could not load your circle.',

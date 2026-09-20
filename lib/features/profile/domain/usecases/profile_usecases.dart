@@ -16,17 +16,45 @@ class GetMeUseCase implements UseCase<UserEntity, NoParams> {
   final ProfileRepository _repository;
 
   @override
-  Future<Either<Failure, UserEntity>> call(NoParams params) => _repository.getMe();
+  Future<Either<Failure, UserEntity>> call(NoParams params) =>
+      _repository.getMe();
 }
 
 class UpdateProfileParams extends Equatable {
-  const UpdateProfileParams({this.username, this.fullName, this.bio});
+  const UpdateProfileParams({
+    this.username,
+    this.fullName,
+    this.bio,
+    this.clearFullName = false,
+    this.clearBio = false,
+    this.avatar,
+    this.cover,
+    this.removeAvatar,
+    this.removeCover,
+  });
   final String? username;
   final String? fullName;
   final String? bio;
+  /// Send JSON null rather than omitting the optional text field.
+  final bool clearFullName;
+  final bool clearBio;
+  final File? avatar;
+  final File? cover;
+  final bool? removeAvatar;
+  final bool? removeCover;
 
   @override
-  List<Object?> get props => [username, fullName, bio];
+  List<Object?> get props => [
+    username,
+    fullName,
+    bio,
+    clearFullName,
+    clearBio,
+    avatar,
+    cover,
+    removeAvatar,
+    removeCover,
+  ];
 }
 
 class UpdateProfileUseCase implements UseCase<UserEntity, UpdateProfileParams> {
@@ -41,8 +69,18 @@ class UpdateProfileUseCase implements UseCase<UserEntity, UpdateProfileParams> {
     }
     return _repository.updateProfile(
       username: params.username,
-      fullName: params.fullName == null ? null : InputSanitizer.sanitizeText(params.fullName!, maxLength: 100),
-      bio: params.bio == null ? null : InputSanitizer.sanitizeText(params.bio!, maxLength: 500),
+      clearFullName: params.clearFullName,
+      clearBio: params.clearBio,
+      avatar: params.avatar,
+      cover: params.cover,
+      removeAvatar: params.removeAvatar,
+      removeCover: params.removeCover,
+      fullName: params.fullName == null
+          ? null
+          : InputSanitizer.sanitizeText(params.fullName!, maxLength: 100),
+      bio: params.bio == null
+          ? null
+          : InputSanitizer.sanitizeText(params.bio!, maxLength: 500),
     );
   }
 }
@@ -52,7 +90,8 @@ class UpdateAvatarUseCase implements UseCase<UserEntity, File> {
   final ProfileRepository _repository;
 
   @override
-  Future<Either<Failure, UserEntity>> call(File params) => _repository.updateAvatar(params);
+  Future<Either<Failure, UserEntity>> call(File params) =>
+      _repository.updateAvatar(params);
 }
 
 class GetUserUseCase implements UseCase<PublicUserEntity, String> {
@@ -60,7 +99,8 @@ class GetUserUseCase implements UseCase<PublicUserEntity, String> {
   final ProfileRepository _repository;
 
   @override
-  Future<Either<Failure, PublicUserEntity>> call(String userId) => _repository.getUser(userId);
+  Future<Either<Failure, PublicUserEntity>> call(String userId) =>
+      _repository.getUser(userId);
 }
 
 class GetUserPostsParams extends Equatable {
@@ -72,7 +112,8 @@ class GetUserPostsParams extends Equatable {
   List<Object?> get props => [userId, page];
 }
 
-class GetUserPostsUseCase implements UseCase<UserPostsPage, GetUserPostsParams> {
+class GetUserPostsUseCase
+    implements UseCase<UserPostsPage, GetUserPostsParams> {
   GetUserPostsUseCase(this._repository);
   final ProfileRepository _repository;
 

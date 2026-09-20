@@ -89,6 +89,41 @@ class ChatCubit extends Cubit<ChatState> {
   final MessagesCubit _inbox;
 
   StreamSubscription<ChatEvent>? _sub;
+  bool _isLoading = false;
+  bool _isRefreshing = false;
+
+  /// Fetches new messages without clearing history or optimistic drafts.
+  Future<void> refreshLatest() async {
+    if (isClosed || _isLoading || _isRefreshing) return;
+    _isRefreshing = true;
+    try {
+      final result = await _getMessages(GetMessagesParams(conversationId: conversationId));
+      if (isClosed) return;
+      result.fold((_) {}, (page) {
+        final hadHistory = state.messages.isNotEmpty;
+        final next = [...state.messages];
+        for (final message in page.messages) {
+          final index = next.indexWhere((existing) =>
+              existing.id == message.id ||
+              (message.clientId.isNotEmpty && existing.clientId == message.clientId));
+          if (index < 0) {
+            next.add(message);
+          } else {
+            next[index] = message;
+          }
+        }
+        next.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        emit(state.copyWith(
+          status: ChatStatus.loaded,
+          messages: next,
+          nextCursor: hadHistory ? state.nextCursor : page.nextCursor,
+        ));
+        _acknowledgeRead();
+      });
+    } finally {
+      _isRefreshing = false;
+    }
+  }
 
   static final _random = Random();
 
@@ -99,7 +134,11 @@ class ChatCubit extends Cubit<ChatState> {
       '${_random.nextInt(0x7fffffff).toRadixString(36)}';
 
   Future<void> load() async {
+    if (_isLoading || isClosed) return;
+    _isLoading = true;
+    emit(state.copyWith(status: ChatStatus.loading));
     final result = await _getMessages(GetMessagesParams(conversationId: conversationId));
+    _isLoading = false;
     // `ChatPage` pushes this cubit and pops it on exit — backing out of a
     // conversation before this resolves closes it mid-flight. Without this
     // guard, `emit` below throws, and `_sub` (only assigned after this
@@ -119,7 +158,7 @@ class ChatCubit extends Cubit<ChatState> {
       },
     );
 
-    _sub = _repository.watchEvents(conversationId).listen((event) {
+    _sub ??= _repository.watchEvents(conversationId).listen((event) {
       if (isClosed) return;
       switch (event) {
         case TypingChanged(:final isTyping):
@@ -129,9 +168,7 @@ class ChatCubit extends Cubit<ChatState> {
           _inbox.applyIncomingMessage(message);
           _acknowledgeRead();
         case MessagesRead():
-          // Read markers live on the participant list; the transcript itself
-          // does not change. Nothing to do until "seen" ticks are designed.
-          break;
+          unawaited(_inbox.refresh(queueIfLoading: true));
       }
     });
   }
@@ -216,14 +253,24 @@ class ChatCubit extends Cubit<ChatState> {
   }
 
   /// Tells the server (and the inbox badge) we have seen the newest message.
-  /// Skipped when the last message is our own — there is nothing to read.
+  /// Finds the newest incoming message even when we have already replied.
   void _acknowledgeRead() {
-    final last = state.messages.isEmpty ? null : state.messages.last;
-    if (last == null || last.fromMe || last.status != MessageDeliveryStatus.sent) return;
+    final last = state.messages.reversed
+        .where((message) => !message.fromMe && message.status == MessageDeliveryStatus.sent)
+        .firstOrNull;
+    if (last == null) return;
 
     _inbox.markConversationRead(conversationId);
-    unawaited(_markRead(MarkReadParams(conversationId: conversationId, messageId: last.id)));
+    if (_lastAcknowledgedId == last.id) return;
+    _lastAcknowledgedId = last.id;
+    unawaited(_markRead(MarkReadParams(conversationId: conversationId, messageId: last.id)).then((result) {
+      result.fold((_) {
+        if (_lastAcknowledgedId == last.id) _lastAcknowledgedId = null;
+      }, (_) {});
+    }));
   }
+
+  String? _lastAcknowledgedId;
 
   /// Inserts or replaces by `clientId` first (an optimistic copy being
   /// confirmed), then by `id` (the same message echoed twice, e.g. the HTTP

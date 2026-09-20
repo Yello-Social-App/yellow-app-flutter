@@ -38,18 +38,55 @@ class NotificationRepositoryImpl implements NotificationRepository {
   @override
   Future<Either<Failure, NotificationsPage>> getInbox({int size = 20, String? cursor, bool unreadOnly = false}) =>
       _run(() async {
-        final result = await _remote.getInbox(size: size, cursor: cursor, unreadOnly: unreadOnly);
-        return NotificationsPage(items: result.items, nextCursor: result.nextCursor);
+        var nextCursor = cursor;
+        final visited = <String>{?cursor};
+        do {
+          final result = await _remote.getInbox(size: size, cursor: nextCursor, unreadOnly: unreadOnly);
+          final items = result.items.where((item) => item.isSignal).toList();
+          nextCursor = result.nextCursor;
+          if (nextCursor != null && !visited.add(nextCursor)) {
+            throw StateError('Notification pagination returned a repeated cursor');
+          }
+          // Skip chat-only pages so they cannot hide later Signals activity.
+          if (items.isNotEmpty || nextCursor == null) {
+            return NotificationsPage(items: items, nextCursor: nextCursor);
+          }
+        } while (true);
       });
 
   @override
-  Future<Either<Failure, int>> getUnreadCount() => _run(_remote.getUnreadCount);
+  Future<Either<Failure, int>> getUnreadCount() => _run(() async => (await _unreadSignals()).length);
+
+  // The aggregate count endpoint includes types hidden from Signals.
+  // Traverse unread pages so the badge uses exactly the same filter as rows.
+  Future<List<NotificationEntity>> _unreadSignals() async {
+    final items = <String, NotificationEntity>{};
+    final visited = <String>{};
+    String? cursor;
+    do {
+      final page = await _remote.getInbox(cursor: cursor, unreadOnly: true);
+      for (final item in page.items) {
+        if (item.isSignal && !item.read) items[item.id] = item;
+      }
+      cursor = page.nextCursor;
+      if (cursor != null && !visited.add(cursor)) {
+        throw StateError('Notification pagination returned a repeated cursor');
+      }
+    } while (cursor != null);
+    return items.values.toList();
+  }
 
   @override
   Future<Either<Failure, NotificationEntity>> markRead(String id) => _run(() => _remote.markRead(id));
 
   @override
-  Future<Either<Failure, int>> markAllRead() => _run(_remote.markAllRead);
+  Future<Either<Failure, int>> markAllRead() => _run(() async {
+    final items = await _unreadSignals();
+    for (final item in items) {
+      await _remote.markRead(item.id);
+    }
+    return items.length;
+  });
 
   @override
   Future<Either<Failure, void>> deleteNotification(String id) => _run(() => _remote.deleteNotification(id));

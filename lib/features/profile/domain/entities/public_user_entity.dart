@@ -10,6 +10,10 @@ class PublicUserEntity extends Equatable {
     this.fullName,
     this.bio,
     this.avatarUrl,
+    this.coverUrl,
+    this.friendStatus,
+    this.postsCount = 0,
+    this.friendsCount = 0,
     required this.createdAt,
   });
 
@@ -18,8 +22,22 @@ class PublicUserEntity extends Equatable {
   final String? fullName;
   final String? bio;
   final String? avatarUrl;
+  final String? coverUrl;
+  final String? friendStatus;
+  final int postsCount;
+  final int friendsCount;
   final DateTime createdAt;
 
   @override
-  List<Object?> get props => [id, username, fullName, bio, avatarUrl];
+  List<Object?> get props => [
+    id,
+    username,
+    fullName,
+    bio,
+    avatarUrl,
+    coverUrl,
+    friendStatus,
+    postsCount,
+    friendsCount,
+  ];
 }

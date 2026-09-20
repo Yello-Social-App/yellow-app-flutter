@@ -32,18 +32,44 @@ class ProfileRepositoryImpl implements ProfileRepository {
   Future<Either<Failure, UserEntity>> getMe() => _run(_remote.getMe);
 
   @override
-  Future<Either<Failure, UserEntity>> updateProfile({String? username, String? fullName, String? bio}) =>
-      _run(() => _remote.updateProfile(username: username, fullName: fullName, bio: bio));
+  Future<Either<Failure, UserEntity>> updateProfile({
+    String? username,
+    String? fullName,
+    String? bio,
+    bool clearFullName = false,
+    bool clearBio = false,
+    File? avatar,
+    File? cover,
+    bool? removeAvatar,
+    bool? removeCover,
+  }) => _run(
+    () => _remote.updateProfile(
+      username: username,
+      fullName: fullName,
+      bio: bio,
+      clearFullName: clearFullName,
+      clearBio: clearBio,
+      avatar: avatar,
+      cover: cover,
+      removeAvatar: removeAvatar,
+      removeCover: removeCover,
+    ),
+  );
 
   @override
-  Future<Either<Failure, UserEntity>> updateAvatar(File file) => _run(() => _remote.uploadAvatar(file));
+  Future<Either<Failure, UserEntity>> updateAvatar(File file) =>
+      _run(() => _remote.uploadAvatar(file));
 
   @override
-  Future<Either<Failure, PublicUserEntity>> getUser(String userId) => _run(() => _remote.getUser(userId));
+  Future<Either<Failure, PublicUserEntity>> getUser(String userId) =>
+      _run(() => _remote.getUser(userId));
 
   @override
-  Future<Either<Failure, UserPostsPage>> getUserPosts(String userId, {int page = 0}) => _run(() async {
-        final result = await _remote.getUserPosts(userId, page: page);
-        return UserPostsPage(posts: result.items, hasMore: result.hasMore);
-      });
+  Future<Either<Failure, UserPostsPage>> getUserPosts(
+    String userId, {
+    int page = 0,
+  }) => _run(() async {
+    final result = await _remote.getUserPosts(userId, page: page);
+    return UserPostsPage(posts: result.items, hasMore: result.hasMore);
+  });
 }

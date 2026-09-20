@@ -42,7 +42,11 @@ class UserDirectory {
         _cache[userId] = user;
         return user;
       });
-    }).whenComplete(() => _inFlight.remove(userId));
+    }).whenComplete(() {
+      // Do not return remove's value: it is this very future, so
+      // whenComplete would wait on itself and hydration would never finish.
+      _inFlight.remove(userId);
+    });
   }
 
   /// Fills in every participant whose profile is missing, fetching each

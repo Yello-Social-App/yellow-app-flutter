@@ -19,6 +19,7 @@ class AppButton extends StatelessWidget {
     this.trailingIcon,
     this.fullWidth = false,
     this.dense = false,
+    this.borderColor,
   });
 
   final String label;
@@ -30,6 +31,7 @@ class AppButton extends StatelessWidget {
   final Widget? trailingIcon;
   final bool fullWidth;
   final bool dense;
+  final Color? borderColor;
 
   @override
   Widget build(BuildContext context) {
@@ -50,14 +52,20 @@ class AppButton extends StatelessWidget {
     };
 
     final child = Padding(
-      padding: EdgeInsets.symmetric(horizontal: dense ? 14 : 18, vertical: dense ? 10 : 13),
+      padding: EdgeInsets.symmetric(
+        horizontal: dense ? 14 : 18,
+        vertical: dense ? 10 : 13,
+      ),
       child: Row(
         mainAxisSize: fullWidth ? MainAxisSize.max : MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           if (icon != null) ...[icon!, const SizedBox(width: 7)],
           Text(label, style: AppTextStyles.button.copyWith(color: fg)),
-          if (trailingIcon != null) ...[const SizedBox(width: 7), trailingIcon!],
+          if (trailingIcon != null) ...[
+            const SizedBox(width: 7),
+            trailingIcon!,
+          ],
         ],
       ),
     );
@@ -66,9 +74,13 @@ class AppButton extends StatelessWidget {
       color: bg,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadii.pill),
-        side: BorderSide(color: border, width: 1.5),
+        side: BorderSide(color: borderColor ?? border, width: 1.5),
       ),
-      child: InkWell(onTap: onPressed, borderRadius: BorderRadius.circular(AppRadii.pill), child: child),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+        child: child,
+      ),
     );
   }
 }

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1017483285231",
+    "project_id": "yello-app-5a712",
+    "storage_bucket": "yello-app-5a712.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1017483285231:android:62f188ecba1092ce55811a",
+        "android_client_info": {
+          "package_name": "com.example.yello_social_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjETE7ys-k80cho9Y6T0_EZzYcZUBUq5U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

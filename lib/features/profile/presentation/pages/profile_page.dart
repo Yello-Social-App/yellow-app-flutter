@@ -14,7 +14,6 @@ import '../../../../core/theme/theme_cubit.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_button.dart';
-import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/app_warning_dialog.dart';
 import '../../../../shared/widgets/error_view.dart';
@@ -45,12 +44,16 @@ class _ProfileView extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
     final cubit = context.read<ProfileCubit>();
+    final coverShadow = Theme.of(context).brightness == Brightness.dark
+        ? Colors.black
+        : Colors.white;
 
     return Scaffold(
       backgroundColor: colors.bg,
       body: BlocBuilder<ProfileCubit, ProfileState>(
         builder: (context, state) {
-          if (state.status == ProfileStatus.loading && state.user == null) {
+          if (state.status == ProfileStatus.initial ||
+              (state.status == ProfileStatus.loading && state.user == null)) {
             return const Center(child: CircularProgressIndicator());
           }
           if (state.status == ProfileStatus.error && state.user == null) {
@@ -77,10 +80,19 @@ class _ProfileView extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(0, 0, 0, 112),
               children: [
                 SizedBox(
-                  height: 170,
+                  height: 210,
                   child: Stack(
                     children: [
-                      const Positioned.fill(child: ImagePlaceholder()),
+                      Positioned.fill(
+                        child: user.coverUrl == null
+                            ? const ImagePlaceholder()
+                            : Image.network(
+                                user.coverUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) =>
+                                    const ImagePlaceholder(),
+                              ),
+                      ),
                       Positioned.fill(
                         child: DecoratedBox(
                           decoration: BoxDecoration(
@@ -96,18 +108,39 @@ class _ProfileView extends StatelessWidget {
                         ),
                       ),
                       Positioned(
-                        top: 12,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        height: 90,
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                                colors: [
+                                  colors.bg,
+                                  coverShadow.withValues(alpha: 0.45),
+                                  coverShadow.withValues(alpha: 0),
+                                ],
+                                stops: const [0, 0.35, 1],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 24,
                         right: 14,
-                        child: SafeArea(
-                          bottom: false,
-                          child: AppIconButton(
-                            icon: const Icon(Icons.notifications_outlined),
-                            onPressed: () =>
-                                context.pushNamed(RouteNames.notificationPreferences),
-                            backgroundColor: Colors.black.withValues(alpha: 0.35),
-                            borderColor: Colors.white.withValues(alpha: 0.5),
-                            iconColor: Colors.white,
-                            size: 38,
+                        child: IconButton.filled(
+                          tooltip: 'Edit cover',
+                          onPressed: state.isUploadingAvatar
+                              ? null
+                              : () => _pickAvatar(context, cubit, cover: true),
+                          icon: const Icon(
+                            Icons.camera_alt_rounded,
+                            size: 20,
+                            color: Colors.black,
                           ),
                         ),
                       ),
@@ -247,6 +280,7 @@ class _ProfileView extends StatelessWidget {
                                     label: 'Edit profile',
                                     onPressed: () =>
                                         _showEditSheet(context, cubit, user),
+                                    borderColor: colors.ink3,
                                   ),
                                   const SizedBox(width: 8),
                                   BlocBuilder<ThemeCubit, ThemeMode>(
@@ -314,7 +348,7 @@ class _ProfileView extends StatelessWidget {
                       Row(
                         children: [
                           _StatTile(
-                            value: '${state.connectionsCount}',
+                            value: '${user.friendsCount}',
                             label: 'Connections',
                             // Circle/friends is shell branch index 1 (see
                             // app_router.dart) — it has no bottom-nav button
@@ -348,6 +382,15 @@ class _ProfileView extends StatelessWidget {
                       _TabBar(state: state, onSelect: cubit.selectTab),
                       const SizedBox(height: 16),
                       _PostList(posts: state.activeTabPosts, tab: state.tab),
+                      if (state.tab != ProfileTab.saved && state.hasMorePosts)
+                        TextButton(
+                          onPressed: state.loadingMorePosts
+                              ? null
+                              : cubit.loadMorePosts,
+                          child: Text(
+                            state.loadingMorePosts ? 'Loading…' : 'Load more',
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -359,24 +402,72 @@ class _ProfileView extends StatelessWidget {
     );
   }
 
-  Future<void> _pickAvatar(BuildContext context, ProfileCubit cubit) async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
+  Future<void> _pickAvatar(
+    BuildContext context,
+    ProfileCubit cubit, {
+    bool cover = false,
+  }) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      useRootNavigator: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: Text(cover ? 'Choose cover' : 'Choose avatar'),
+              onTap: () => Navigator.pop(context, 'choose'),
+            ),
+            if ((cover
+                    ? cubit.state.user?.coverUrl
+                    : cubit.state.user?.avatarUrl) !=
+                null)
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: Text(cover ? 'Remove cover' : 'Remove avatar'),
+                onTap: () => Navigator.pop(context, 'remove'),
+              ),
+          ],
+        ),
+      ),
     );
-    if (picked == null) return;
-    final ok = await cubit.uploadAvatar(File(picked.path));
-    if (!context.mounted) return;
-    if (ok) {
-      AppStatusSnackbar.showSuccess(
-        context,
-        message: 'Your avatar has been updated.',
-      );
-    } else {
-      AppStatusSnackbar.showError(
-        context,
-        message: 'Could not update avatar. Please try again!',
-      );
+    if (action == null || !context.mounted) return;
+    try {
+      bool ok;
+      if (action == 'remove') {
+        ok = await cubit.updateProfile(
+          removeCover: cover ? true : null,
+          removeAvatar: cover ? null : true,
+        );
+      } else {
+        final picked = await ImagePicker().pickImage(
+          source: ImageSource.gallery,
+        );
+        if (picked == null || !context.mounted) return;
+        ok = cover
+            ? await cubit.updateProfile(cover: File(picked.path))
+            : await cubit.uploadAvatar(File(picked.path));
+      }
+      if (!context.mounted) return;
+      if (ok) {
+        AppStatusSnackbar.showSuccess(
+          context,
+          message: 'Your profile image has been updated.',
+        );
+      } else {
+        AppStatusSnackbar.showError(
+          context,
+          message: cubit.state.errorMessage ?? 'Could not update image.',
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        AppStatusSnackbar.showError(
+          context,
+          message: 'Could not open this image. Please try again.',
+        );
+      }
     }
   }
 
@@ -397,92 +488,148 @@ class _ProfileView extends StatelessWidget {
     ProfileCubit cubit,
     UserEntity user,
   ) {
-    final colors = AppColors.of(context);
-    final usernameController = TextEditingController(text: user.username);
-    final fullNameController = TextEditingController(text: user.fullName ?? '');
-    final bioController = TextEditingController(text: user.bio ?? '');
-
-    showModalBottomSheet<void>(
+    showModalBottomSheet<bool>(
       context: context,
-      // Opened from the Profile tab while the floating pill nav bar is on
-      // screen — see `post_options_sheet.dart`'s `showPostOptionsSheet` for
-      // why this needs the root navigator rather than the branch's own
-      // nested one, or the sheet paints behind that bar instead of over it.
       useRootNavigator: true,
       isScrollControlled: true,
-      backgroundColor: colors.bg,
+      backgroundColor: AppColors.of(context).bg,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (sheetContext) {
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            20,
-            20,
-            MediaQuery.of(sheetContext).viewInsets.bottom + 20,
-          ),
+      builder: (_) => _EditProfileSheet(cubit: cubit, user: user),
+    ).then((saved) {
+      if (saved == true && context.mounted) {
+        AppStatusSnackbar.showSuccess(
+          context,
+          message: 'Your profile has been updated.',
+        );
+      }
+    });
+  }
+}
+
+class _EditProfileSheet extends StatefulWidget {
+  const _EditProfileSheet({required this.cubit, required this.user});
+  final ProfileCubit cubit;
+  final UserEntity user;
+  @override
+  State<_EditProfileSheet> createState() => _EditProfileSheetState();
+}
+
+class _EditProfileSheetState extends State<_EditProfileSheet> {
+  late final _username = TextEditingController(text: widget.user.username);
+  late final _fullName = TextEditingController(
+    text: widget.user.fullName ?? '',
+  );
+  late final _bio = TextEditingController(text: widget.user.bio ?? '');
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _username.dispose();
+    _fullName.dispose();
+    _bio.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final user = widget.user;
+    final ok = await widget.cubit.updateProfile(
+      username: _username.text.trim() == user.username
+          ? null
+          : _username.text.trim(),
+      fullName: _fullName.text == (user.fullName ?? '')
+          ? null
+          : _fullName.text.trim(),
+      bio: _bio.text == (user.bio ?? '') ? null : _bio.text.trim(),
+      clearFullName: _fullName.text.trim().isEmpty && user.fullName != null,
+      clearBio: _bio.text.trim().isEmpty && user.bio != null,
+    );
+    if (!mounted) return;
+    if (ok) {
+      Navigator.pop(context, true);
+    } else {
+      setState(() {
+        _saving = false;
+        _error =
+            widget.cubit.state.errorMessage ?? 'Could not save your changes.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_saving,
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          MediaQuery.viewInsetsOf(context).bottom + 24,
+        ),
+        child: SafeArea(
+          top: false,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
                 'Edit profile',
-                style: AppTextStyles.titleLg.copyWith(color: colors.ink),
+                style: AppTextStyles.titleLg.copyWith(
+                  color: AppColors.of(context).ink,
+                ),
               ),
               const SizedBox(height: 16),
               TextField(
-                controller: usernameController,
-                decoration: const InputDecoration(labelText: 'Username'),
+                controller: _username,
+                enabled: !_saving,
+                decoration: const InputDecoration(
+                  labelText: 'Username',
+                  helperText: 'You can change your username once every 7 days.',
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
-                controller: fullNameController,
+                controller: _fullName,
+                enabled: !_saving,
+                maxLength: 100,
                 decoration: const InputDecoration(labelText: 'Full name'),
               ),
               const SizedBox(height: 12),
               TextField(
-                controller: bioController,
+                controller: _bio,
+                enabled: !_saving,
+                maxLength: 500,
                 maxLines: 3,
                 decoration: const InputDecoration(labelText: 'Bio'),
               ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    _error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
               const SizedBox(height: 16),
               AppButton(
-                label: 'Save',
+                label: _saving ? 'Saving…' : 'Save',
                 fullWidth: true,
-                onPressed: () async {
-                  final ok = await cubit.updateProfile(
-                    username: usernameController.text,
-                    fullName: fullNameController.text,
-                    bio: bioController.text,
-                  );
-                  // Closed either way (matches this sheet's original
-                  // behavior) rather than kept open to retry inline: a
-                  // Scaffold-level SnackBar shown while this modal sheet's
-                  // route is still on top would render behind the sheet's
-                  // barrier and never actually be seen until the sheet is
-                  // dismissed some other way.
-                  if (!sheetContext.mounted) return;
-                  Navigator.of(sheetContext).pop();
-                  if (!context.mounted) return;
-                  if (ok) {
-                    AppStatusSnackbar.showSuccess(
-                      context,
-                      message: 'Your profile has been updated.',
-                    );
-                  } else {
-                    AppStatusSnackbar.showError(
-                      context,
-                      message:
-                          'Your changes could not be saved. Please try again!',
-                    );
-                  }
-                },
+                onPressed: _saving ? null : _save,
               ),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }
@@ -541,7 +688,10 @@ class _TabBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
     final tabs = [
-      (ProfileTab.posts, 'Post ${state.originalPosts.length}'),
+      (
+        ProfileTab.posts,
+        'Post ${state.user?.postsCount ?? state.originalPosts.length}',
+      ),
       (ProfileTab.reposts, 'Shared ${state.repostedPosts.length}'),
       (ProfileTab.saved, 'Saved ${state.savedPosts.length}'),
     ];
@@ -609,7 +759,8 @@ class _PostList extends StatelessWidget {
         ),
       };
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 30),
         decoration: BoxDecoration(
           border: Border.all(color: colors.line, width: 1.5),
           borderRadius: BorderRadius.circular(AppRadii.xl),

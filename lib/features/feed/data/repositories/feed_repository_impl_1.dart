@@ -16,7 +16,12 @@ import '../datasources/feed_remote_datasource.dart';
 import '../datasources/story_local_datasource.dart';
 
 class FeedRepositoryImpl implements FeedRepository {
-  FeedRepositoryImpl(this._remote, this._stories, this._bookmarks, this._networkInfo);
+  FeedRepositoryImpl(
+    this._remote,
+    this._stories,
+    this._bookmarks,
+    this._networkInfo,
+  );
 
   final FeedRemoteDataSource _remote;
   final StoryLocalDataSource _stories;
@@ -34,20 +39,27 @@ class FeedRepositoryImpl implements FeedRepository {
     }
   }
 
-  Future<PostEntity> _withSaved(PostEntity post) async => post.copyWith(savedByMe: await _bookmarks.isSaved(post.id));
+  Future<PostEntity> _withSaved(PostEntity post) async =>
+      post.copyWith(savedByMe: await _bookmarks.isSaved(post.id));
 
   @override
   Future<Either<Failure, FeedPage>> getFeed({String? cursor}) => _run(() async {
     final result = await _remote.getFeed(cursor: cursor);
     final posts = await Future.wait(result.posts.map(_withSaved));
-    return FeedPage(posts: posts, hasMore: result.hasMore, nextCursor: result.nextCursor);
+    return FeedPage(
+      posts: posts,
+      hasMore: result.hasMore,
+      nextCursor: result.nextCursor,
+    );
   });
 
   @override
-  Future<Either<Failure, List<StoryEntity>>> getStories() => _run(_stories.getStories);
+  Future<Either<Failure, List<StoryEntity>>> getStories() =>
+      _run(_stories.getStories);
 
   @override
-  Future<Either<Failure, void>> markStorySeen(String userId) => _run(() => _stories.markSeen(userId));
+  Future<Either<Failure, void>> markStorySeen(String userId) =>
+      _run(() => _stories.markSeen(userId));
 
   @override
   Future<Either<Failure, PostEntity>> getPost(String postId) => _run(() async {
@@ -56,30 +68,54 @@ class FeedRepositoryImpl implements FeedRepository {
   });
 
   @override
-  Future<Either<Failure, CommentsPage>> getComments(String postId, {int page = 0}) => _run(() async {
+  Future<Either<Failure, CommentsPage>> getComments(
+    String postId, {
+    int page = 0,
+  }) => _run(() async {
     final result = await _remote.getComments(postId, page: page);
     return CommentsPage(comments: result.comments, hasMore: result.hasMore);
   });
 
   @override
-  Future<Either<Failure, CommentEntity>> addComment(String postId, String content, {String? parentCommentId}) =>
-      _run(() => _remote.addComment(postId, content, parentCommentId: parentCommentId));
+  Future<Either<Failure, CommentEntity>> addComment(
+    String postId,
+    String content, {
+    String? parentCommentId,
+  }) => _run(
+    () => _remote.addComment(postId, content, parentCommentId: parentCommentId),
+  );
 
   @override
-  Future<Either<Failure, PostEntity>> toggleLike(PostEntity post) => _run(() async {
-    final summary = await _remote.react(post.id);
-    return post.copyWith(reactionCounts: summary.counts, viewerReaction: summary.viewerReaction);
-  });
+  Future<Either<Failure, PostEntity>> toggleLike(PostEntity post) =>
+      _run(() async {
+        final summary = await _remote.react(post.id);
+        return post.copyWith(
+          reactionCounts: summary.counts,
+          viewerReaction: summary.viewerReaction,
+        );
+      });
 
   @override
-  Future<Either<Failure, PostEntity>> reactToPost(PostEntity post, ReactionType type) => _run(() async {
+  Future<Either<Failure, PostEntity>> reactToPost(
+    PostEntity post,
+    ReactionType type,
+  ) => _run(() async {
     final summary = await _remote.react(post.id, type: type.wireValue);
-    return post.copyWith(reactionCounts: summary.counts, viewerReaction: summary.viewerReaction);
+    return post.copyWith(
+      reactionCounts: summary.counts,
+      viewerReaction: summary.viewerReaction,
+    );
   });
 
   @override
-  Future<Either<Failure, CommentEntity>> reactToComment(CommentEntity comment, ReactionType type) => _run(() async {
-    final summary = await _remote.reactToComment(comment.id, type: type.wireValue);
+  Future<Either<Failure, CommentEntity>> reactToComment(
+    CommentEntity comment,
+    ReactionType type,
+  ) => _run(() async {
+    final summary = await _remote.reactToComment(
+      comment.id,
+      type: type.wireValue,
+    );
     return comment.copyWith(
       reactionCount: summary.counts.values.fold<int>(0, (a, b) => a + b),
       viewerReaction: summary.viewerReaction,
@@ -99,7 +135,10 @@ class FeedRepositoryImpl implements FeedRepository {
       final type = ReactionType.fromWire(entry.key);
       if (type != null) counts[type] = entry.value;
     }
-    return ReactionBreakdown(counts: counts, viewerReaction: ReactionType.fromWire(summary.viewerReaction));
+    return ReactionBreakdown(
+      counts: counts,
+      viewerReaction: ReactionType.fromWire(summary.viewerReaction),
+    );
   });
 
   @override
@@ -109,16 +148,24 @@ class FeedRepositoryImpl implements FeedRepository {
     ReactionType? type,
     int page = 0,
   }) => _run(() async {
-    final result = await _remote.getReactors(targetType, targetId, type: type?.wireValue, page: page);
+    final result = await _remote.getReactors(
+      targetType,
+      targetId,
+      type: type?.wireValue,
+      page: page,
+    );
     return ReactorsPage(reactors: result.items, hasMore: result.hasMore);
   });
 
   @override
-  Future<Either<Failure, PostEntity>> repost(String postId, {String? content}) =>
-      _run(() => _remote.repost(postId, content: content));
+  Future<Either<Failure, PostEntity>> repost(
+    String postId, {
+    String? content,
+  }) => _run(() => _remote.repost(postId, content: content));
 
   @override
-  Future<Either<Failure, bool>> toggleSave(String postId) => _run(() => _bookmarks.toggle(postId));
+  Future<Either<Failure, bool>> toggleSave(String postId) =>
+      _run(() => _bookmarks.toggle(postId));
 
   @override
   Future<Either<Failure, List<String>>> getSavedPostIds() =>
@@ -129,18 +176,32 @@ class FeedRepositoryImpl implements FeedRepository {
     required String content,
     required PostVisibility visibility,
     List<File> images = const [],
-  }) => _run(() => _remote.createPost(content: content, visibility: visibility, images: images));
+  }) => _run(
+    () => _remote.createPost(
+      content: content,
+      visibility: visibility,
+      images: images,
+    ),
+  );
 
   @override
-  Future<Either<Failure, PostEntity>> updatePost(String postId, {String? content, PostVisibility? visibility}) =>
-      _run(() => _remote.updatePost(postId, content: content, visibility: visibility));
+  Future<Either<Failure, PostEntity>> updatePost(
+    String postId, {
+    String? content,
+    PostVisibility? visibility,
+  }) => _run(
+    () => _remote.updatePost(postId, content: content, visibility: visibility),
+  );
 
   @override
-  Future<Either<Failure, void>> deletePost(String postId) => _run(() => _remote.deletePost(postId));
+  Future<Either<Failure, void>> deletePost(String postId) =>
+      _run(() => _remote.deletePost(postId));
 
   @override
-  Future<Either<Failure, void>> deleteComment(String commentId) => _run(() => _remote.deleteComment(commentId));
+  Future<Either<Failure, void>> deleteComment(String commentId) =>
+      _run(() => _remote.deleteComment(commentId));
 
   @override
-  Future<Either<Failure, String>> getShareLink(String postId) => _run(() => _remote.getShareLink(postId));
+  Future<Either<Failure, String>> getShareLink(String postId) =>
+      _run(() => _remote.getShareLink(postId));
 }

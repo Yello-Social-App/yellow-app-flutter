@@ -18,6 +18,16 @@ import '../../features/chat/domain/repositories/chat_repository.dart';
 import '../../features/chat/domain/usecases/chat_usecases.dart';
 import '../../features/chat/presentation/bloc/chat_cubit.dart';
 import '../../features/chat/presentation/bloc/messages_cubit.dart';
+import '../../features/communities/data/datasources/communities_remote_datasource.dart';
+import '../../features/communities/data/repositories/communities_repository_impl.dart';
+import '../../features/communities/domain/entities/community_post_entity.dart';
+import '../../features/communities/domain/repositories/communities_repository.dart';
+import '../../features/communities/domain/usecases/communities_usecases.dart';
+import '../../features/communities/presentation/bloc/communities_cubit.dart';
+import '../../features/communities/presentation/bloc/community_detail_cubit.dart';
+import '../../features/communities/presentation/bloc/community_feed_cubit.dart';
+import '../../features/communities/presentation/bloc/community_post_cubit.dart';
+import '../../features/communities/presentation/bloc/create_community_post_cubit.dart';
 import '../../features/feed/data/datasources/bookmarks_local_datasource.dart';
 import '../../features/feed/data/datasources/feed_remote_datasource.dart';
 import '../../features/feed/data/datasources/story_local_datasource.dart';
@@ -28,6 +38,7 @@ import '../../features/feed/domain/usecases/add_comment_usecase.dart';
 import '../../features/feed/domain/usecases/create_post_usecase.dart';
 import '../../features/feed/domain/usecases/delete_comment_usecase.dart';
 import '../../features/feed/domain/usecases/delete_post_usecase.dart';
+import '../../features/feed/domain/usecases/edit_comment_usecase.dart';
 import '../../features/feed/domain/usecases/get_comments_usecase.dart';
 import '../../features/feed/domain/usecases/get_feed_usecase.dart';
 import '../../features/feed/domain/usecases/get_post_detail_usecase.dart';
@@ -62,9 +73,23 @@ import '../../features/profile/domain/usecases/profile_usecases.dart';
 import '../../features/profile/presentation/bloc/profile_cubit.dart';
 import '../../features/profile/presentation/bloc/public_profile_cubit.dart';
 import '../../features/profile/presentation/bloc/shared_posts_cubit.dart';
+import '../../features/search/data/datasources/search_remote_datasource.dart';
+import '../../features/search/data/repositories/search_repository_impl.dart';
+import '../../features/search/domain/repositories/search_repository.dart';
+import '../../features/search/domain/usecases/search_users_usecase.dart';
+import '../../features/search/presentation/bloc/search_cubit.dart';
+import '../../features/showcase/data/datasources/showcase_remote_datasource.dart';
+import '../../features/showcase/data/repositories/showcase_repository_impl.dart';
+import '../../features/showcase/domain/entities/project_entity.dart';
+import '../../features/showcase/domain/repositories/showcase_repository.dart';
+import '../../features/showcase/domain/usecases/showcase_usecases.dart';
+import '../../features/showcase/presentation/bloc/project_detail_cubit.dart';
+import '../../features/showcase/presentation/bloc/publish_project_cubit.dart';
+import '../../features/showcase/presentation/bloc/showcase_cubit.dart';
 import '../network/api_client.dart';
 import '../network/network_info.dart';
 import '../network/token_refresh_service.dart';
+import '../notifications/push_notification_service.dart';
 import '../router/app_router.dart';
 import '../router/route_guards.dart';
 import '../security/biometric_auth_service.dart';
@@ -92,6 +117,9 @@ Future<void> configureDependencies() async {
   _registerNotifications();
   _registerProfile();
   _registerChat();
+  _registerSearch();
+  _registerCommunities();
+  _registerShowcase();
 }
 
 void _registerCore() {
@@ -190,6 +218,12 @@ void _registerNotifications() {
   sl.registerLazySingleton(() => GetNotificationPreferencesUseCase(sl()));
   sl.registerLazySingleton(() => UpdateNotificationPreferencesUseCase(sl()));
 
+  // Needs `RegisterDeviceUseCase` (above) and `SecureStorageService` (see
+  // `_registerCore`) — resolved lazily, so registration order here doesn't
+  // matter, only that both exist somewhere in the graph by the time
+  // `bootstrap()` calls `sl<PushNotificationService>().init()`.
+  sl.registerLazySingleton<PushNotificationService>(() => PushNotificationServiceImpl(sl(), sl()));
+
   // Long-lived: backs both the Signals tab *and* the bottom-nav unread
   // badge (`BottomNavBar` resolves the same instance via
   // `sl<NotificationsCubit>()`) — see the cubit's own class doc for why a
@@ -258,6 +292,8 @@ void _registerProfile() {
   sl.registerFactoryParam<PublicProfileCubit, String, void>(
     (userId, _) => PublicProfileCubit(
       userId: userId,
+      blockUser: sl(),
+      unblockUser: sl(),
       getMe: sl(),
       getUser: sl(),
       getUserPosts: sl(),
@@ -339,6 +375,10 @@ void _registerFeed() {
   sl.registerLazySingleton(() => UpdatePostUseCase(sl()));
   sl.registerLazySingleton(() => DeletePostUseCase(sl()));
   sl.registerLazySingleton(() => DeleteCommentUseCase(sl()));
+  // `PUT /comments/{id}` — shared by the feed's threads and community
+  // threads, since a comment lives on the same `/comments/{id}` resource
+  // whichever kind of post it hangs off.
+  sl.registerLazySingleton(() => EditCommentUseCase(sl()));
   sl.registerLazySingleton(() => GetShareLinkUseCase(sl()));
 
   // Long-lived: the whole Home tab's state (posts, stories, like/save
@@ -387,4 +427,97 @@ void _registerFeed() {
   );
   sl.registerFactory(() => StoryCubit(sl(), sl()));
   sl.registerFactory(() => CreatePostCubit(sl()));
+}
+
+void _registerSearch() {
+  sl.registerLazySingleton<SearchRemoteDataSource>(() => SearchRemoteDataSourceImpl(sl()));
+  sl.registerLazySingleton<SearchRepository>(() => SearchRepositoryImpl(sl(), sl()));
+
+  sl.registerLazySingleton(() => SearchUsersUseCase(sl()));
+
+  // Factory: a search screen's query and results have no reason to outlive the
+  // screen, and the cubit owns a debounce timer it cancels in `close()`.
+  sl.registerFactory(() => SearchCubit(searchUsers: sl(), sendFriendRequest: sl()));
+}
+
+void _registerCommunities() {
+  sl.registerLazySingleton<CommunitiesRemoteDataSource>(() => CommunitiesRemoteDataSourceImpl(sl()));
+  sl.registerLazySingleton<CommunitiesRepository>(() => CommunitiesRepositoryImpl(sl(), sl()));
+
+  sl.registerLazySingleton(() => GetCommunitiesUseCase(sl()));
+  sl.registerLazySingleton(() => GetCommunityUseCase(sl()));
+  sl.registerLazySingleton(() => JoinCommunityUseCase(sl()));
+  sl.registerLazySingleton(() => LeaveCommunityUseCase(sl()));
+  sl.registerLazySingleton(() => GetCommunityFeedUseCase(sl()));
+  sl.registerLazySingleton(() => GetCommunityPostsUseCase(sl()));
+  sl.registerLazySingleton(() => CreateCommunityPostUseCase(sl()));
+  sl.registerLazySingleton(() => VoteCommunityPostUseCase(sl()));
+  sl.registerLazySingleton(() => ReactToCommunityPostUseCase(sl()));
+  sl.registerLazySingleton(() => GetCommunityCommentsUseCase(sl()));
+  sl.registerLazySingleton(() => AddCommunityCommentUseCase(sl()));
+
+  // All factories: unlike `FeedCubit`, none of these back a tab that has to
+  // survive a switch — the whole feature is pushed on top of the shell, so a
+  // singleton here would only keep stale lists alive between visits.
+  sl.registerFactory(() => CommunitiesCubit(getCommunities: sl(), joinCommunity: sl(), leaveCommunity: sl()));
+  sl.registerFactory(() => CommunityFeedCubit(getFeed: sl(), vote: sl(), react: sl()));
+  sl.registerFactory(() => CreateCommunityPostCubit(sl()));
+
+  // `String` param is the community's **slug** (not its uuid) — a fresh cubit
+  // per community push, same convention as `PublicProfileCubit`.
+  sl.registerFactoryParam<CommunityDetailCubit, String, void>(
+    (slug, _) => CommunityDetailCubit(
+      slug: slug,
+      getCommunity: sl(),
+      getPosts: sl(),
+      joinCommunity: sl(),
+      leaveCommunity: sl(),
+      vote: sl(),
+      react: sl(),
+    ),
+  );
+
+  // Takes the whole `CommunityPostEntity`, not an id: the backend serves no
+  // single community post, so the thread screen is opened with the post it
+  // shows. See `CommunitiesRepository`'s class doc.
+  sl.registerFactoryParam<CommunityPostCubit, CommunityPostEntity, void>(
+    (post, _) => CommunityPostCubit(
+      post: post,
+      getComments: sl(),
+      addComment: sl(),
+      vote: sl(),
+      react: sl(),
+      editComment: sl(),
+      deleteComment: sl(),
+      getMe: sl(),
+    ),
+  );
+}
+
+void _registerShowcase() {
+  sl.registerLazySingleton<ShowcaseRemoteDataSource>(() => ShowcaseRemoteDataSourceImpl(sl()));
+  sl.registerLazySingleton<ShowcaseRepository>(() => ShowcaseRepositoryImpl(sl(), sl()));
+
+  sl.registerLazySingleton(() => GetProjectsUseCase(sl()));
+  sl.registerLazySingleton(() => GetProjectTechUseCase(sl()));
+  sl.registerLazySingleton(() => GetProjectUseCase(sl()));
+  sl.registerLazySingleton(() => RecordProjectViewUseCase(sl()));
+  sl.registerLazySingleton(() => ToggleProjectLikeUseCase(sl()));
+  sl.registerLazySingleton(() => PublishProjectUseCase(sl()));
+
+  sl.registerFactory(() => ShowcaseCubit(getProjects: sl(), getTech: sl(), toggleLike: sl()));
+  sl.registerFactory(() => PublishProjectCubit(sl()));
+
+  // (projectId, seed) — the seed is the grid's own entity, passed so the detail
+  // header paints before `GET /projects/{id}` answers. Null on a cold deep
+  // link, which is why it is the nullable second param rather than required.
+  sl.registerFactoryParam<ProjectDetailCubit, String, ProjectEntity?>(
+    (projectId, seed) => ProjectDetailCubit(
+      projectId: projectId,
+      seed: seed,
+      getProject: sl(),
+      recordView: sl(),
+      toggleLike: sl(),
+    ),
+  );
 }

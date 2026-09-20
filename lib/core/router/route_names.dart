@@ -22,4 +22,23 @@ abstract final class RouteNames {
   static const String search = 'search';
   static const String sharedPosts = 'shared-posts';
   static const String notificationPreferences = 'notification-preferences';
+
+  // Communities. The `{slug}` path parameter is a community *slug*, never its
+  // uuid — that is what every `/communities/...` API route takes.
+  static const String communities = 'communities';
+  static const String community = 'community';
+  static const String createCommunityPost = 'create-community-post';
+
+  /// A community thread. Takes the `CommunityPostEntity` through the route's
+  /// `extra`, because the backend has no `GET /community-posts/{id}` to rebuild
+  /// it from the id — see `CommunityPostRouteFallback` for what a cold deep
+  /// link gets instead.
+  static const String communityPost = 'community-post';
+
+  // Showcase. Unlike a community thread, a project *is* fetchable by id, so
+  // these routes are fully deep-linkable; `extra` is only a rendering head
+  // start.
+  static const String showcase = 'showcase';
+  static const String project = 'project';
+  static const String publishProject = 'publish-project';
 }
