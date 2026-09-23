@@ -16,8 +16,34 @@ abstract final class NotificationTypes {
   static const friendRequestReceived = 'FRIEND_REQUEST_RECEIVED';
   static const friendRequestAccepted = 'FRIEND_REQUEST_ACCEPTED';
 
-  /// Chat activity is excluded from Signals, even if returned by the inbox.
+  /// Chat activity is push-only: `yello-notify` never stores it as an inbox
+  /// row (the conversation itself is the record), so these never reach
+  /// Signals. They *are* mutable in preferences, which is why the list
+  /// below carries them.
   static const chatMessage = 'CHAT_MESSAGE';
+
+  /// A first reaction on one of the viewer's messages. Changing or removing
+  /// a reaction, or reacting to your own message, sends nothing.
+  static const chatReaction = 'CHAT_REACTION';
+
+  /// A data-only push with no notification block: someone unsent a message
+  /// and the alert shown for it must be taken down by the app. Never a row,
+  /// never a preference — see `PushNotificationService`.
+  static const chatMessageDeleted = 'CHAT_MESSAGE_DELETED';
+
+  /// A moderator decided a report the viewer filed. Shown both as a push and
+  /// as a Signals row; `data` carries `reportId` and `status`
+  /// (`ACTION_TAKEN` / `NO_VIOLATION`) and deliberately says nothing about
+  /// the post, its author, or who decided. Tapping it opens Privacy &
+  /// safety, where `GET /v1/reports/me` has the outcome.
+  static const reportResolved = 'REPORT_RESOLVED';
+
+  /// A data-only push with no notification block and no inbox row: someone
+  /// unfriended the viewer, declined their request, or cancelled a request
+  /// they had sent. `data` carries only `userId` (the other party) and is
+  /// the app's cue to re-read friend state for them. A *block* sends
+  /// nothing, so blocking is never revealed this way.
+  static const friendshipChanged = 'FRIENDSHIP_CHANGED';
 
   /// Post and friend activity shown in Signals. Notification recipients are
   /// determined by the notification service.
@@ -30,9 +56,16 @@ abstract final class NotificationTypes {
     commentReacted,
     friendRequestReceived,
     friendRequestAccepted,
+    reportResolved,
   };
 
-  /// All nine wire values, in the order the preferences screen lists them.
+  /// Every type a user can mute, in the order the preferences screen lists
+  /// them. [chatMessageDeleted] and [friendshipChanged] are deliberately
+  /// absent: both are silent, so there is nothing to mute. [reportResolved]
+  /// is absent too — the notify service's preference vocabulary has not been
+  /// confirmed to carry it, and a toggle the server drops would read as a
+  /// broken switch. Add it here once `GET /notifications/v1/preferences`
+  /// is seen returning it.
   static const all = [
     postCreated,
     postCommented,
@@ -43,6 +76,7 @@ abstract final class NotificationTypes {
     friendRequestReceived,
     friendRequestAccepted,
     chatMessage,
+    chatReaction,
   ];
 }
 

@@ -7,24 +7,33 @@ import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_button.dart';
-import '../../../../shared/widgets/app_icon_button.dart';
-import '../../../../shared/widgets/filter_chip_pill.dart';
+import '../../../../shared/widgets/date_label.dart';
+import '../../../../shared/widgets/explore_title_menu.dart';
 import '../../../../shared/widgets/paged_list_view.dart';
+import '../../../../shared/widgets/segmented_tabs.dart';
 import '../../domain/entities/project_entity.dart';
 import '../bloc/showcase_cubit.dart';
 import '../widgets/project_card.dart';
+import '../widgets/publish_nudge_card.dart';
+import '../widgets/shimmer_project_card.dart';
+import '../widgets/tech_chip_row.dart';
+import '../widgets/tech_filter_sheet.dart';
 
-/// The showcase grid — `GET /projects`, with the tech facets from
-/// `GET /projects/tech` as the filter row.
+/// A list this short, unfiltered, gets a [PublishNudgeCard] after its last
+/// row: with one or two projects the screen is mostly empty page, and the
+/// header's Publish button alone was not enough of an invitation.
+const int _sparseListMax = 2;
+
+/// The showcase grid — `GET /projects`, sorted from the segmented control and
+/// narrowed by tech from the chip row (the busiest facets of
+/// `GET /projects/tech`) or the sheet behind it, which lists every facet and
+/// holds the Featured toggle.
 class ShowcasePage extends StatelessWidget {
   const ShowcasePage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => sl<ShowcaseCubit>()..load(),
-      child: const _ShowcaseView(),
-    );
+    return BlocProvider(create: (_) => sl<ShowcaseCubit>()..load(), child: const _ShowcaseView());
   }
 }
 
@@ -40,78 +49,104 @@ class _ShowcaseView extends StatelessWidget {
       backgroundColor: colors.bg,
       body: SafeArea(
         bottom: false,
-        child: BlocBuilder<ShowcaseCubit, ShowcaseState>(
-          builder: (context, state) {
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
-                  child: Row(
-                    children: [
-                      AppIconButton(
-                        icon: const Icon(Icons.arrow_back),
-                        onPressed: () => Navigator.of(context).maybePop(),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: RichText(
-                          text: TextSpan(
-                            style: AppTextStyles.displayXl.copyWith(color: colors.ink, fontSize: 28),
-                            children: [
-                              const TextSpan(text: 'Built'),
-                              TextSpan(text: '.', style: TextStyle(color: colors.yel)),
-                            ],
-                          ),
-                        ),
-                      ),
-                      AppButton(
-                        label: 'Publish',
-                        dense: true,
-                        icon: const Icon(Icons.add, size: 14),
-                        onPressed: () => _publish(context, cubit),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
+        child: Column(
+          children: [
+            // Tab chrome, no back arrow: this screen is the Explore branch's
+            // other page, reached from the title menu on Communities, and Back
+            // means "hop to Feed" as on every tab. Nothing here reads state, so
+            // it sits outside every builder below.
+            //
+            // The date eyebrow is its own full-width row above the title/action
+            // row rather than a third line inside the title column, which is
+            // the shape Feed and Communities both use.
+            const Padding(
+              padding: EdgeInsets.fromLTRB(18, 14, 14, 0),
+              child: Align(alignment: Alignment.centerLeft, child: DateLabel()),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 8, 14, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        for (final sort in ProjectSort.values) ...[
-                          FilterChipPill(
-                            label: sort.label,
-                            selected: state.sort == sort,
-                            onTap: () => cubit.setSort(sort),
+                        // Left-aligned inside the flexible slot so the tap
+                        // target hugs the title instead of spanning the gap
+                        // up to the Publish button.
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: ExploreTitleMenu(
+                            current: ExploreDestination.showcase,
+                            fontSize: AppTextStyles.displayXlFontSize - 2,
                           ),
-                          const SizedBox(width: 6),
-                        ],
-                        Container(width: 1, height: 22, color: colors.line),
-                        const SizedBox(width: 6),
-                        FilterChipPill(
-                          label: 'Featured',
-                          selected: state.featuredOnly,
-                          onTap: cubit.toggleFeaturedOnly,
                         ),
-                        // The tech vocabulary comes from the server, so these
-                        // chips always match what is actually published rather
-                        // than a hardcoded list that drifts.
-                        for (final tech in state.tech) ...[
-                          const SizedBox(width: 6),
-                          FilterChipPill(
-                            label: tech.name,
-                            trailing: '${tech.projectCount}',
-                            selected: state.selectedTech == tech.name,
-                            onTap: () => cubit.setTech(tech.name),
+                        const SizedBox(height: 4),
+                        Padding(
+                          // Matches the title menu's own inset so the two
+                          // lines share a left edge.
+                          padding: const EdgeInsets.only(left: 4),
+                          child: Text(
+                            ExploreDestination.showcase.subtitle,
+                            style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
                           ),
-                        ],
+                        ),
                       ],
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  AppButton(
+                    label: 'Publish',
+                    dense: true,
+                    icon: const Icon(Icons.add, size: 14),
+                    onPressed: () => _publish(context, cubit),
+                  ),
+                ],
+              ),
+            ),
+            // Sort takes the whole row; the tech facets get a row of their own
+            // below rather than a dropdown squeezed in beside it.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+              child: BlocSelector<ShowcaseCubit, ShowcaseState, ProjectSort>(
+                selector: (state) => state.sort,
+                builder: (context, sort) => SegmentedTabs<ProjectSort>(
+                  values: ProjectSort.values,
+                  current: sort,
+                  labelOf: (sort) => sort.label,
+                  onSelect: cubit.setSort,
                 ),
-                Expanded(
-                  child: RefreshIndicator(
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: BlocSelector<ShowcaseCubit, ShowcaseState, (List<TechCountEntity>, String?, bool)>(
+                selector: (state) => (state.tech, state.selectedTech, state.featuredOnly),
+                builder: (context, facets) {
+                  final (tech, selected, featuredOnly) = facets;
+                  return TechChipRow(
+                    tech: tech,
+                    selected: selected,
+                    onSelect: cubit.setTech,
+                    onOpenSheet: () => showTechFilterSheet(context, cubit),
+                    sheetActive: featuredOnly,
+                  );
+                },
+              ),
+            ),
+            Expanded(
+              child: BlocBuilder<ShowcaseCubit, ShowcaseState>(
+                builder: (context, state) {
+                  final showNudge =
+                      state.status == ShowcaseStatus.loaded &&
+                      !state.hasMore &&
+                      state.selectedTech == null &&
+                      !state.featuredOnly &&
+                      state.projects.isNotEmpty &&
+                      state.projects.length <= _sparseListMax;
+
+                  return RefreshIndicator(
                     onRefresh: cubit.refresh,
                     color: colors.ink,
                     backgroundColor: colors.surf,
@@ -126,10 +161,17 @@ class _ShowcaseView extends StatelessWidget {
                       emptyHint: state.selectedTech == null && !state.featuredOnly
                           ? 'Be the first to publish a project.'
                           : 'Nothing matches this filter.',
-                      itemCount: state.projects.length,
+                      skeleton: const [ShimmerProjectCard(), ShimmerProjectCard()],
+                      itemCount: state.projects.length + (showNudge ? 1 : 0),
                       isLoadingMore: state.isLoadingMore,
                       onLoadMore: cubit.loadMore,
                       itemBuilder: (context, index) {
+                        if (index == state.projects.length) {
+                          return PublishNudgeCard(
+                            projectCount: state.projects.length,
+                            onPublish: () => _publish(context, cubit),
+                          );
+                        }
                         final project = state.projects[index];
                         return ProjectCard(
                           project: project,
@@ -139,21 +181,17 @@ class _ShowcaseView extends StatelessWidget {
                         );
                       },
                     ),
-                  ),
-                ),
-              ],
-            );
-          },
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Future<void> _openProject(
-    BuildContext context,
-    ShowcaseCubit cubit,
-    ProjectEntity project,
-  ) async {
+  Future<void> _openProject(BuildContext context, ShowcaseCubit cubit, ProjectEntity project) async {
     // The entity rides along in `extra` so the detail screen can paint its
     // header immediately, but that screen still re-reads
     // `GET /projects/{id}` — unlike a community thread, a project *is*

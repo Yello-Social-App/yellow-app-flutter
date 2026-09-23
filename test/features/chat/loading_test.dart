@@ -116,11 +116,22 @@ void main() {
       when(
         () => repository.watchEvents('chat'),
       ).thenAnswer((_) => const Stream.empty());
+      when(
+        () => repository.getConversation('chat'),
+      ).thenAnswer((_) async => const Left(NetworkFailure()));
       final inbox = MessagesCubit(GetConversationsUseCase(repository));
       final cubit = ChatCubit(
         conversationId: 'chat',
+        getConversation: GetConversationUseCase(repository),
         getMessages: GetMessagesUseCase(repository),
         sendMessage: SendMessageUseCase(repository),
+        editMessage: EditMessageUseCase(repository),
+        deleteMessage: DeleteMessageUseCase(repository),
+        reactToMessage: ReactToMessageUseCase(repository),
+        uploadAttachment: UploadAttachmentUseCase(repository),
+        refreshAttachment: RefreshAttachmentUseCase(repository),
+        acceptInvite: AcceptGroupInviteUseCase(repository),
+        declineInvite: DeclineGroupInviteUseCase(repository),
         markRead: MarkReadUseCase(repository),
         repository: repository,
         inbox: inbox,

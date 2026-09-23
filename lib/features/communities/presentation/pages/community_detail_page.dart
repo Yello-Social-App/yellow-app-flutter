@@ -16,6 +16,7 @@ import '../../domain/entities/community_entity.dart';
 import '../../domain/entities/community_post_entity.dart';
 import '../bloc/community_detail_cubit.dart';
 import '../widgets/community_post_card.dart';
+import '../widgets/shimmer_community_post_card.dart';
 
 /// One community: its about/rules header and its threads.
 class CommunityDetailPage extends StatelessWidget {
@@ -88,6 +89,10 @@ class _CommunityDetailView extends StatelessWidget {
                       emptyHint: state.canPost
                           ? 'Start the first one.'
                           : 'Join this community to start a thread.',
+                      skeleton: const [
+                        ShimmerCommunityPostCard(showCommunity: false),
+                        ShimmerCommunityPostCard(showCommunity: false, hasBody: false),
+                      ],
                       header: community == null
                           ? null
                           : _Header(
@@ -183,6 +188,7 @@ class _Header extends StatelessWidget {
             color: colors.surf,
             border: Border.all(color: colors.line, width: 1.5),
             borderRadius: BorderRadius.circular(AppRadii.xl),
+            boxShadow: AppShadows.card(context),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -237,7 +243,7 @@ class _Header extends StatelessWidget {
                         ),
                         child: Text(
                           tag.toUpperCase(),
-                          style: AppTextStyles.metaMono.copyWith(color: colors.ink2, fontSize: 9),
+                          style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink2),
                         ),
                       ),
                   ],

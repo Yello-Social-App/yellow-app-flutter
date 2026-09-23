@@ -33,4 +33,31 @@ abstract final class AssetConstants {
   static const String imageDir = 'assets/images/';
   static const String splashLogo = 'assets/icons/appLogo.png';
   static const String circleIcon = 'assets/icons/Circle.png';
+
+  /// The `_SignalsAction` (feed app bar) glyph, in place of the
+  /// `Icons.favorite_border` Material icon it used to be. [notificationIcon]
+  /// is the resting state (no unread) — the source gif's first frame,
+  /// extracted as a still PNG. [notificationIconActive] only plays while
+  /// there is an unread notification: the source `anime_notification (1).gif`
+  /// at its native speed, followed by ~1.2s held on the resting frame before
+  /// it loops, so it reads as a deliberate ring-then-rest beat rather than
+  /// looping back-to-back with no breathing room. Built once with ffmpeg
+  /// concat (original frames + the held still), not a raw re-export.
+  static const String notificationIcon = 'assets/icons/anime_notification_static.png';
+  static const String notificationIconActive = 'assets/icons/anime_notification_paused.gif';
+
+  /// Community thread vote arrows, as four authored PNGs rather than Material
+  /// glyphs: outline for "not voted", filled for the direction the viewer
+  /// chose. They ship pre-colored in the brand yellow, so they are drawn
+  /// untinted — see `VoteArrowIcon`.
+  ///
+  /// Note the capital "A" in [voteDownArrowActive]: that is the file's real
+  /// name on disk. Asset keys are case-sensitive at runtime on Android and
+  /// iOS even though a Windows dev machine resolves either spelling, so a
+  /// "tidied" lowercase path here would load fine locally and throw on
+  /// device.
+  static const String voteUpArrow = 'assets/icons/vote_up_arrow.png';
+  static const String voteUpArrowActive = 'assets/icons/voted_up_arrow.png';
+  static const String voteDownArrow = 'assets/icons/vote_down_arrow.png';
+  static const String voteDownArrowActive = 'assets/icons/voted_down_Arrow.png';
 }

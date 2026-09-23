@@ -16,12 +16,29 @@ abstract final class RouteNames {
   static const String postDetail = 'post-detail';
   static const String userProfile = 'user-profile';
   static const String chat = 'chat';
+
+  /// A group's own screen (name, photo, members, roles, leave) — pushed over
+  /// the chat from its header. DMs have no such screen.
+  static const String groupInfo = 'group-info';
   static const String storyViewer = 'story-viewer';
   static const String storyCompose = 'story-compose';
   static const String createPost = 'create-post';
   static const String search = 'search';
+
+  /// The full-screen photo viewer, opened by tapping a post photo. Takes its
+  /// URLs through `extra` (`PhotoViewerArgs`) — photo URLs are too long and
+  /// too plural for the path, so this one is not deep-linkable by design.
+  static const String photoViewer = 'photo-viewer';
+
   static const String sharedPosts = 'shared-posts';
   static const String notificationPreferences = 'notification-preferences';
+
+  /// Settings → Privacy & safety: the reports you filed and their outcomes,
+  /// plus the accounts you have muted. Also where a tapped
+  /// `REPORT_RESOLVED` push lands — see `ReportsDestination`.
+  static const String privacySafety = 'privacy-safety';
+
+  static const String sendFeedback = 'send-feedback';
 
   // Communities. The `{slug}` path parameter is a community *slug*, never its
   // uuid — that is what every `/communities/...` API route takes.

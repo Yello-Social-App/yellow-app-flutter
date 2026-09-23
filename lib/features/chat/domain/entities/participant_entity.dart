@@ -1,14 +1,42 @@
 import 'package:equatable/equatable.dart';
 
 /// A participant's role in a conversation — `OWNER` on the wire for the
-/// creator of a GROUP, `MEMBER` for everyone else (and for both sides of a
-/// DIRECT conversation).
+/// creator of a GROUP, `ADMIN` for members the owner promoted, `MEMBER` for
+/// everyone else (and for both sides of a DIRECT conversation).
+///
+/// What each role may do in a group (`yello-chat`'s own table):
+///
+/// | action | who |
+/// |---|---|
+/// | add people, send invite cards, leave | any member |
+/// | rename, set/remove photo, remove a member | owner or admin |
+/// | remove an admin, promote, demote | owner only |
+/// | remove the owner | nobody — leaving hands the group to the longest-standing admin |
 enum ParticipantRole {
   owner,
+  admin,
   member;
 
-  static ParticipantRole fromWire(String? value) =>
-      value == 'OWNER' ? ParticipantRole.owner : ParticipantRole.member;
+  static ParticipantRole fromWire(String? value) => switch (value) {
+        'OWNER' => ParticipantRole.owner,
+        'ADMIN' => ParticipantRole.admin,
+        _ => ParticipantRole.member,
+      };
+
+  String get wire => switch (this) {
+        ParticipantRole.owner => 'OWNER',
+        ParticipantRole.admin => 'ADMIN',
+        ParticipantRole.member => 'MEMBER',
+      };
+
+  /// Rename, photo, and removing a plain member.
+  bool get canManage => this != ParticipantRole.member;
+
+  String get label => switch (this) {
+        ParticipantRole.owner => 'Owner',
+        ParticipantRole.admin => 'Admin',
+        ParticipantRole.member => 'Member',
+      };
 }
 
 /// One member of a conversation, as `yello-chat` returns it.

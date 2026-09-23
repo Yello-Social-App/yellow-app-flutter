@@ -34,7 +34,20 @@ class AuthFailure extends Failure {
 }
 
 class ValidationFailure extends Failure {
-  const ValidationFailure(super.message);
+  const ValidationFailure(super.message, {this.code});
+
+  /// The backend's own `ErrorCode` when this failure came from a rejected
+  /// request, so a caller that needs to tell two rejections apart can branch
+  /// on it (see `ApiErrorCodes`) instead of matching [message], which is
+  /// human copy the server may reword at any time.
+  ///
+  /// Null for the client-side validation a use case does before the request
+  /// ever goes out ("Enter the 6-digit code.") — there is no server code to
+  /// carry in that case.
+  final String? code;
+
+  @override
+  List<Object?> get props => [message, code];
 }
 
 /// Root/jailbreak or other device-integrity gate tripped (see

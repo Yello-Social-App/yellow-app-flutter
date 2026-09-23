@@ -18,6 +18,7 @@ import 'package:yello_social_app/features/feed/domain/usecases/update_post_useca
 import 'package:yello_social_app/features/feed/presentation/bloc/feed_cubit.dart';
 import 'package:yello_social_app/features/profile/domain/repositories/profile_repository.dart';
 import 'package:yello_social_app/features/profile/domain/usecases/profile_usecases.dart';
+import 'package:yello_social_app/features/safety/domain/usecases/safety_usecases.dart';
 
 import '../../helpers/mock_data.dart';
 
@@ -45,6 +46,10 @@ class _MockDeletePost extends Mock implements DeletePostUseCase {}
 
 class _MockGetShareLink extends Mock implements GetShareLinkUseCase {}
 
+class _MockHidePost extends Mock implements HidePostUseCase {}
+
+class _MockMuteUser extends Mock implements MuteUserUseCase {}
+
 void main() {
   late _MockGetFeed getFeed;
   late _MockGetStories getStories;
@@ -58,6 +63,8 @@ void main() {
   late _MockUpdatePost updatePost;
   late _MockDeletePost deletePost;
   late _MockGetShareLink getShareLink;
+  late _MockHidePost hidePost;
+  late _MockMuteUser muteUser;
 
   setUpAll(() {
     registerFallbackValue(buildPost());
@@ -67,6 +74,8 @@ void main() {
     registerFallbackValue(const GetReactionSummaryParams(targetType: 'POST', targetId: ''));
     registerFallbackValue(const RepostParams(postId: ''));
     registerFallbackValue(const GetUserPostsParams(userId: ''));
+    registerFallbackValue(const HidePostParams(''));
+    registerFallbackValue(const MuteParams(''));
   });
 
   setUp(() {
@@ -82,6 +91,8 @@ void main() {
     updatePost = _MockUpdatePost();
     deletePost = _MockDeletePost();
     getShareLink = _MockGetShareLink();
+    hidePost = _MockHidePost();
+    muteUser = _MockMuteUser();
     when(() => getStories(const NoParams())).thenAnswer((_) async => const Right([]));
     when(() => getMe(const NoParams())).thenAnswer((_) async => Right(buildUser()));
     // Default: the signed-in user has no posts/reposts of their own — most
@@ -103,6 +114,8 @@ void main() {
     updatePost: updatePost,
     deletePost: deletePost,
     getShareLink: getShareLink,
+    hidePost: hidePost,
+    muteUser: muteUser,
   );
 
   blocTest<FeedCubit, FeedState>(
@@ -504,6 +517,76 @@ void main() {
       verify: (_) {
         verify(() => deletePost('r1')).called(1);
         verifyNever(() => repost(any()));
+      },
+    );
+  });
+
+  group('hide and mute', () {
+    blocTest<FeedCubit, FeedState>(
+      'hidePost() drops the card once the server has accepted it',
+      build: () {
+        when(() => getFeed(any())).thenAnswer(
+          (_) async => Right(
+            FeedPage(posts: [buildPost(id: 'p1'), buildPost(id: 'p2')], hasMore: false, nextCursor: null),
+          ),
+        );
+        when(() => hidePost(any())).thenAnswer((_) async => const Right(null));
+        return buildCubit();
+      },
+      act: (cubit) async {
+        await cubit.refresh();
+        await cubit.hidePost('p1');
+      },
+      verify: (cubit) {
+        expect(cubit.state.posts.map((p) => p.id), ['p2']);
+        verify(() => hidePost(const HidePostParams('p1'))).called(1);
+      },
+    );
+
+    blocTest<FeedCubit, FeedState>(
+      'a failed hide leaves the card where it was',
+      build: () {
+        when(
+          () => getFeed(any()),
+        ).thenAnswer((_) async => Right(FeedPage(posts: [buildPost(id: 'p1')], hasMore: false, nextCursor: null)));
+        when(() => hidePost(any())).thenAnswer((_) async => const Left(NetworkFailure()));
+        return buildCubit();
+      },
+      act: (cubit) async {
+        await cubit.refresh();
+        expect(await cubit.hidePost('p1'), isFalse);
+      },
+      verify: (cubit) => expect(cubit.state.posts.map((p) => p.id), ['p1']),
+    );
+
+    blocTest<FeedCubit, FeedState>(
+      'muteAuthor() drops every post by that author, not just the tapped one',
+      build: () {
+        when(() => getFeed(any())).thenAnswer(
+          (_) async => Right(
+            FeedPage(
+              posts: [
+                buildPost(id: 'p1', authorId: 'u2'),
+                buildPost(id: 'p2', authorId: 'u3'),
+                buildPost(id: 'p3', authorId: 'u2'),
+              ],
+              hasMore: false,
+              nextCursor: null,
+            ),
+          ),
+        );
+        when(() => muteUser(any())).thenAnswer((_) async => const Right(null));
+        return buildCubit();
+      },
+      act: (cubit) async {
+        await cubit.refresh();
+        await cubit.muteAuthor('u2');
+      },
+      verify: (cubit) {
+        // The server leaves muted authors out of `/feed` from the next
+        // fetch on; this keeps what is already on screen honest meanwhile.
+        expect(cubit.state.posts.map((p) => p.id), ['p2']);
+        verify(() => muteUser(const MuteParams('u2'))).called(1);
       },
     );
   });

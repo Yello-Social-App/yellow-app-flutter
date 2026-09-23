@@ -191,7 +191,7 @@ class _PublishProjectViewState extends State<_PublishProjectView> {
                           const SizedBox(width: 8),
                           Text(
                             '${_tech.length}/$kProjectTechMaxCount',
-                            style: AppTextStyles.metaMono.copyWith(color: colors.ink3, fontSize: 9),
+                            style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink3),
                           ),
                         ],
                       ),
@@ -311,7 +311,7 @@ class _Field extends StatelessWidget {
           border: InputBorder.none,
           // A 2048-character counter under a URL field is noise.
           counterText: showCounter ? null : '',
-          counterStyle: AppTextStyles.metaMono.copyWith(color: colors.ink3, fontSize: 9),
+          counterStyle: AppTextStyles.metaMonoSm.copyWith(color: colors.ink3),
         ),
       ),
     );

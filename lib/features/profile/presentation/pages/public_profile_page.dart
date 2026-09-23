@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injection.dart';
+import '../../../../core/notifications/push_notification_service.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -18,6 +21,7 @@ import '../../../../shared/widgets/image_placeholder.dart';
 import '../../../chat/domain/usecases/chat_usecases.dart';
 import '../../../feed/presentation/widgets/post_card.dart';
 import '../bloc/public_profile_cubit.dart';
+import '../widgets/shimmer_profile_view.dart';
 
 /// Read-only view of someone else's profile (`GET /users/{id}` +
 /// `GET /users/{id}/posts`), pushed by tapping an avatar/username anywhere
@@ -39,8 +43,37 @@ class PublicProfilePage extends StatelessWidget {
   }
 }
 
-class _PublicProfileView extends StatelessWidget {
+class _PublicProfileView extends StatefulWidget {
   const _PublicProfileView();
+
+  @override
+  State<_PublicProfileView> createState() => _PublicProfileViewState();
+}
+
+class _PublicProfileViewState extends State<_PublicProfileView> {
+  StreamSubscription<String>? _friendshipChanges;
+
+  @override
+  void initState() {
+    super.initState();
+    // A silent `FRIENDSHIP_CHANGED` push naming *this* profile means the
+    // Add/Accept/Unfriend button on screen is now wrong — they unfriended
+    // the viewer, declined their request, or cancelled one they had sent.
+    // Reloading is the only way to find out which: the push carries a user
+    // id and nothing else, on purpose. Pushes about anyone else are
+    // ignored, so an open profile is not reloaded for unrelated activity.
+    _friendshipChanges = sl<PushNotificationService>().friendshipChanges.listen((userId) {
+      if (!mounted) return;
+      final cubit = context.read<PublicProfileCubit>();
+      if (cubit.userId == userId) cubit.load();
+    });
+  }
+
+  @override
+  void dispose() {
+    _friendshipChanges?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +130,7 @@ class _BodyState extends State<_Body> {
 
     if (state.status == PublicProfileStatus.initial ||
         (state.status == PublicProfileStatus.loading && state.user == null)) {
-      return const Center(child: CircularProgressIndicator());
+      return const ShimmerProfileView(cardOverlap: 20, tabCount: 2);
     }
     if (state.status == PublicProfileStatus.error) {
       return Center(
@@ -211,6 +244,7 @@ class _BodyState extends State<_Body> {
               color: colors.surf,
               border: Border.all(color: colors.line, width: 1.5),
               borderRadius: BorderRadius.circular(AppRadii.huge),
+              boxShadow: AppShadows.card(context),
             ),
             child: Column(
               children: [
@@ -259,9 +293,8 @@ class _BodyState extends State<_Body> {
                         Text(
                           user.bio!,
                           textAlign: TextAlign.center,
-                          style: AppTextStyles.bodySm.copyWith(
+                          style: AppTextStyles.bodyMd.copyWith(
                             color: colors.ink2,
-                            fontSize: 14,
                           ),
                         ),
                       ],
@@ -627,6 +660,7 @@ class _StatTile extends StatelessWidget {
           color: colors.surf,
           border: Border.all(color: colors.line, width: 1.5),
           borderRadius: BorderRadius.circular(AppRadii.lg),
+          boxShadow: AppShadows.card(context),
         ),
         child: Column(
           children: [

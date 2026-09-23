@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../shared/widgets/image_placeholder.dart';
+import '../../../../shared/widgets/photo_viewer_page.dart';
 
 /// Read-only, swipeable viewer for a *published* post's photos — the
 /// display-side counterpart to create-post's fanned `_MediaCardStack`.
@@ -15,16 +16,21 @@ import '../../../../shared/widgets/image_placeholder.dart';
 /// [PageView] — cropped to a fixed aspect ratio so paging between
 /// differently-shaped photos doesn't jump the card's height — with a
 /// "n/total" badge and dot indicator so every photo is reachable.
+///
+/// Every photo here is *cropped or scaled down* to fit a card, so tapping
+/// one opens [PhotoViewerPage] on that same photo: full screen, full
+/// resolution, pinch/double-tap zoom, and swipeable across the rest of the
+/// set. That is true wherever this widget is used (feed card, post detail,
+/// repost preview) — the tap is handled here rather than passed in, so no
+/// surface can accidentally ship a photo that doesn't expand.
 class PostImageCarousel extends StatefulWidget {
   const PostImageCarousel({
     super.key,
     required this.imageUrls,
-    this.onTap,
     this.placeholderHeight = 280,
   });
 
   final List<String> imageUrls;
-  final VoidCallback? onTap;
 
   /// Height of the empty-state / broken-image placeholder, and of the
   /// multi-photo carousel itself. Callers pass the same figure the old
@@ -63,7 +69,7 @@ class _PostImageCarouselState extends State<PostImageCarousel> {
                   MediaQuery.devicePixelRatioOf(context))
               .round();
       return GestureDetector(
-        onTap: widget.onTap,
+        onTap: () => openPhotoViewer(context, imageUrls: urls),
         child: CachedNetworkImage(
           imageUrl: urls.first,
           fit: BoxFit.fitWidth,
@@ -78,7 +84,8 @@ class _PostImageCarouselState extends State<PostImageCarousel> {
     }
 
     return GestureDetector(
-      onTap: widget.onTap,
+      // Opens on whichever photo is showing, not always the first.
+      onTap: () => openPhotoViewer(context, imageUrls: urls, initialIndex: _index),
       child: SizedBox(
         height: widget.placeholderHeight,
         child: Stack(
@@ -152,6 +159,12 @@ class _CountBadge extends StatelessWidget {
 /// the classic swipe-through-photos affordance layered over the image
 /// rather than the app's ink/line palette, since it has to stay legible
 /// over whatever photo is behind it.
+///
+/// Legibility over a light photo comes from the flat dark pill behind the
+/// row, **not** from a blurred `BoxShadow` on each dot: the dots are
+/// `AnimatedContainer`s whose decoration changes every frame of the width
+/// animation, which is exactly the shape that crashed this app's renderer
+/// (`docs/GOTCHAS.md`). The pill is a plain, unblurred fill and is safe.
 class _DotIndicator extends StatelessWidget {
   const _DotIndicator({required this.index, required this.total});
   final int index;
@@ -162,23 +175,29 @@ class _DotIndicator extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        for (var i = 0; i < total; i++)
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            margin: const EdgeInsets.symmetric(horizontal: 2.5),
-            width: i == index ? 16 : 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: i == index ? 0.95 : 0.5),
-              borderRadius: BorderRadius.circular(999),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.25),
-                  blurRadius: 3,
-                ),
-              ],
-            ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.28),
+            borderRadius: BorderRadius.circular(999),
           ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < total; i++)
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                  width: i == index ? 16 : 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: i == index ? 0.95 : 0.5),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ],
     );
   }

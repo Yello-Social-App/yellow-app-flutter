@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injection.dart';
+import '../../../../core/notifications/push_notification_service.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -12,6 +15,7 @@ import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/error_view.dart';
 import '../../../../shared/widgets/shimmer_loading.dart';
+import '../../../../shared/widgets/yello_wordmark.dart';
 import '../../domain/entities/friendship_entity.dart';
 import '../bloc/friends_cubit.dart';
 
@@ -27,8 +31,35 @@ class FriendsPage extends StatelessWidget {
   }
 }
 
-class _FriendsView extends StatelessWidget {
+class _FriendsView extends StatefulWidget {
   const _FriendsView();
+
+  @override
+  State<_FriendsView> createState() => _FriendsViewState();
+}
+
+class _FriendsViewState extends State<_FriendsView> {
+  StreamSubscription<String>? _friendshipChanges;
+
+  @override
+  void initState() {
+    super.initState();
+    // `FRIENDSHIP_CHANGED` is a silent push: someone unfriended the viewer,
+    // declined their request, or cancelled one they had sent, and nothing
+    // is shown for it. This list is one of the two screens that would
+    // otherwise keep showing the old state until it was left and re-entered
+    // — the other is `PublicProfilePage`. Foreground only, by the nature of
+    // the push; a backgrounded app reloads on its next `load()` anyway.
+    _friendshipChanges = sl<PushNotificationService>().friendshipChanges.listen((_) {
+      if (mounted) context.read<FriendsCubit>().refresh();
+    });
+  }
+
+  @override
+  void dispose() {
+    _friendshipChanges?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,14 +89,9 @@ class _FriendsView extends StatelessWidget {
                           style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
                         ),
                         const SizedBox(height: 8),
-                        RichText(
-                          text: TextSpan(
-                            style: AppTextStyles.displayXl.copyWith(color: colors.ink),
-                            children: [
-                              const TextSpan(text: 'Circle'),
-                              TextSpan(text: '.', style: TextStyle(color: colors.yel)),
-                            ],
-                          ),
+                        const YelloWordmark(
+                          fontSize: AppTextStyles.displayXlFontSize,
+                          text: 'Circle',
                         ),
                       ],
                     ),
@@ -137,6 +163,7 @@ class _SectionCard extends StatelessWidget {
         color: colors.surf,
         border: Border.all(color: colors.line, width: 1.5),
         borderRadius: BorderRadius.circular(AppRadii.xl),
+        boxShadow: AppShadows.card(context),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(

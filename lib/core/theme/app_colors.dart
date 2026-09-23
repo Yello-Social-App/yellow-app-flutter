@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
-/// Design-token color palette lifted 1:1 from the Yello Mobile v2 Claude
-/// Design source (`:root` / `[data-theme="dark"]` custom properties in
-/// `Yello Mobile v2.dc.html`). Exposed as a [ThemeExtension] so every widget
-/// can reach the exact token set the design used, rather than approximating
-/// them through Material's ColorScheme roles.
+/// Design-token color palette. It began as a 1:1 lift of the Yello Mobile v2
+/// Claude Design source (`:root` / `[data-theme="dark"]` custom properties in
+/// `Yello Mobile v2.dc.html`) and has since been retuned to a lighter, softer
+/// set — see ADR-020 for which tokens moved and why. Exposed as a
+/// [ThemeExtension] so every widget can reach the exact token set the app
+/// draws with, rather than approximating it through Material's ColorScheme
+/// roles.
 @immutable
 class AppColors extends ThemeExtension<AppColors> {
   const AppColors({
@@ -74,42 +76,64 @@ class AppColors extends ThemeExtension<AppColors> {
   /// Empty image-slot placeholder fill.
   final Color slot;
 
+  /// The light set, deliberately soft rather than high-contrast:
+  ///
+  /// - hairlines sit at ~10% / ~6% ink instead of ~16% / ~9%, so a border
+  ///   reads as a seam rather than a drawn outline;
+  /// - the page is a warm off-white while a card stays pure white, so a
+  ///   surface separates from the page on its own and no longer needs the
+  ///   border to do that work (this is what lets the hairlines drop — see
+  ///   ADR-012, whose `bg == surf` premise this replaces);
+  /// - primary ink is a warm charcoal, not near-black (still 13:1 on a
+  ///   card).
+  ///
+  /// [ink3] is the one token deliberately *not* lightened: at 3.4:1 on a
+  /// card it is already at the 3:1 floor for placeholder and disabled text,
+  /// and anything paler stops being readable.
   static const light = AppColors(
-    bg: Color(0xFFFFFFFF),
+    bg: Color(0xFFFEFCF7),
     surf: Color(0xFFFFFFFF),
-    surf2: Color(0xFFF5F2EA),
-    ink: Color(0xFF14120C),
-    ink2: Color(0xFF5C5546),
+    surf2: Color(0xFFFAF7F0),
+    ink: Color(0xFF2A2620),
+    ink2: Color(0xFF6B6357),
     ink3: Color(0xFF918A7B),
-    line: Color(0x2914120C),
-    line2: Color(0x1714120C),
+    line: Color(0x1A14120C),
+    line2: Color(0x0F14120C),
     yel: Color(0xFFF4C542),
-    yelb: Color(0xFFFFF3CE),
-    yeld: Color(0xFF6B5200),
-    onYel: Color(0xFF14120C),
+    yelb: Color(0xFFFFF8E1),
+    yeld: Color(0xFF6F5502),
+    onYel: Color(0xFF2A2620),
     red: Color(0xFFE4574F),
     grn: Color(0xFF2E9E5B),
     shell: Color(0xFF14120C),
-    slot: Color(0xFFEDE9DF),
+    slot: Color(0xFFF3F0E8),
   );
 
+  /// The dark set, lifted off black by the same retune: surfaces move up a
+  /// step (charcoal rather than near-black) and the light-on-dark hairlines
+  /// come down from 20%/10% to 17%/8%, so the same "soft seam" reading holds
+  /// in both themes.
+  ///
+  /// [shell] stays pure black on purpose — it is the one surface that is
+  /// dark in *both* themes (ADR-009), and keeping it below the lifted [bg]
+  /// is what still makes it read as a slab.
   static const dark = AppColors(
-    bg: Color(0xFF12100A),
-    surf: Color(0xFF1C1A13),
-    surf2: Color(0xFF26231A),
+    bg: Color(0xFF1A1811),
+    surf: Color(0xFF24211A),
+    surf2: Color(0xFF2E2B21),
     ink: Color(0xFFF7F5F0),
     ink2: Color(0xFFA79F90),
     ink3: Color(0xFF7D7667),
-    line: Color(0x33F7F5F0),
-    line2: Color(0x1AF7F5F0),
+    line: Color(0x2BF7F5F0),
+    line2: Color(0x14F7F5F0),
     yel: Color(0xFFF4C542),
-    yelb: Color(0xFF3E3106),
+    yelb: Color(0xFF473807),
     yeld: Color(0xFFF4C542),
-    onYel: Color(0xFF14120C),
+    onYel: Color(0xFF2A2620),
     red: Color(0xFFF2726A),
     grn: Color(0xFF4FC07E),
     shell: Color(0xFF000000),
-    slot: Color(0xFF2A261C),
+    slot: Color(0xFF322E24),
   );
 
   @override

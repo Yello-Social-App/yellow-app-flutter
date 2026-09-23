@@ -182,9 +182,8 @@ class _DetailsCardState extends State<_DetailsCard> {
               const SizedBox(height: 6),
               Text(
                 'Create your premium sanctuary.',
-                style: AppTextStyles.bodySm.copyWith(
+                style: AppTextStyles.bodyMd.copyWith(
                   color: colors.ink2,
-                  fontSize: 14,
                 ),
               ),
               const SizedBox(height: 28),
@@ -294,7 +293,6 @@ class _DetailsCardState extends State<_DetailsCard> {
                     Text(
                       'Reminder me next time',
                       style: AppTextStyles.bodySm.copyWith(
-                        fontSize: 13,
                         color: colors.ink2,
                       ),
                     ),
@@ -321,7 +319,6 @@ class _DetailsCardState extends State<_DetailsCard> {
                     'Already have an account?',
                     style: AppTextStyles.bodySm.copyWith(
                       color: colors.ink2,
-                      fontSize: 13,
                     ),
                   ),
                   const SizedBox(width: 4),
@@ -335,9 +332,8 @@ class _DetailsCardState extends State<_DetailsCard> {
                       ),
                       child: Text(
                         'Sign In',
-                        style: AppTextStyles.button.copyWith(
+                        style: AppTextStyles.buttonLg.copyWith(
                           color: colors.yeld,
-                          fontSize: 13,
                         ),
                       ),
                     ),
@@ -402,9 +398,8 @@ class _OtpCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   'Enter the 6-digit code we sent to $email.',
-                  style: AppTextStyles.bodySm.copyWith(
+                  style: AppTextStyles.bodyMd.copyWith(
                     color: colors.ink2,
-                    fontSize: 14,
                   ),
                 ),
                 const SizedBox(height: 28),
@@ -447,9 +442,8 @@ class _OtpCard extends StatelessWidget {
                             state.isProcessing
                                 ? 'Resending…'
                                 : "Didn't get a code? Resend",
-                            style: AppTextStyles.button.copyWith(
+                            style: AppTextStyles.buttonLg.copyWith(
                               color: colors.yeld,
-                              fontSize: 13,
                             ),
                           ),
                         ),

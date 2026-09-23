@@ -192,7 +192,7 @@ class _CreateCommunityPostViewState extends State<_CreateCommunityPostView> {
                           const SizedBox(width: 8),
                           Text(
                             '(OPTIONAL)',
-                            style: AppTextStyles.metaMono.copyWith(color: colors.ink3, fontSize: 9),
+                            style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink3),
                           ),
                         ],
                       ),
@@ -256,7 +256,7 @@ class _Field extends StatelessWidget {
           hintText: hint,
           hintStyle: AppTextStyles.hint.copyWith(color: colors.ink3),
           border: InputBorder.none,
-          counterStyle: AppTextStyles.metaMono.copyWith(color: colors.ink3, fontSize: 9),
+          counterStyle: AppTextStyles.metaMonoSm.copyWith(color: colors.ink3),
         ),
       ),
     );

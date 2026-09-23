@@ -125,4 +125,26 @@ void main() {
     // physical bottom edge on that device instead of leaving a gap under it.
     expect(insetHeight.height, closeTo(flatHeight.height + inset, 0.5));
   });
+
+  // Explore is a real tab (branch 5) now, after two earlier shapes that left
+  // the slot inert — a sheet launcher, then a bare push over the shell. Pins
+  // the branch index the slot speaks in both directions, since the router's
+  // branch order and `_slotForBranch` have to agree on it by hand.
+  testWidgets('Explore reports branch 5 on tap', (tester) async {
+    final selected = <int>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          extendBody: true,
+          body: Container(color: Colors.blue),
+          bottomNavigationBar: BottomNavBar(currentIndex: 0, onTabSelected: selected.add, onCreate: () {}),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Explore'));
+    await tester.pump();
+
+    expect(selected, [5]);
+  });
 }

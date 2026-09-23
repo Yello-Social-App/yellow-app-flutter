@@ -85,7 +85,7 @@ class AppWarningDialog extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: AppTextStyles.bodySm.copyWith(color: colors.ink2, fontSize: 14),
+              style: AppTextStyles.bodyMd.copyWith(color: colors.ink2),
             ),
             const SizedBox(height: 24),
             Row(

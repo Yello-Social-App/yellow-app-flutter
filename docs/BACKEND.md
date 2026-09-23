@@ -25,6 +25,9 @@ Don't "unify" them into `VersionedEndpoints`.
 - Swagger UI: `/docs` · raw OpenAPI 3.0: `/docs/json?api-docs.json`
 - Last verified against the served spec: **v0.2.0, 40 paths / 53 operations,
   2026-09-20** (see the doc comment on `VersionedEndpoints`).
+- `yello-chat` spec: `/ws/docs` (Swagger UI), `/ws/docs-json` — last
+  verified **v0.1.0, 22 `/ws` paths, 2026-09-22**. `yello-notify` spec:
+  `/notifications/docs`.
 
 ---
 
@@ -62,7 +65,9 @@ The server-side vocabulary currently includes:
 `PAYLOAD_TOO_LARGE` · `POST_NOT_VISIBLE` · `RATE_LIMIT_EXCEEDED` ·
 `RESET_TOKEN_INVALID` · `RESOURCE_NOT_FOUND` · `TOKEN_EXPIRED` ·
 `TOKEN_INVALID` · `TOKEN_REVOKED` · `USERNAME_ALREADY_USED` ·
-`USERNAME_CHANGE_COOLDOWN` · `VALIDATION_FAILED`
+`USERNAME_CHANGE_COOLDOWN` · `VALIDATION_FAILED` ·
+`CANNOT_REPORT_OWN_POST` · `CANNOT_MUTE_SELF` · `REPORT_ALREADY_EXISTS` ·
+`REPORT_ALREADY_RESOLVED`
 
 Adding a new code means adding a branch in `ErrorHandler`, not a string
 comparison at a call site.
@@ -91,12 +96,183 @@ Grouped as declared in `VersionedEndpoints`:
   `/community-posts/{postId}/vote`
 - **Showcase** — `/projects`, `/projects/{id}`, `/projects/{id}/like`,
   `/projects/{id}/views`, `/projects/tech`
+- **Feedback** — `/feedback`, `/feedback/me`
+- **Reports** — `/posts/{postId}/reports`, `/reports/me`
+  (+ `/admin/reports`, `/admin/reports/{id}` — moderators only, never
+  called by this app)
+- **Mute** — `/users/{userId}/mute`, `/users/me/muted`
+- **Hide** — `/posts/{postId}/hide`
 
 `/users/search` requires `q` of **at least 2 characters** — the server answers
 `400 VALIDATION_FAILED` below that, so callers gate on length rather than
 firing per keystroke.
 
+### Feedback, reports, mute and hide
+
+Added from the backend's own reference for these features (2026-09-22). Not
+yet re-checked against the served OpenAPI document — do that on the next
+`/docs` sweep.
+
+| Method | Path | Success | Notes |
+|---|---|---|---|
+| POST | `/v1/feedback` | `201` `Feedback` | 10/h per user |
+| GET | `/v1/feedback/me` | `200` page | newest first |
+| POST | `/v1/posts/{postId}/reports` | `201` `PostReport` | 20/h per user |
+| GET | `/v1/reports/me` | `200` page | newest first |
+| POST/DELETE | `/v1/users/{userId}/mute` | `204` | idempotent, no body |
+| GET | `/v1/users/me/muted` | `200` page | most recent first |
+| POST/DELETE | `/v1/posts/{postId}/hide` | `204` | idempotent, no body |
+
+- **`204` means there is no body to unwrap.** Mute, unmute, hide, unhide —
+  and, since this revision, unfriend — answer `204 No Content`. Reaching for
+  `ApiEnvelope.data` on one of those throws *on success*. Every other
+  effect-only friendship call (`…/decline`, cancel, block, unblock) still
+  answers `200 { user, friendStatus }`, so they are not interchangeable.
+- **`DELETE /v1/friends/{userId}` changed** from `200 { user, friendStatus }`
+  to `204`. The client already typed it `Future<void>` and never read the
+  body, so nothing had to change — treat `204` as `friendStatus: "NONE"`.
+- **Feedback `featureId`** is one of `messages`, `stories`, `communities`,
+  `showcase`, `compact-mode`, `in-app-updates`, `other`. The last two name
+  features Yello does not have; `FeedbackFeature.pickable` is the subset the
+  app's own picker offers, while all seven still parse on the way back in.
+- **`diagnostics`** (`{appVersion, platform}`, each ≤ 32 chars) is accepted
+  and stored but never returned. `SafetyRemoteDataSourceImpl` fills it from
+  `package_info_plus` + `dart:io`; anything else in that object is dropped
+  server-side.
+- **`REPORT_ALREADY_EXISTS` (409) is not a failure.** It means the viewer
+  already has an `UNDER_REVIEW` report on that post — which is what they
+  asked for. `ReportPostCubit` reads it off `ValidationFailure.code` and
+  confirms rather than showing an error. Once a report resolves, the same
+  post can be reported again.
+- **Reports carry a frozen snapshot** of the post (`authorName`, `excerpt`)
+  taken when the report was filed, so the row stays readable after the post
+  is hidden or deleted. `postId` goes null once the post is deleted, which
+  is why the row is only tappable while it is set.
+- **`/v1/admin/reports`** (the moderation queue and its `PATCH`) has no
+  client here: it answers `403 ACCESS_DENIED` for every account this app
+  signs in. Deliberately absent from `VersionedEndpoints` and
+  `SafetyRepository`.
+
+New error codes, all mapped in `ErrorHandler`: `CANNOT_REPORT_OWN_POST`,
+`CANNOT_MUTE_SELF`, `REPORT_ALREADY_EXISTS`, `REPORT_ALREADY_RESOLVED`.
+
 ---
+
+## yello-chat (`/ws`) — bare JSON, own error body
+
+Responses are the object itself, **no** `{success, data}` envelope; errors
+are `{ code, message, details? }` with codes `VALIDATION_ERROR` (400, or
+413 for an oversized upload) · `UNAUTHORIZED` · `FORBIDDEN` · `NOT_FOUND` ·
+`CONFLICT` · `RATE_LIMITED` · `UNAVAILABLE` · `INTERNAL_ERROR`. `ErrorHandler`
+reads `code`/`message` off that body as-is and maps the 4xx family to
+`ValidationFailure` so the server's wording reaches the user
+(`ChatErrorCodes`). Ids are UUIDs, times ISO 8601. The acting user is always
+the token's `sub` — never a body field.
+
+Routes, as declared in `ChatRoutes`:
+
+- **Conversations** — `GET/POST /ws/conversations`, `GET /ws/conversations/{id}`,
+  `POST /ws/conversations/{id}/read`
+- **Messages** — `GET/POST /ws/conversations/{id}/messages`;
+  `PATCH/DELETE …/messages/{messageId}` (sender only — edit is text only,
+  delete leaves a tombstone: `deletedAt` set, `body: ""`, files and
+  reactions gone); `PUT/DELETE …/messages/{messageId}/reaction` (one
+  reaction per user per message; both answer `{ messageId, reactions[] }` —
+  replace, don't merge)
+- **Attachments** — `POST /ws/conversations/{id}/attachments` (multipart,
+  one `file`, ≤ 10 MiB, typed from its bytes: JPEG/PNG/GIF/WebP → `IMAGE`,
+  anything else → `FILE`) then send the id in `attachmentIds`;
+  `GET /ws/attachments/{id}` for a fresh presigned URL. URLs live an hour
+  and are **re-signed on every read** — cache images by attachment id, not
+  URL (`_AttachmentThumb` does).
+- **Groups** (400 on a DM) — `PATCH /ws/conversations/{id}` (`title`),
+  `PUT/DELETE …/photo`, `POST …/members`, `DELETE/PATCH …/members/{userId}`
+  (`role: ADMIN | MEMBER`), `POST …/leave`. Roles: any member adds people,
+  sends invites and leaves; OWNER or ADMIN renames, changes the photo and
+  removes a member; only the OWNER removes an admin or changes roles; the
+  owner cannot be removed — on leaving, the longest-standing admin (else
+  member) takes over. ≤ 50 people.
+- **Invite cards** — `POST /ws/conversations/{id}/invites` (`{ userId }`)
+  answers `{ invite, message }`, the card being a normal message in the
+  inviter's DM with the invitee (`groupInvite` set, `body: ""`);
+  `POST /ws/invites/{id}/accept` (answers the joined conversation) /
+  `…/decline`. Only the invitee answers; a second answer is 409.
+
+Limits: message text ≤ 4 000 chars (`CHAT_MESSAGE_MAX_LENGTH`), ≤ 10
+attachments per message, ≤ 64-char `clientId` (the idempotency key).
+
+**WebSocket** — `wss://…/ws`, frames `{ event, data }` ≤ 64 KiB, wired
+by `ChatSocket` (`chat/data/datasources/chat_socket.dart`). Handshake,
+established against the live service with `tool/ws_probe.dart` on
+2026-09-22 (the README that documents it is not in this repo):
+
+- the upgrade takes no header; the client sends
+  `{ "event": "auth", "data": { "token": "<yello-api access token>" } }`
+  **within a few seconds** or the server closes with code 4401
+  "authentication timeout";
+- success is `auth.ok`; a bad token is `error { code: UNAUTHORIZED,
+  message: "Invalid token" }` (`ChatSocket` refreshes once and retries);
+- any other frame before auth is `error UNAUTHORIZED "Authenticate first"`;
+- `ping` → `pong { ref, serverTime }` works before auth;
+- validation failures name the field: `error { code: VALIDATION_ERROR,
+  details: { issues: [{ path, message }] } }`.
+
+Server → client: `message.new/sent/updated/deleted/reactions`,
+`message.read`, `typing`, `presence`, `conversation.new/updated/removed`,
+`group.invite.updated`, `error`, `pong` — `ChatFrameDecoder` maps each to a
+`ChatEvent`. Client → server used by this app: `auth`, `typing`
+(`{ conversationId, isTyping }` — **the relayed frame's field names are the
+one thing the probe could not confirm without a real token**; run
+`dart run tool/ws_probe.dart <token>` and the server's validation error
+names them). Everything else still goes over HTTP; the socket is delivery,
+not a second request path. The chat screen keeps a 30 s history poll as a
+safety net while the socket is up and drops to 5 s when it is not.
+
+## yello-notify — what changed with the chat features
+
+- **Chat pushes are push-only.** `CHAT_MESSAGE`, `CHAT_REACTION` and
+  `CHAT_MESSAGE_DELETED` are never stored as inbox rows — `GET
+  /notifications/v1` does not return them. The `isSignal` filter in
+  `NotificationRepositoryImpl` is therefore belt-and-braces, not load-bearing.
+- **`CHAT_MESSAGE_DELETED` is data-only** (no notification block). The app
+  must find the alert shown under tag `chat:<conversationId>` and cancel it
+  when it is for that `messageId` — `PushNotificationService` does, in the
+  foreground and in the background isolate. iOS may delay or drop it.
+- **Grouping keys** — Android `tag` / iOS `thread-id`: `chat:<conversationId>`
+  for messages, `chat.reaction:<messageId>` for reactions, per post / per
+  comment / per sender for social types, none for `POST_CREATED`.
+- **Android channel** is `yello_default` (manifest meta-data and
+  `_androidChannel` agree).
+- **Deep links from `data`**, checked in this order: `conversationId` → the
+  chat; `postId` (+ `commentId`) → the post; `actorId` alone → that profile.
+  `PushDestination.fromData` is that rule; `MainShellPage` follows it. The
+  post screen has no scroll-to-comment yet, so `commentId` is carried but
+  unused.
+- Preferences: `CHAT_MESSAGE` and `CHAT_REACTION` are both mutable types;
+  `CHAT_MESSAGE_DELETED` is silent and has no toggle.
+
+### Two more push types (2026-09-22)
+
+- **`REPORT_RESOLVED`** — to the *reporter*, when a moderator decides their
+  report. Inbox row **and** visible push. `data` is
+  `{type, reportId, status}` and names neither the post, its author, nor who
+  decided. Copy is fixed server-side: "We removed a post you reported" /
+  "We reviewed a post you reported". The app's whole job on receipt is to
+  re-read `GET /v1/reports/me` — which is what `ReportsDestination` opens
+  Privacy & safety for. It is in `NotificationTypes.signalTypes` (so it
+  shows in Signals and counts toward the badge) but **not** in
+  `NotificationTypes.all`: the notify service has not been seen returning it
+  from `GET /notifications/v1/preferences`, and a toggle the server drops
+  reads as a broken switch. Add it once it appears there.
+- **`FRIENDSHIP_CHANGED`** — silent, data-only, never an inbox row. Sent to
+  the *other* party when someone unfriends them, declines their request, or
+  cancels a request they had sent. `data` is `{type, userId}`. A **block**
+  sends nothing, so blocking is never revealed this way.
+  `PushNotificationService.friendshipChanges` republishes the `userId`;
+  `FriendsPage` refreshes on any of them and `PublicProfilePage` reloads
+  only when the id is the profile on screen. Foreground only — a background
+  push runs no Dart for it, so the affected screen catches up on its next
+  load.
 
 ## Deliberate gaps — do not "fix" these client-side
 
@@ -120,6 +296,37 @@ firing per keystroke.
   reached without `extra`.
 - **Feed-list vs. single-post** endpoints can briefly disagree on reaction
   counts before self-correcting.
+- **`yello-chat` `typing` / `presence` payloads** — the frame reference in
+  the service README is not in this repo. The `auth` handshake was
+  recovered from the server's own validation errors (see above); `typing`
+  is sent as `{ conversationId, isTyping }` and read tolerantly
+  (`userId` + `isTyping`/`typing`), and `presence` is not decoded at all.
+  A wrong guess shows up as an `error` frame in the device log
+  (`ChatRepositoryImpl.watchEvents` logs them) and is a one-line fix in
+  `ChatFrameDecoder` / `sendTyping`.
+- **Group changes are live only** — `conversation.updated` frames are not
+  stored as lines in message history, so a rename or member change made
+  while the viewer was away leaves no trace in the transcript.
+- **Inbox `lastMessage`** carries only `{id, senderId, body, createdAt}`:
+  an empty body cannot be told apart as "photo", "invite card" or "deleted"
+  from the summary alone (`LastMessageKind` — the client says more only for
+  messages it applied itself).
+- **Android app badge** — the notify guide asks the app to set the launcher
+  badge from `unread-count` itself on Android; nothing in this repo does
+  (no badge plugin), so only iOS shows a count.
+- **No `isMuted` on a user.** `GET /v1/users/{id}` says nothing about
+  whether the viewer has muted them, and the only way to find out is to page
+  `/v1/users/me/muted` until the id turns up. That is why
+  `PublicProfilePage` has **no** mute toggle: muting is offered from the
+  post "···" menu (where the author is the post's author) and undone from
+  Settings → Privacy & safety. Add the toggle if an `isMuted` field lands.
+- **No "hidden posts" endpoint.** `GET /v1/feed` leaves hidden posts out and
+  nothing lists them back, so `DELETE /v1/posts/{id}/hide` has no screen to
+  be called from. `UnhidePostUseCase` exists and is registered; it has no
+  caller until such an endpoint does.
+- **A moderator hiding a post is invisible to its author.** The only signal
+  is the reporter's own `REPORT_RESOLVED` push; nothing tells the person who
+  wrote it, and no endpoint exposes "this post of yours was hidden".
 
 If a proposed change needs a contract that doesn't exist, **say so** instead
 of shipping a client-side workaround that can't actually close the gap.

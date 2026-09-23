@@ -24,6 +24,7 @@ String _labelFor(String type) => switch (type) {
   NotificationTypes.friendRequestReceived => 'Friend requests',
   NotificationTypes.friendRequestAccepted => 'Accepted friend requests',
   NotificationTypes.chatMessage => 'Chat messages',
+  NotificationTypes.chatReaction => 'Reactions to your messages',
   _ => type,
 };
 
@@ -133,6 +134,7 @@ class _SettingsCard extends StatelessWidget {
         color: colors.surf,
         border: Border.all(color: colors.line, width: 1.5),
         borderRadius: BorderRadius.circular(AppRadii.lg),
+        boxShadow: AppShadows.card(context),
       ),
       child: child,
     );
@@ -172,7 +174,7 @@ class _ToggleRow extends StatelessWidget {
               ),
               if (subtitle != null) ...[
                 const SizedBox(height: 3),
-                Text(subtitle!, style: AppTextStyles.metaMono.copyWith(color: colors.ink2, fontSize: 9.5)),
+                Text(subtitle!, style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink2)),
               ],
             ],
           ),

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/chat/presentation/pages/chat_page.dart';
+import '../../features/chat/presentation/pages/group_info_page.dart';
 import '../../features/chat/presentation/pages/messages_page.dart';
 import '../../features/communities/domain/entities/community_entity.dart';
 import '../../features/communities/domain/entities/community_post_entity.dart';
@@ -22,6 +23,8 @@ import '../../features/notification/presentation/pages/notifications_page.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
 import '../../features/profile/presentation/pages/public_profile_page.dart';
 import '../../features/profile/presentation/pages/shared_posts_page.dart';
+import '../../features/safety/presentation/pages/privacy_safety_page.dart';
+import '../../features/safety/presentation/pages/send_feedback_page.dart';
 import '../../features/search/presentation/pages/search_page.dart';
 import '../../features/shell/presentation/pages/main_shell_page.dart';
 import '../../features/shell/presentation/pages/splash_page.dart';
@@ -29,6 +32,7 @@ import '../../features/showcase/domain/entities/project_entity.dart';
 import '../../features/showcase/presentation/pages/project_detail_page.dart';
 import '../../features/showcase/presentation/pages/publish_project_page.dart';
 import '../../features/showcase/presentation/pages/showcase_page.dart';
+import '../../shared/widgets/photo_viewer_page.dart';
 import '../security/session_manager.dart';
 import 'go_router_refresh_stream.dart';
 import 'route_guards.dart';
@@ -36,7 +40,7 @@ import 'route_names.dart';
 
 /// App-wide navigation graph.
 ///
-/// The five bottom-nav tabs are a [StatefulShellRoute.indexedStack] so each
+/// The bottom-nav tabs are a [StatefulShellRoute.indexedStack] so each
 /// tab keeps its own scroll position / navigation stack when the user
 /// switches away and back — matching the mockup's single always-mounted
 /// page with a `tab` flag, but through idiomatic go_router state instead of
@@ -44,6 +48,10 @@ import 'route_names.dart';
 /// detail, chat, story viewer/composer, create-post) are modeled as regular
 /// pushed routes with a fade/slide transition, since that's what they
 /// visually are: a screen stacked on top of the shell.
+///
+/// Branch order is load-bearing — `BottomNavBar._slotForBranch` and
+/// `MainShellPage`'s `_*Branch` constants index into it: Feed 0, Circle 1,
+/// Inbox 2, Signals 3, Profile 4, Explore 5.
 class AppRouter {
   AppRouter(RouteGuards guards, SessionManager sessionManager)
       : router = GoRouter(
@@ -104,6 +112,29 @@ class AppRouter {
                     builder: (context, state) => const ProfilePage(),
                   ),
                 ]),
+                // Explore. Communities and Showcase share one branch so the
+                // Explore slot stays lit and the bar stays put whichever of
+                // the two the title menu has picked — `ExploreTitleMenu`
+                // switches with `goNamed`, which swaps this branch's page in
+                // place rather than pushing. `/communities` is declared first
+                // so it is the branch's initial location: what a fresh tap on
+                // Explore lands on, and what reselecting the tab resets to.
+                // `NoTransitionPage` so the swap reads as a tab change, not a
+                // page push sliding up over the old one.
+                StatefulShellBranch(routes: [
+                  GoRoute(
+                    path: '/communities',
+                    name: RouteNames.communities,
+                    pageBuilder: (context, state) =>
+                        NoTransitionPage(key: state.pageKey, child: const CommunitiesPage()),
+                  ),
+                  GoRoute(
+                    path: '/showcase',
+                    name: RouteNames.showcase,
+                    pageBuilder: (context, state) =>
+                        NoTransitionPage(key: state.pageKey, child: const ShowcasePage()),
+                  ),
+                ]),
               ],
             ),
             _overlayRoute(
@@ -123,6 +154,15 @@ class AppRouter {
               name: RouteNames.chat,
               builder: (context, state) =>
                   ChatPage(conversationId: state.pathParameters['conversationId']!),
+            ),
+            // Declared as its own overlay rather than a child of `/chat/:id`
+            // so `/chat/:id` stays an exact match — the same shape as
+            // `/communities/:slug/new` beside `/communities/:slug`.
+            _overlayRoute(
+              path: '/chat/:conversationId/info',
+              name: RouteNames.groupInfo,
+              builder: (context, state) =>
+                  GroupInfoPage(conversationId: state.pathParameters['conversationId']!),
             ),
             _overlayRoute(
               path: '/story/:userIndex',
@@ -157,10 +197,41 @@ class AppRouter {
               builder: (context, state) => const NotificationPreferencesPage(),
             ),
             _overlayRoute(
-              path: '/communities',
-              name: RouteNames.communities,
-              builder: (context, state) => const CommunitiesPage(),
+              path: '/privacy-safety',
+              name: RouteNames.privacySafety,
+              builder: (context, state) => const PrivacySafetyPage(),
             ),
+            _overlayRoute(
+              path: '/feedback',
+              name: RouteNames.sendFeedback,
+              builder: (context, state) => const SendFeedbackPage(),
+            ),
+            // The photo viewer gets its own transition rather than
+            // `_overlayRoute`'s slide-up: it is a lightbox over whatever is
+            // behind it, so it fades in over a still screen (non-opaque, so
+            // the page underneath keeps painting through the fade).
+            GoRoute(
+              path: '/photo',
+              name: RouteNames.photoViewer,
+              pageBuilder: (context, state) {
+                final args = state.extra;
+                return CustomTransitionPage(
+                  key: state.pageKey,
+                  opaque: false,
+                  child: args is PhotoViewerArgs
+                      ? PhotoViewerPage(imageUrls: args.imageUrls, initialIndex: args.initialIndex)
+                      : const PhotoViewerPage(imageUrls: []),
+                  transitionsBuilder: (context, animation, secondary, child) => FadeTransition(
+                    opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+                    child: child,
+                  ),
+                );
+              },
+            ),
+            // The Communities and Showcase *hubs* live in the shell's Explore
+            // branch above; everything below them is a full-screen overlay
+            // pushed over the shell, like a post detail is for the feed.
+            //
             // Declared before '/communities/:slug' is irrelevant here (the
             // depths differ), but the composer does need the community itself
             // for its tag picker: `POST /communities/{slug}/posts` requires a
@@ -193,11 +264,6 @@ class AppRouter {
                 if (post is! CommunityPostEntity) return const CommunityPostRouteFallback();
                 return CommunityPostPage(post: post);
               },
-            ),
-            _overlayRoute(
-              path: '/showcase',
-              name: RouteNames.showcase,
-              builder: (context, state) => const ShowcasePage(),
             ),
             // Must stay ahead of '/showcase/:projectId': go_router matches in
             // declaration order, so the other way round 'new' would be read as

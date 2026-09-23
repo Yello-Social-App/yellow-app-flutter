@@ -116,9 +116,8 @@ class _LoginViewState extends State<_LoginView> {
                       const SizedBox(height: 6),
                       Text(
                         'Please sign in to continue.',
-                        style: AppTextStyles.bodySm.copyWith(
+                        style: AppTextStyles.bodyMd.copyWith(
                           color: colors.ink2,
-                          fontSize: 14,
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -173,7 +172,6 @@ class _LoginViewState extends State<_LoginView> {
                                 Text(
                                   'Remember me next time',
                                   style: AppTextStyles.bodySm.copyWith(
-                                    fontSize: 13,
                                     color: colors.ink2,
                                   ),
                                 ),
@@ -218,7 +216,6 @@ class _LoginViewState extends State<_LoginView> {
                             "Don't have an account?",
                             style: AppTextStyles.bodySm.copyWith(
                               color: colors.ink2,
-                              fontSize: 13,
                             ),
                           ),
                           const SizedBox(width: 4),
@@ -232,9 +229,8 @@ class _LoginViewState extends State<_LoginView> {
                               ),
                               child: Text(
                                 'Sign Up',
-                                style: AppTextStyles.button.copyWith(
+                                style: AppTextStyles.buttonLg.copyWith(
                                   color: colors.yeld,
-                                  fontSize: 13,
                                 ),
                               ),
                             ),
@@ -368,7 +364,6 @@ class _LoginViewState extends State<_LoginView> {
                         'We sent a 6-digit code to ${state.pendingEmail}. Enter it below with your new password.',
                         style: AppTextStyles.bodySm.copyWith(
                           color: colors.ink2,
-                          fontSize: 13,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -412,7 +407,6 @@ class _LoginViewState extends State<_LoginView> {
                               "Didn't get a code? Resend",
                               style: AppTextStyles.bodySm.copyWith(
                                 color: colors.ink2,
-                                fontSize: 13,
                               ),
                             ),
                           ),

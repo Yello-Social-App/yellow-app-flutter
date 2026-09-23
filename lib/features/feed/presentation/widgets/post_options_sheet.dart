@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
+import '../../../../shared/widgets/app_warning_dialog.dart';
 import '../../domain/entities/post_entity.dart';
 
 /// The post "···" overflow menu — shared by the feed card and the post
@@ -13,6 +15,13 @@ import '../../domain/entities/post_entity.dart';
 /// `PUT`/`DELETE /api/v1/posts/{id}`). Callers own the actual cubit calls
 /// (`FeedCubit` or `PostDetailCubit`, whichever owns the post being shown);
 /// this only renders the sheet and invokes whichever callback was tapped.
+///
+/// The three safety actions are the mirror of edit/delete: they only make
+/// sense on *someone else's* post, so [isOwnPost] gates them the other way
+/// round. They run from least to most drastic — hide this one post, report
+/// it, then stop seeing the author entirely — and are separated from the
+/// neutral actions above them, so neither group is tapped by muscle memory
+/// meant for the other.
 Future<void> showPostOptionsSheet(
   BuildContext context, {
   required bool isOwnPost,
@@ -20,6 +29,10 @@ Future<void> showPostOptionsSheet(
   required VoidCallback onViewReactions,
   required VoidCallback onEdit,
   required VoidCallback onDelete,
+  required VoidCallback onHide,
+  required VoidCallback onReport,
+  required VoidCallback onMute,
+  required String authorUsername,
 }) {
   final colors = AppColors.of(context);
   return showModalBottomSheet<void>(
@@ -82,9 +95,52 @@ Future<void> showPostOptionsSheet(
                 onDelete();
               },
             ),
+          if (!isOwnPost) ...[
+            Divider(height: 1, thickness: 1, color: colors.line),
+            _MenuTile(
+              icon: Icons.visibility_off_outlined,
+              label: 'Hide this post',
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                onHide();
+              },
+            ),
+            _MenuTile(
+              icon: Icons.flag_outlined,
+              label: 'Report post',
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                onReport();
+              },
+            ),
+            _MenuTile(
+              icon: Icons.volume_off_outlined,
+              label: 'Mute ${authorUsername.withAtSign}',
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                onMute();
+              },
+            ),
+          ],
         ],
       ),
     ),
+  );
+}
+
+/// "Stop seeing posts from @…?" — shared by the feed card and the post
+/// detail screen so both explain a mute the same way. Worth confirming
+/// where hiding one post is not: a mute is open-ended and silent, and the
+/// only way back is a screen most people will never have visited.
+Future<bool> confirmMuteAuthor(BuildContext context, String authorUsername) {
+  return AppWarningDialog.show(
+    context,
+    title: 'Mute ${authorUsername.withAtSign}?',
+    message: "Their posts stop showing in your feed. They are never told, "
+        "and you can undo this in Settings → Privacy & safety.",
+    confirmLabel: 'Mute',
+    cancelLabel: 'Cancel',
+    icon: Icons.volume_off_outlined,
   );
 }
 
