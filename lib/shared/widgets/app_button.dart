@@ -61,7 +61,26 @@ class AppButton extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           if (icon != null) ...[icon!, const SizedBox(width: 7)],
-          Text(label, style: AppTextStyles.button.copyWith(color: fg)),
+          // A full-width button's width comes from its parent (an `Expanded`,
+          // a stretched Column), so a long label — or a large text scale —
+          // has nowhere to go and overflows the pill. Shrink it to fit
+          // instead, same treatment the nav bar's labels get. Only for
+          // `fullWidth`: a content-sized button can be handed unbounded width
+          // by a parent Row, where a flex child would assert.
+          if (fullWidth)
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  softWrap: false,
+                  maxLines: 1,
+                  style: AppTextStyles.button.copyWith(color: fg),
+                ),
+              ),
+            )
+          else
+            Text(label, style: AppTextStyles.button.copyWith(color: fg)),
           if (trailingIcon != null) ...[
             const SizedBox(width: 7),
             trailingIcon!,

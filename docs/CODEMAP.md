@@ -5,8 +5,8 @@
 Index of every meaningful file in `lib/`, so you can jump straight to the
 right one instead of searching. **Read this before opening source files.**
 
-- Generated from commit `4c2e24d`
-- `lib/`: 221 Dart files · `test/`: 12 test files
+- Generated from commit `7659f92`
+- `lib/`: 223 Dart files · `test/`: 14 test files
 - Regenerate: `bash tool/codemap.sh` · Staleness check: `bash tool/codemap.sh --check`
 
 Layer rule (see [ARCHITECTURE.md](ARCHITECTURE.md)): `presentation` → `domain/usecases`
@@ -506,6 +506,11 @@ on re-entry.
 - `lib/features/profile/presentation/pages/public_profile_page.dart` — PublicProfilePage
 - `lib/features/profile/presentation/pages/shared_posts_page.dart` — SharedPostsPage
 
+**Widgets**
+
+- `lib/features/profile/presentation/widgets/profile_details_card.dart` — ProfileDetailsCard
+- `lib/features/profile/presentation/widgets/profile_header.dart` — ProfileHeader
+
 **Usecases**
 
 - `lib/features/profile/domain/usecases/profile_usecases.dart` — GetMeUseCase, UpdateProfileParams, UpdateProfileUseCase, UpdateAvatarUseCase, GetUserUseCase, GetUserPostsParams, GetUserPostsUseCase
@@ -739,6 +744,8 @@ on re-entry.
 - `test/features/feed/post_detail_cubit_test.dart`
 - `test/features/feed/story_compose_page_test.dart`
 - `test/features/profile/profile_cubit_test.dart`
+- `test/features/profile/profile_details_card_test.dart`
+- `test/features/profile/profile_header_test.dart`
 - `test/features/profile/shared_posts_cubit_test.dart`
 - `test/features/shell/bottom_nav_bar_test.dart`
 - `test/helpers/mock_data.dart`

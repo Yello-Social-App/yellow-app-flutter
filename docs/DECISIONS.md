@@ -152,3 +152,40 @@ place and reach consistent answers. Generating the index means it cannot drift.
 
 **Cost:** the map must be regenerated when the tree changes
 (`bash tool/codemap.sh`, checked with `--check`).
+
+---
+
+## ADR-009 — The profile screen's overlap is `Stack`/`Positioned`, not `Transform`
+
+**Status:** Accepted
+
+The Profile tab was restructured to a cover/avatar/details layout (modelled on
+a mainstream social profile). The avatar, its camera badge and the compose
+bubble all overlap the cover, and all three are tappable — so the overlap is
+built with `Stack` + `Positioned` and the cover block reserves
+`coverHeight + avatarOverhang` of real height. Nothing is shifted with
+`Transform.translate`.
+
+**Why:** `RenderTransform.hitTest` inverse-transforms a tap against the
+child's *untransformed* box, so a translated widget silently stops accepting
+taps past its own edge. This screen already lost a stat tile's tap that way
+(see [GOTCHAS.md](GOTCHAS.md)). `Positioned` takes plain doubles and stays
+hit-test-safe. `test/features/profile/profile_header_test.dart` pins the two
+overlapping tap targets so a future "tidy-up" back to `Transform` fails the
+suite instead of shipping.
+
+**Also decided here:**
+
+- The chips filter only the post list, so they sit directly above it —
+  the reference screen puts its chips above its details block, which reads as
+  if they filtered that too.
+- "add status…" became a composer shortcut and the personal-details rows use
+  name / username / join date / email / bio / account status. There is no
+  status, place, school or employer field on this backend, and inventing
+  client-side ones would be fiction.
+- The connections face-pile renders even at zero connections: Circle is shell
+  branch 1 with no bottom-nav button, so that row (and the account menu's
+  "Your circle") are the only ways into it.
+
+**Revisit if:** the API grows real profile-detail fields, or Circle gets its
+own nav button.

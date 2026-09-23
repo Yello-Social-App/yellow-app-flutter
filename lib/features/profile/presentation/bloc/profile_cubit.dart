@@ -11,6 +11,7 @@ import '../../../feed/domain/usecases/get_post_usecase.dart';
 import '../../../feed/domain/usecases/get_saved_post_ids_usecase.dart';
 import '../../../feed/domain/usecases/like_post_usecase.dart';
 import '../../../feed/domain/usecases/react_usecases.dart';
+import '../../../friends/domain/entities/friendship_entity.dart';
 import '../../../friends/domain/usecases/friends_usecases.dart';
 import '../../domain/usecases/profile_usecases.dart';
 
@@ -23,6 +24,7 @@ class ProfileState extends Equatable {
     this.status = ProfileStatus.initial,
     this.user,
     this.connectionsCount = 0,
+    this.connections = const [],
     this.myPosts = const [],
     this.savedPosts = const [],
     this.tab = ProfileTab.posts,
@@ -35,6 +37,11 @@ class ProfileState extends Equatable {
   final ProfileStatus status;
   final UserEntity? user;
   final int connectionsCount;
+
+  /// First page of the viewer's friends, used only for the header's
+  /// face-pile. [connectionsCount] stays the source of truth for the number —
+  /// this list is a handful of avatars, not the whole circle.
+  final List<FriendshipEntity> connections;
   final List<PostEntity> myPosts;
   final List<PostEntity> savedPosts;
   final ProfileTab tab;
@@ -58,6 +65,7 @@ class ProfileState extends Equatable {
     ProfileStatus? status,
     UserEntity? user,
     int? connectionsCount,
+    List<FriendshipEntity>? connections,
     List<PostEntity>? myPosts,
     List<PostEntity>? savedPosts,
     ProfileTab? tab,
@@ -70,6 +78,7 @@ class ProfileState extends Equatable {
       status: status ?? this.status,
       user: user ?? this.user,
       connectionsCount: connectionsCount ?? this.connectionsCount,
+      connections: connections ?? this.connections,
       myPosts: myPosts ?? this.myPosts,
       savedPosts: savedPosts ?? this.savedPosts,
       tab: tab ?? this.tab,
@@ -85,6 +94,7 @@ class ProfileState extends Equatable {
     status,
     user,
     connectionsCount,
+    connections,
     myPosts,
     savedPosts,
     tab,
@@ -118,6 +128,7 @@ class ProfileCubit extends Cubit<ProfileState> {
        _getUserPosts = getUserPosts,
        _getSavedPostIds = getSavedPostIds,
        _getPost = getPost,
+       _getFriends = getFriends,
        _likePost = likePost,
        _reactToPost = reactToPost,
        _repost = repost,
@@ -131,6 +142,7 @@ class ProfileCubit extends Cubit<ProfileState> {
   final GetUserPostsUseCase _getUserPosts;
   final GetSavedPostIdsUseCase _getSavedPostIds;
   final GetPostUseCase _getPost;
+  final GetFriendsUseCase _getFriends;
   final LikePostUseCase _likePost;
   final ReactToPostUseCase _reactToPost;
   final RepostUseCase _repost;
@@ -236,6 +248,14 @@ class ProfileCubit extends Cubit<ProfileState> {
         savedPosts: _withMyReposts(savedPosts),
       ),
     );
+
+    // Friend avatars for the header's face-pile. Deliberately after the
+    // `loaded` emit above so the profile still paints at the same moment it
+    // always has: the row shows the count alone until this lands, and stays
+    // that way if the call fails.
+    final friendsResult = await _getFriends(const PageParams());
+    if (isClosed) return;
+    friendsResult.fold((_) {}, (page) => emit(state.copyWith(connections: page.friendships)));
   }
 
   /// Re-applies [_myRepostIds] onto freshly-fetched posts — see

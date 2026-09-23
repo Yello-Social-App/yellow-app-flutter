@@ -24,8 +24,23 @@ file only when it genuinely helps.
 - `tool/codemap.sh`, which regenerates `docs/CODEMAP.md` from the source tree
   (`--check` fails when the committed map is stale).
 
+### Changed
+
+- Your profile screen has a new layout: a full-bleed cover with the avatar
+  centred over it, your name, connection/post counts and join date beneath,
+  a row of your connections' faces, and "Add to story" / "Edit profile" as
+  the two main actions. Tapping the avatar or the cover's camera button
+  still changes those photos.
+- Profile content is now filtered by chips (All / Shared / Saved) sitting
+  directly above the posts, with a "Personal details" card above them.
+- Appearance (light/dark), Your circle, Shared posts, Notification
+  preferences and Log out moved into the profile's menu button, top-left;
+  search and the post composer are top-right.
+
 ### Fixed
 
+- A long label on a full-width button now shrinks to fit instead of
+  overflowing its pill — visible at large system text sizes.
 - `README.md` no longer contains unresolved merge-conflict markers.
 
 ---
