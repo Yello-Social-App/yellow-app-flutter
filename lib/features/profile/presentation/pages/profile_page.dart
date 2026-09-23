@@ -24,6 +24,7 @@ import '../../../feed/presentation/widgets/post_card.dart';
 import '../bloc/profile_cubit.dart';
 import '../widgets/profile_details_card.dart';
 import '../widgets/profile_header.dart';
+import '../widgets/shimmer_own_profile_view.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -60,7 +61,7 @@ class _ProfileViewState extends State<_ProfileView> {
             builder: (context, state) {
               if (state.status == ProfileStatus.initial ||
                   (state.status == ProfileStatus.loading && state.user == null)) {
-                return const Center(child: CircularProgressIndicator());
+                return const ShimmerOwnProfileView();
               }
               if (state.status == ProfileStatus.error && state.user == null) {
                 return SafeArea(
@@ -180,7 +181,12 @@ class _ProfileViewState extends State<_ProfileView> {
   }
 
   /// The reference's hamburger: everything that isn't a profile edit —
-  /// appearance, the screens with no nav button of their own, and sign-out.
+  /// appearance, the account-level screens (Privacy & safety, Send feedback),
+  /// the ones with no nav button of their own, and sign-out.
+  ///
+  /// This is where the old four-button row and the Settings sheet it opened
+  /// both ended up. The action row on the header is for things you do *to
+  /// this profile*; none of these are.
   Future<void> _openAccountMenu(BuildContext context) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final action = await _showMenu(context, [
@@ -188,11 +194,14 @@ class _ProfileViewState extends State<_ProfileView> {
         'theme',
         isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
         isDark ? 'Switch to light' : 'Switch to dark',
+        null,
       ),
-      ('circle', Icons.group_outlined, 'Your circle'),
-      ('shared', Icons.repeat_rounded, 'Shared posts'),
-      ('notifications', Icons.notifications_none_rounded, 'Notification preferences'),
-      ('logout', Icons.logout_rounded, 'Log out'),
+      ('circle', Icons.group_outlined, 'Your circle', null),
+      ('shared', Icons.repeat_rounded, 'Shared posts', null),
+      ('privacy', Icons.shield_outlined, 'Privacy & safety', 'Your reports and muted accounts'),
+      ('feedback', Icons.rate_review_outlined, 'Send feedback', 'Rate a feature and tell us why'),
+      ('notifications', Icons.notifications_none_rounded, 'Notification preferences', null),
+      ('logout', Icons.logout_rounded, 'Log out', null),
     ]);
     if (action == null || !context.mounted) return;
     switch (action) {
@@ -202,6 +211,10 @@ class _ProfileViewState extends State<_ProfileView> {
         StatefulNavigationShell.of(context).goBranch(1);
       case 'shared':
         context.pushNamed(RouteNames.sharedPosts);
+      case 'privacy':
+        context.pushNamed(RouteNames.privacySafety);
+      case 'feedback':
+        context.pushNamed(RouteNames.sendFeedback);
       case 'notifications':
         context.pushNamed(RouteNames.notificationPreferences);
       case 'logout':
@@ -213,9 +226,9 @@ class _ProfileViewState extends State<_ProfileView> {
     final user = cubit.state.user;
     if (user == null) return;
     final action = await _showMenu(context, [
-      ('edit', Icons.edit_outlined, 'Edit profile'),
-      ('avatar', Icons.account_circle_outlined, 'Change profile photo'),
-      ('cover', Icons.image_outlined, 'Change cover photo'),
+      ('edit', Icons.edit_outlined, 'Edit profile', null),
+      ('avatar', Icons.account_circle_outlined, 'Change profile photo', null),
+      ('cover', Icons.image_outlined, 'Change cover photo', null),
     ]);
     if (action == null || !context.mounted) return;
     switch (action) {
@@ -228,21 +241,37 @@ class _ProfileViewState extends State<_ProfileView> {
     }
   }
 
-  Future<String?> _showMenu(BuildContext context, List<(String, IconData, String)> items) {
+  /// Items are `(value, icon, label, subtitle?)`.
+  ///
+  /// `useRootNavigator`, same reason as `showPostOptionsSheet`: this opens
+  /// from a tab whose Scaffold sits under `MainShellPage`'s floating nav bar,
+  /// so a sheet on the nested Navigator would render behind it.
+  Future<String?> _showMenu(BuildContext context, List<(String, IconData, String, String?)> items) {
     final colors = AppColors.of(context);
     return showModalBottomSheet<String>(
       context: context,
       useRootNavigator: true,
-      backgroundColor: colors.bg,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      backgroundColor: colors.surf,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.xl)),
+      ),
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            for (final (value, icon, label) in items)
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              width: 80,
+              height: 4,
+              decoration: BoxDecoration(color: colors.line, borderRadius: BorderRadius.circular(AppRadii.pill)),
+            ),
+            for (final (value, icon, label, subtitle) in items)
               ListTile(
-                leading: Icon(icon, color: colors.ink2),
+                leading: Icon(icon, color: colors.ink),
                 title: Text(label, style: AppTextStyles.body.copyWith(color: colors.ink)),
+                subtitle: subtitle == null
+                    ? null
+                    : Text(subtitle, style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink2)),
                 onTap: () => Navigator.pop(context, value),
               ),
           ],

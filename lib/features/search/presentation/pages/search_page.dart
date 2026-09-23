@@ -12,10 +12,11 @@ import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/error_view.dart';
-import '../../../../shared/widgets/shimmer_loading.dart';
-import '../../../feed/domain/entities/reactor_entity.dart' show FriendRelationStatus;
+import '../../../feed/domain/entities/reactor_entity.dart'
+    show FriendRelationStatus;
 import '../../domain/entities/user_search_result_entity.dart';
 import '../bloc/search_cubit.dart';
+import '../widgets/shimmer_search_result_row.dart';
 
 /// People search, backed by the real `GET /users/search` endpoint.
 ///
@@ -29,7 +30,10 @@ class SearchPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(create: (_) => sl<SearchCubit>(), child: const _SearchView());
+    return BlocProvider(
+      create: (_) => sl<SearchCubit>(),
+      child: const _SearchView(),
+    );
   }
 }
 
@@ -99,10 +103,14 @@ class _SearchViewState extends State<_SearchView> {
                               autofocus: true,
                               textInputAction: TextInputAction.search,
                               onChanged: cubit.onQueryChanged,
-                              style: AppTextStyles.hint.copyWith(color: colors.ink),
+                              style: AppTextStyles.hint.copyWith(
+                                color: colors.ink,
+                              ),
                               decoration: InputDecoration(
                                 hintText: 'Search people',
-                                hintStyle: AppTextStyles.hint.copyWith(color: colors.ink3),
+                                hintStyle: AppTextStyles.hint.copyWith(
+                                  color: colors.ink3,
+                                ),
                                 border: InputBorder.none,
                               ),
                             ),
@@ -118,7 +126,11 @@ class _SearchViewState extends State<_SearchView> {
                                 },
                                 child: Padding(
                                   padding: const EdgeInsets.only(left: 8),
-                                  child: Icon(Icons.close, size: 18, color: colors.ink3),
+                                  child: Icon(
+                                    Icons.close,
+                                    size: 18,
+                                    color: colors.ink3,
+                                  ),
                                 ),
                               );
                             },
@@ -142,43 +154,56 @@ class _SearchViewState extends State<_SearchView> {
                       style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
                     ),
                   ),
-                  SearchStatus.loading => const Padding(
-                    padding: EdgeInsets.fromLTRB(14, 0, 14, 0),
-                    child: ShimmerListCard(),
+                  // Same padding and 8px spacing as the loaded list below, so
+                  // results land exactly where their skeleton rows were.
+                  SearchStatus.loading => ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
+                    itemCount: 4,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 8),
+                    itemBuilder: (context, index) =>
+                        const ShimmerSearchResultRow(),
                   ),
                   SearchStatus.error => Padding(
                     padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
                     child: ErrorView(
-                      message: state.errorMessage ?? 'Could not run that search.',
+                      message:
+                          state.errorMessage ?? 'Could not run that search.',
                       onRetry: cubit.retry,
                     ),
                   ),
                   SearchStatus.loaded when state.results.isEmpty => _Centered(
                     child: EmptyStateCard(
                       title: 'NO MATCHES',
-                      hint: 'Nobody matching "${state.query}". Try a different spelling.',
+                      hint:
+                          'Nobody matching "${state.query}". Try a different spelling.',
                     ),
                   ),
-                  SearchStatus.loaded => NotificationListener<ScrollNotification>(
-                    onNotification: _onScroll,
-                    child: ListView.separated(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
-                      itemCount: state.results.length + 1,
-                      separatorBuilder: (context, index) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        if (index == state.results.length) {
-                          return _Footer(hasMore: state.hasMore, isLoadingMore: state.isLoadingMore);
-                        }
-                        final user = state.results[index];
-                        return _ResultRow(
-                          user: user,
-                          busy: state.busyIds.contains(user.id),
-                          onAdd: () => cubit.sendRequest(user.id),
-                        );
-                      },
+                  SearchStatus.loaded =>
+                    NotificationListener<ScrollNotification>(
+                      onNotification: _onScroll,
+                      child: ListView.separated(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
+                        itemCount: state.results.length + 1,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          if (index == state.results.length) {
+                            return _Footer(
+                              hasMore: state.hasMore,
+                              isLoadingMore: state.isLoadingMore,
+                            );
+                          }
+                          final user = state.results[index];
+                          return _ResultRow(
+                            user: user,
+                            busy: state.busyIds.contains(user.id),
+                            onAdd: () => cubit.sendRequest(user.id),
+                          );
+                        },
+                      ),
                     ),
-                  ),
                 },
               ),
             ),
@@ -196,7 +221,10 @@ class _Centered extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: child),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: child,
+      ),
     );
   }
 }
@@ -211,7 +239,13 @@ class _Footer extends StatelessWidget {
     if (isLoadingMore) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 22),
-        child: Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))),
+        child: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
       );
     }
     if (hasMore) return const SizedBox(height: 22);
@@ -220,7 +254,11 @@ class _Footer extends StatelessWidget {
 }
 
 class _ResultRow extends StatelessWidget {
-  const _ResultRow({required this.user, required this.busy, required this.onAdd});
+  const _ResultRow({
+    required this.user,
+    required this.busy,
+    required this.onAdd,
+  });
 
   final UserSearchResultEntity user;
   final bool busy;
@@ -234,10 +272,14 @@ class _ResultRow extends StatelessWidget {
         color: colors.surf,
         border: Border.all(color: colors.line, width: 1.5),
         borderRadius: BorderRadius.circular(AppRadii.lg),
+        boxShadow: AppShadows.card(context),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => context.pushNamed(RouteNames.userProfile, pathParameters: {'userId': user.id}),
+        onTap: () => context.pushNamed(
+          RouteNames.userProfile,
+          pathParameters: {'userId': user.id},
+        ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(
@@ -264,13 +306,19 @@ class _ResultRow extends StatelessWidget {
                       user.username.withAtSign,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
+                      style: AppTextStyles.metaMono.copyWith(
+                        color: colors.ink2,
+                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              _RelationControl(status: user.friendStatus, busy: busy, onAdd: onAdd),
+              _RelationControl(
+                status: user.friendStatus,
+                busy: busy,
+                onAdd: onAdd,
+              ),
             ],
           ),
         ),
@@ -285,7 +333,11 @@ class _ResultRow extends StatelessWidget {
 /// accepting or cancelling belongs on the Circle tab where the full request
 /// context lives.
 class _RelationControl extends StatelessWidget {
-  const _RelationControl({required this.status, required this.busy, required this.onAdd});
+  const _RelationControl({
+    required this.status,
+    required this.busy,
+    required this.onAdd,
+  });
 
   final FriendRelationStatus? status;
   final bool busy;
@@ -296,7 +348,11 @@ class _RelationControl extends StatelessWidget {
     final colors = AppColors.of(context);
 
     if (status == FriendRelationStatus.none) {
-      return AppButton(label: 'Add', dense: true, onPressed: busy ? null : onAdd);
+      return AppButton(
+        label: 'Add',
+        dense: true,
+        onPressed: busy ? null : onAdd,
+      );
     }
 
     final label = switch (status) {
@@ -310,6 +366,9 @@ class _RelationControl extends StatelessWidget {
     };
     if (label == null) return const SizedBox.shrink();
 
-    return Text(label.toUpperCase(), style: AppTextStyles.metaMono.copyWith(color: colors.ink3));
+    return Text(
+      label.toUpperCase(),
+      style: AppTextStyles.metaMono.copyWith(color: colors.ink3),
+    );
   }
 }

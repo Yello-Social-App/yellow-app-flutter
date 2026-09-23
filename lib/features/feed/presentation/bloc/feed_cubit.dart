@@ -5,6 +5,7 @@ import '../../../../core/error/failures.dart';
 import '../../../../core/usecase/usecase.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../profile/domain/usecases/profile_usecases.dart';
+import '../../../safety/domain/usecases/safety_usecases.dart';
 import '../../domain/entities/post_entity.dart';
 import '../../domain/entities/reaction_breakdown.dart';
 import '../../domain/entities/story_entity.dart';
@@ -91,6 +92,8 @@ class FeedCubit extends Cubit<FeedState> {
     required UpdatePostUseCase updatePost,
     required DeletePostUseCase deletePost,
     required GetShareLinkUseCase getShareLink,
+    required HidePostUseCase hidePost,
+    required MuteUserUseCase muteUser,
   }) : _getFeed = getFeed,
        _getStories = getStories,
        _likePost = likePost,
@@ -103,6 +106,8 @@ class FeedCubit extends Cubit<FeedState> {
        _updatePost = updatePost,
        _deletePost = deletePost,
        _getShareLink = getShareLink,
+       _hidePost = hidePost,
+       _muteUser = muteUser,
        super(const FeedState());
 
   final GetFeedUseCase _getFeed;
@@ -117,6 +122,8 @@ class FeedCubit extends Cubit<FeedState> {
   final UpdatePostUseCase _updatePost;
   final DeletePostUseCase _deletePost;
   final GetShareLinkUseCase _getShareLink;
+  final HidePostUseCase _hidePost;
+  final MuteUserUseCase _muteUser;
 
   Future<void> load() async {
     if (state.status == FeedStatus.loaded) return;
@@ -172,6 +179,8 @@ class FeedCubit extends Cubit<FeedState> {
     _myRepostIds.clear();
     _pendingReactions.clear();
     _pendingReposts.clear();
+    _pendingHides.clear();
+    _pendingMutes.clear();
     emit(const FeedState());
   }
 
@@ -429,5 +438,55 @@ class FeedCubit extends Cubit<FeedState> {
   Future<ReactionBreakdown?> getReactionSummary(String postId) async {
     final result = await _getReactionSummary(GetReactionSummaryParams(targetType: 'POST', targetId: postId));
     return result.fold((_) => null, (summary) => summary);
+  }
+
+  /// Post ids with a hide in flight — the same re-entrancy guard as
+  /// [_pendingReactions]. The card disappears on success, so a double-tap
+  /// would otherwise fire a second `POST …/hide` at a post that is no
+  /// longer on screen.
+  final Set<String> _pendingHides = {};
+
+  /// Hides one post from this account's feed, everywhere — `POST
+  /// /v1/posts/{id}/hide`, which the backend honours on every device, not
+  /// just this one. Drops the card on success.
+  ///
+  /// Not optimistic, unlike [toggleLike]: the card vanishing *is* the
+  /// feedback, and a card that vanished for a request that then failed
+  /// would come back on the next refresh with no explanation.
+  Future<bool> hidePost(String postId) async {
+    if (!_pendingHides.add(postId)) return false;
+    try {
+      final result = await _hidePost(HidePostParams(postId));
+      return result.fold((_) => false, (_) {
+        removePost(postId);
+        return true;
+      });
+    } finally {
+      _pendingHides.remove(postId);
+    }
+  }
+
+  /// User ids with a mute in flight — see [_pendingHides].
+  final Set<String> _pendingMutes = {};
+
+  /// Mutes a post's author — `POST /v1/users/{id}/mute`. The server leaves
+  /// muted authors out of `/feed` from the next fetch on, so this drops
+  /// what is already on screen to match, rather than leaving their posts
+  /// sitting there until the next refresh.
+  ///
+  /// A repost of someone else's post is dropped by its *reposter*: that is
+  /// whose name is on the card in the feed, and whose posts the mute
+  /// actually filters.
+  Future<bool> muteAuthor(String userId) async {
+    if (!_pendingMutes.add(userId)) return false;
+    try {
+      final result = await _muteUser(MuteParams(userId));
+      return result.fold((_) => false, (_) {
+        emit(state.copyWith(posts: state.posts.where((p) => p.authorId != userId).toList()));
+        return true;
+      });
+    } finally {
+      _pendingMutes.remove(userId);
+    }
   }
 }

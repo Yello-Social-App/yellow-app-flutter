@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +12,7 @@ import 'core/notifications/push_notification_service.dart';
 import 'core/security/root_jailbreak_detector.dart';
 import 'core/security/session_manager.dart';
 import 'core/utils/logger.dart';
+import 'features/chat/data/datasources/chat_socket.dart';
 import 'features/chat/data/datasources/user_directory.dart';
 import 'features/chat/presentation/bloc/messages_cubit.dart';
 import 'features/feed/presentation/bloc/feed_cubit.dart';
@@ -75,6 +78,9 @@ Future<void> bootstrap({required String baseUrl}) async {
       // Chat participant names/avatars are cached per session — dropping
       // them here stops the next account seeing the previous one's contacts.
       sl<UserDirectory>().clear();
+      // The live socket is authenticated as the old account; drop it so a
+      // re-login reconnects with the new token.
+      unawaited(sl<ChatSocket>().reset());
     }
   });
 

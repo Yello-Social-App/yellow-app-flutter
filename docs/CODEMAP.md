@@ -5,8 +5,8 @@
 Index of every meaningful file in `lib/`, so you can jump straight to the
 right one instead of searching. **Read this before opening source files.**
 
-- Generated from commit `7659f92`
-- `lib/`: 223 Dart files · `test/`: 14 test files
+- Generated from commit `4a80307`
+- `lib/`: 260 Dart files · `test/`: 25 test files
 - Regenerate: `bash tool/codemap.sh` · Staleness check: `bash tool/codemap.sh --check`
 
 Layer rule (see [ARCHITECTURE.md](ARCHITECTURE.md)): `presentation` → `domain/usecases`
@@ -39,20 +39,24 @@ Declared in `lib/core/router/app_router.dart`; names live in
 | `/messages` | `messages` | `MessagesPage` |
 | `/notifications` | `notifications` | `NotificationsPage` |
 | `/profile` | `profile` | `ProfilePage` |
+| `/communities` | `communities` | `NoTransitionPage / CommunitiesPage` |
+| `/showcase` | `showcase` | `NoTransitionPage / ShowcasePage` |
 | `/post/:postId` | `postDetail` | `PostDetailPage` |
 | `/user/:userId` | `userProfile` | `PublicProfilePage` |
 | `/chat/:conversationId` | `chat` | `ChatPage` |
+| `/chat/:conversationId/info` | `groupInfo` | `GroupInfoPage` |
 | `/story/:userIndex` | `storyViewer` | `StoryViewerPage` |
 | `/story-compose` | `storyCompose` | `StoryComposePage` |
 | `/create` | `createPost` | `CreatePostPage` |
 | `/search` | `search` | `SearchPage` |
 | `/shared-posts` | `sharedPosts` | `SharedPostsPage` |
 | `/notification-preferences` | `notificationPreferences` | `NotificationPreferencesPage` |
-| `/communities` | `communities` | `CommunitiesPage` |
+| `/privacy-safety` | `privacySafety` | `PrivacySafetyPage` |
+| `/feedback` | `sendFeedback` | `SendFeedbackPage` |
+| `/photo` | `photoViewer` | `CustomTransitionPage / PhotoViewerPage` |
 | `/communities/:slug/new` | `createCommunityPost` | `CommunityDetailPage / CreateCommunityPostPage` |
 | `/communities/:slug` | `community` | `CommunityDetailPage` |
 | `/community-post/:postId` | `communityPost` | `CommunityPostRouteFallback / CommunityPostPage` |
-| `/showcase` | `showcase` | `ShowcasePage` |
 | `/showcase/new` | `publishProject` | `PublishProjectPage` |
 | `/showcase/:projectId` | `project` | `ProjectDetailPage` |
 | `ath` | `` | `CustomTransitionPage` |
@@ -68,8 +72,10 @@ the file's own comments explain each one; read them before changing a lifetime.
 ### Singletons (`registerLazySingleton`)
 
 - `AcceptFriendRequestUseCase`
+- `AcceptGroupInviteUseCase`
 - `AddCommentUseCase`
 - `AddCommunityCommentUseCase`
+- `AddGroupMembersUseCase`
 - `ApiClient`
 - `AppRouter`
 - `AuthLocalDataSource`
@@ -79,18 +85,23 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `BlockUserUseCase`
 - `BookmarksLocalDataSource`
 - `CancelFriendRequestUseCase`
+- `ChangeMemberRoleUseCase`
 - `ChatRemoteDataSource`
 - `ChatRepository`
+- `ChatSocket`
 - `CommunitiesRemoteDataSource`
 - `CommunitiesRepository`
 - `Connectivity`
 - `CreateCommunityPostUseCase`
 - `CreatePostUseCase`
 - `DeclineFriendRequestUseCase`
+- `DeclineGroupInviteUseCase`
 - `DeleteCommentUseCase`
+- `DeleteMessageUseCase`
 - `DeleteNotificationUseCase`
 - `DeletePostUseCase`
 - `EditCommentUseCase`
+- `EditMessageUseCase`
 - `FeedCubit`
 - `FeedRemoteDataSource`
 - `FeedRepository`
@@ -104,6 +115,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `GetCommunityFeedUseCase`
 - `GetCommunityPostsUseCase`
 - `GetCommunityUseCase`
+- `GetConversationUseCase`
 - `GetConversationsUseCase`
 - `GetFeedUseCase`
 - `GetFriendRequestsUseCase`
@@ -111,6 +123,9 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `GetInboxUseCase`
 - `GetMeUseCase`
 - `GetMessagesUseCase`
+- `GetMutedUsersUseCase`
+- `GetMyFeedbackUseCase`
+- `GetMyReportsUseCase`
 - `GetNotificationPreferencesUseCase`
 - `GetPostDetailUseCase`
 - `GetPostUseCase`
@@ -125,9 +140,12 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `GetUnreadNotificationCountUseCase`
 - `GetUserPostsUseCase`
 - `GetUserUseCase`
+- `HidePostUseCase`
+- `InviteToGroupUseCase`
 - `JoinCommunityUseCase`
 - `JwtManager`
 - `LeaveCommunityUseCase`
+- `LeaveGroupUseCase`
 - `LikePostUseCase`
 - `LoginUseCase`
 - `LogoutUseCase`
@@ -136,6 +154,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `MarkReadUseCase`
 - `MarkStorySeenUseCase`
 - `MessagesCubit`
+- `MuteUserUseCase`
 - `NetworkInfo`
 - `NotificationRemoteDataSource`
 - `NotificationRepository`
@@ -146,15 +165,23 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `PushNotificationService`
 - `ReactToCommentUseCase`
 - `ReactToCommunityPostUseCase`
+- `ReactToMessageUseCase`
 - `ReactToPostUseCase`
 - `RecordProjectViewUseCase`
+- `RefreshAttachmentUseCase`
 - `RegisterDeviceUseCase`
 - `RegisterUseCase`
+- `RemoveGroupMemberUseCase`
+- `RemoveGroupPhotoUseCase`
+- `RenameGroupUseCase`
+- `ReportPostUseCase`
 - `RepostUseCase`
 - `ResendOtpUseCase`
 - `ResetPasswordUseCase`
 - `RootJailbreakDetector`
 - `RouteGuards`
+- `SafetyRemoteDataSource`
+- `SafetyRepository`
 - `SearchRemoteDataSource`
 - `SearchRepository`
 - `SearchUsersUseCase`
@@ -162,21 +189,27 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `SendFriendRequestUseCase`
 - `SendMessageUseCase`
 - `SessionManager`
+- `SetGroupPhotoUseCase`
 - `ShowcaseRemoteDataSource`
 - `ShowcaseRepository`
 - `StartDirectConversationUseCase`
+- `StartGroupConversationUseCase`
 - `StoryLocalDataSource`
+- `SubmitFeedbackUseCase`
 - `ThemeCubit`
 - `ToggleProjectLikeUseCase`
 - `ToggleSaveUseCase`
 - `TokenRefreshService`
 - `UnblockUserUseCase`
 - `UnfriendUseCase`
+- `UnhidePostUseCase`
+- `UnmuteUserUseCase`
 - `UnregisterDeviceUseCase`
 - `UpdateAvatarUseCase`
 - `UpdateNotificationPreferencesUseCase`
 - `UpdatePostUseCase`
 - `UpdateProfileUseCase`
+- `UploadAttachmentUseCase`
 - `UserDirectory`
 - `VerifyOtpUseCase`
 - `VoteCommunityPostUseCase`
@@ -191,8 +224,10 @@ on re-entry.
 - `CommunityFeedCubit`
 - `CreateCommunityPostCubit`
 - `CreatePostCubit`
+- `FeedbackCubit`
 - `FriendsCubit`
 - `NotificationPreferencesCubit`
+- `PrivacySafetyCubit`
 - `ProfileCubit`
 - `PublishProjectCubit`
 - `SearchCubit`
@@ -257,26 +292,30 @@ on re-entry.
 **Cubits + States**
 
 - `lib/features/chat/presentation/bloc/chat_cubit.dart` — ChatState, ChatCubit
+- `lib/features/chat/presentation/bloc/group_info_cubit.dart` — GroupInfoState, GroupInfoCubit
 - `lib/features/chat/presentation/bloc/messages_cubit.dart` — MessagesState, MessagesCubit
 
 **Pages**
 
 - `lib/features/chat/presentation/pages/chat_page.dart` — ChatPage
+- `lib/features/chat/presentation/pages/group_info_page.dart` — GroupInfoPage
 - `lib/features/chat/presentation/pages/messages_page.dart` — MessagesPage
 
 **Usecases**
 
-- `lib/features/chat/domain/usecases/chat_usecases.dart` — CursorParams, GetConversationsUseCase, GetMessagesParams, GetMessagesUseCase, SendMessageParams, SendMessageUseCase, MarkReadParams, MarkReadUseCase, StartDirectConversationUseCase
+- `lib/features/chat/domain/usecases/chat_usecases.dart` — CursorParams, GetConversationsUseCase, GetConversationUseCase, GetMessagesParams, GetMessagesUseCase, SendMessageParams, SendMessageUseCase, EditMessageParams, EditMessageUseCase, MessageRefParams, DeleteMessageUseCase, ReactToMessageParams, ReactToMessageUseCase, UploadAttachmentParams, UploadAttachmentUseCase, RefreshAttachmentUseCase, MarkReadParams, MarkReadUseCase, StartDirectConversationUseCase, StartGroupParams, StartGroupConversationUseCase, RenameGroupParams, RenameGroupUseCase, SetGroupPhotoParams, SetGroupPhotoUseCase, RemoveGroupPhotoUseCase, GroupMembersParams, AddGroupMembersUseCase, GroupMemberParams, RemoveGroupMemberUseCase, ChangeMemberRoleParams, ChangeMemberRoleUseCase, LeaveGroupUseCase, InviteToGroupUseCase, AcceptGroupInviteUseCase, DeclineGroupInviteUseCase
 
 **Entities**
 
-- `lib/features/chat/domain/entities/conversation_entity.dart` — LastMessageEntity, ConversationEntity
-- `lib/features/chat/domain/entities/message_entity.dart` — MessageEntity
+- `lib/features/chat/domain/entities/attachment_entity.dart` — AttachmentEntity
+- `lib/features/chat/domain/entities/conversation_entity.dart` — LastMessageEntity, ConversationChange, ConversationEntity
+- `lib/features/chat/domain/entities/group_invite_entity.dart` — GroupInviteCardEntity, GroupInviteEntity, GroupInviteResult
+- `lib/features/chat/domain/entities/message_entity.dart` — ReplyPreviewEntity, ReactionEntity, MessageEntity
 - `lib/features/chat/domain/entities/participant_entity.dart` — ParticipantEntity
 
 **Repository interfaces**
 
-- `lib/features/chat/domain/repositories/chat_repository.dart` — ConversationsPage, MessagesPage, TypingChanged, MessageArrived, MessagesRead
+- `lib/features/chat/domain/repositories/chat_repository.dart` — ConversationsPage, MessagesPage, TypingChanged, LiveDeliveryChanged, MessageArrived, MessageUpdated, MessageDeleted, MessageReactionsChanged, MessagesRead, ConversationUpdated, ConversationRemoved, GroupInviteUpdated
 
 **Repository implementations**
 
@@ -285,12 +324,15 @@ on re-entry.
 **Models (JSON ⇄ entity)**
 
 - `lib/features/chat/data/models/conversation_model.dart` — ConversationPage
+- `lib/features/chat/data/models/group_invite_model.dart`
 - `lib/features/chat/data/models/message_model.dart` — MessagePage
 
 **Data sources**
 
+- `lib/features/chat/data/datasources/chat_frame_decoder.dart`
 - `lib/features/chat/data/datasources/chat_local_datasource.dart`
 - `lib/features/chat/data/datasources/chat_remote_datasource.dart` — ChatRemoteDataSourceImpl
+- `lib/features/chat/data/datasources/chat_socket.dart` — ChatSocket
 - `lib/features/chat/data/datasources/user_directory.dart` — UserDirectory
 
 ### Communities — `lib/features/communities`
@@ -313,6 +355,9 @@ on re-entry.
 **Widgets**
 
 - `lib/features/communities/presentation/widgets/community_post_card.dart` — CommunityPostCard
+- `lib/features/communities/presentation/widgets/shimmer_community_card.dart` — ShimmerCommunityCard
+- `lib/features/communities/presentation/widgets/shimmer_community_post_card.dart` — ShimmerCommunityPostCard
+- `lib/features/communities/presentation/widgets/vote_arrow_icon.dart` — VoteArrowIcon
 
 **Usecases**
 
@@ -363,7 +408,7 @@ on re-entry.
 - `lib/features/feed/presentation/widgets/create_post_prompt.dart` — CreatePostPrompt
 - `lib/features/feed/presentation/widgets/post_card.dart` — PostCard, RepostedPostPreview
 - `lib/features/feed/presentation/widgets/post_image_carousel.dart` — PostImageCarousel
-- `lib/features/feed/presentation/widgets/post_options_sheet.dart` — confirmDeletePost(), showEditPostSheet(), showPostOptionsSheet()
+- `lib/features/feed/presentation/widgets/post_options_sheet.dart` — confirmDeletePost(), confirmMuteAuthor(), showEditPostSheet(), showPostOptionsSheet()
 - `lib/features/feed/presentation/widgets/reaction_breakdown_sheet.dart` — showReactionBreakdownSheet()
 - `lib/features/feed/presentation/widgets/reaction_picker_sheet.dart` — showReactionPicker()
 - `lib/features/feed/presentation/widgets/reactors_sheet.dart` — showReactorsSheet()
@@ -403,7 +448,6 @@ on re-entry.
 **Repository implementations**
 
 - `lib/features/feed/data/repositories/feed_repository_impl.dart` — FeedRepositoryImpl
-- `lib/features/feed/data/repositories/feed_repository_impl_1.dart` — FeedRepositoryImpl
 
 **Models (JSON ⇄ entity)**
 
@@ -510,6 +554,8 @@ on re-entry.
 
 - `lib/features/profile/presentation/widgets/profile_details_card.dart` — ProfileDetailsCard
 - `lib/features/profile/presentation/widgets/profile_header.dart` — ProfileHeader
+- `lib/features/profile/presentation/widgets/shimmer_own_profile_view.dart` — ShimmerOwnProfileView
+- `lib/features/profile/presentation/widgets/shimmer_profile_view.dart` — ShimmerProfileView
 
 **Usecases**
 
@@ -535,6 +581,51 @@ on re-entry.
 
 - `lib/features/profile/data/datasources/profile_remote_datasource.dart` — ProfileRemoteDataSourceImpl
 
+### Safety — `lib/features/safety`
+
+**Cubits + States**
+
+- `lib/features/safety/presentation/bloc/feedback_cubit.dart` — FeedbackState, FeedbackCubit
+- `lib/features/safety/presentation/bloc/privacy_safety_cubit.dart` — PrivacySafetyState, PrivacySafetyCubit
+- `lib/features/safety/presentation/bloc/report_post_cubit.dart` — ReportPostState, ReportPostCubit
+
+**Pages**
+
+- `lib/features/safety/presentation/pages/privacy_safety_page.dart` — PrivacySafetyPage
+- `lib/features/safety/presentation/pages/send_feedback_page.dart` — SendFeedbackPage
+
+**Widgets**
+
+- `lib/features/safety/presentation/widgets/report_post_sheet.dart` — showReportPostSheet()
+
+**Usecases**
+
+- `lib/features/safety/domain/usecases/safety_usecases.dart` — SafetyPageParams, SubmitFeedbackParams, SubmitFeedbackUseCase, GetMyFeedbackUseCase, ReportPostParams, ReportPostUseCase, GetMyReportsUseCase, MuteParams, MuteUserUseCase, UnmuteUserUseCase, GetMutedUsersUseCase, HidePostParams, HidePostUseCase, UnhidePostUseCase
+
+**Entities**
+
+- `lib/features/safety/domain/entities/feedback_entity.dart` — FeedbackEntity
+- `lib/features/safety/domain/entities/muted_user_entity.dart` — MutedUserEntity
+- `lib/features/safety/domain/entities/post_report_entity.dart` — ReportedPostSnapshot, PostReportEntity
+
+**Repository interfaces**
+
+- `lib/features/safety/domain/repositories/safety_repository.dart` — FeedbackPage, ReportsPage, MutedUsersPage
+
+**Repository implementations**
+
+- `lib/features/safety/data/repositories/safety_repository_impl.dart` — SafetyRepositoryImpl
+
+**Models (JSON ⇄ entity)**
+
+- `lib/features/safety/data/models/feedback_model.dart` — FeedbackModel
+- `lib/features/safety/data/models/muted_user_model.dart` — MutedUserModel
+- `lib/features/safety/data/models/post_report_model.dart` — PostReportModel
+
+**Data sources**
+
+- `lib/features/safety/data/datasources/safety_remote_datasource.dart` — SafetyRemoteDataSourceImpl
+
 ### Search — `lib/features/search`
 
 **Cubits + States**
@@ -544,6 +635,10 @@ on re-entry.
 **Pages**
 
 - `lib/features/search/presentation/pages/search_page.dart` — SearchPage
+
+**Widgets**
+
+- `lib/features/search/presentation/widgets/shimmer_search_result_row.dart` — ShimmerSearchResultRow
 
 **Usecases**
 
@@ -579,7 +674,6 @@ on re-entry.
 **Widgets**
 
 - `lib/features/shell/presentation/widgets/bottom_nav_bar.dart` — BottomNavBar
-- `lib/features/shell/presentation/widgets/explore_sheet.dart` — showExploreSheet()
 
 ### Showcase — `lib/features/showcase`
 
@@ -598,6 +692,10 @@ on re-entry.
 **Widgets**
 
 - `lib/features/showcase/presentation/widgets/project_card.dart` — ProjectCard
+- `lib/features/showcase/presentation/widgets/publish_nudge_card.dart` — PublishNudgeCard
+- `lib/features/showcase/presentation/widgets/shimmer_project_card.dart` — ShimmerProjectCard
+- `lib/features/showcase/presentation/widgets/tech_chip_row.dart` — TechChipRow
+- `lib/features/showcase/presentation/widgets/tech_filter_sheet.dart` — showTechFilterSheet()
 
 **Usecases**
 
@@ -665,7 +763,7 @@ on re-entry.
 
 **`lib/core/notifications`**
 
-- `lib/core/notifications/push_notification_service.dart` — PushNotificationServiceImpl, firebaseMessagingBackgroundHandler()
+- `lib/core/notifications/push_notification_service.dart` — ConversationDestination, PostDestination, ProfileDestination, ReportsDestination, PushNotificationServiceImpl, cancelChatNotification(), chatNotificationTag(), firebaseMessagingBackgroundHandler()
 
 **`lib/core/router`**
 
@@ -699,6 +797,7 @@ on re-entry.
 
 - `lib/core/utils/formatters.dart`
 - `lib/core/utils/logger.dart`
+- `lib/core/utils/presigned_url.dart` — presignedObjectKey()
 - `lib/core/utils/responsive.dart`
 - `lib/core/utils/validators.dart`
 
@@ -722,11 +821,16 @@ on re-entry.
 - `lib/shared/widgets/app_icon_button.dart` — AppIconButton
 - `lib/shared/widgets/app_status_snackbar.dart`
 - `lib/shared/widgets/app_warning_dialog.dart` — AppWarningDialog
+- `lib/shared/widgets/date_label.dart` — DateLabel
 - `lib/shared/widgets/error_view.dart` — ErrorView, EmptyStateCard
+- `lib/shared/widgets/explore_title_menu.dart` — ExploreTitleMenu
 - `lib/shared/widgets/filter_chip_pill.dart` — FilterChipPill
+- `lib/shared/widgets/filter_dropdown_pill.dart` — FilterDropdownPill
 - `lib/shared/widgets/image_placeholder.dart` — ImagePlaceholder
 - `lib/shared/widgets/paged_list_view.dart` — PagedListView
+- `lib/shared/widgets/photo_viewer_page.dart` — PhotoViewerArgs, PhotoViewerPage, openPhotoViewer()
 - `lib/shared/widgets/responsive_content.dart` — ResponsiveContent
+- `lib/shared/widgets/segmented_tabs.dart` — SegmentedTabs
 - `lib/shared/widgets/shimmer_loading.dart` — ShimmerBox, ShimmerListCard, ShimmerPostCard
 - `lib/shared/widgets/yello_wordmark.dart` — YelloWordmark
 
@@ -735,11 +839,17 @@ on re-entry.
 ## Tests
 
 - `test/core/network/error_handler_test.dart`
+- `test/core/notifications/push_destination_test.dart`
 - `test/core/security/input_sanitizer_test.dart`
 - `test/core/security/jwt_manager_test.dart`
 - `test/core/security/session_manager_test.dart`
+- `test/core/utils/presigned_url_test.dart`
 - `test/features/auth/domain/login_usecase_test.dart`
+- `test/features/chat/chat_cubit_actions_test.dart`
+- `test/features/chat/chat_frame_decoder_test.dart`
+- `test/features/chat/chat_socket_test.dart`
 - `test/features/chat/loading_test.dart`
+- `test/features/chat/message_mapper_test.dart`
 - `test/features/feed/feed_cubit_test.dart`
 - `test/features/feed/post_detail_cubit_test.dart`
 - `test/features/feed/story_compose_page_test.dart`
@@ -747,6 +857,11 @@ on re-entry.
 - `test/features/profile/profile_details_card_test.dart`
 - `test/features/profile/profile_header_test.dart`
 - `test/features/profile/shared_posts_cubit_test.dart`
+- `test/features/safety/safety_cubits_test.dart`
 - `test/features/shell/bottom_nav_bar_test.dart`
+- `test/features/showcase/showcase_widgets_test.dart`
 - `test/helpers/mock_data.dart`
+- `test/shared/widgets/date_label_test.dart`
+- `test/shared/widgets/photo_viewer_test.dart`
+- `test/shared/widgets/shimmer_skeletons_test.dart`
 

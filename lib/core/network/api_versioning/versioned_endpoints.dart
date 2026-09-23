@@ -11,6 +11,11 @@ import 'endpoint_resolver.dart';
 /// 2026-09-20. The previous sweep (2026-09-15) saw 34 routes; Communities,
 /// Showcase, community-post comments and `/users/search` have landed since.
 ///
+/// The feedback / reports / mute / hide block below came from the backend's
+/// own reference for those features (2026-09-22) rather than from that
+/// sweep, so it has **not** been re-checked against the served OpenAPI
+/// document — re-verify it on the next `/docs` pass.
+///
 /// Notifications are **not** here — `yello-notify` is a separate service
 /// whose version segment sits after the resource name (`/notifications/v1`,
 /// not `/v1/notifications`), so `EndpointResolver` would prepend the wrong
@@ -81,6 +86,42 @@ abstract final class VersionedEndpoints {
 
   /// POST blocks, DELETE unblocks — same path.
   static String userBlock(String userId) => _r.resolve('/users/$userId/block', ApiVersion.v1);
+
+  // ---------------------------------------------------------------------
+  // Feedback, reports, mute and hide. Added 2026-09-22 from the backend's
+  // own reference for these four features; the moderator queue
+  // (`/admin/reports`) is deliberately absent — it answers
+  // `403 ACCESS_DENIED` for every account this app signs in, so there is
+  // nothing for a client route to call. See `docs/BACKEND.md`.
+  // ---------------------------------------------------------------------
+
+  /// `POST` one feature rating (1-5, optional note), `GET /feedback/me` for
+  /// your own, newest first (offset-paged). Submitting is capped at 10 per
+  /// hour per user — over that is `429 RATE_LIMIT_EXCEEDED`.
+  static String feedback() => _r.resolve('/feedback', ApiVersion.v1);
+  static String myFeedback() => _r.resolve('/feedback/me', ApiVersion.v1);
+
+  /// `POST /posts/{postId}/reports` — one open report per post per user;
+  /// a second one while the first is `UNDER_REVIEW` is
+  /// `409 REPORT_ALREADY_EXISTS`. Capped at 20 per hour.
+  static String postReports(String postId) => _r.resolve('/posts/$postId/reports', ApiVersion.v1);
+
+  /// `GET /reports/me` — your reports and their outcomes (offset-paged).
+  static String myReports() => _r.resolve('/reports/me', ApiVersion.v1);
+
+  /// POST mutes, DELETE unmutes — same path, both `204` with no body, and
+  /// both idempotent. A mute is never visible to the other user: it shows
+  /// up in no `friendStatus` and in nothing else they can read.
+  static String userMute(String userId) => _r.resolve('/users/$userId/mute', ApiVersion.v1);
+
+  /// `GET /users/me/muted` — who you have muted, most recent first
+  /// (offset-paged).
+  static String mutedUsers() => _r.resolve('/users/me/muted', ApiVersion.v1);
+
+  /// POST hides, DELETE unhides — same path, both `204` with no body, and
+  /// both idempotent. Hiding takes the post out of *your* `/feed` only; it
+  /// is not a report and the author is never told.
+  static String postHide(String postId) => _r.resolve('/posts/$postId/hide', ApiVersion.v1);
 
   // ---------------------------------------------------------------------
   // Communities. Every `{community}` segment is the community's **slug**

@@ -12,11 +12,13 @@ import '../../features/auth/domain/usecases/register_usecase.dart';
 import '../../features/auth/domain/usecases/verify_otp_usecase.dart';
 import '../../features/auth/presentation/bloc/auth_cubit.dart';
 import '../../features/chat/data/datasources/chat_remote_datasource.dart';
+import '../../features/chat/data/datasources/chat_socket.dart';
 import '../../features/chat/data/datasources/user_directory.dart';
 import '../../features/chat/data/repositories/chat_repository_impl.dart';
 import '../../features/chat/domain/repositories/chat_repository.dart';
 import '../../features/chat/domain/usecases/chat_usecases.dart';
 import '../../features/chat/presentation/bloc/chat_cubit.dart';
+import '../../features/chat/presentation/bloc/group_info_cubit.dart';
 import '../../features/chat/presentation/bloc/messages_cubit.dart';
 import '../../features/communities/data/datasources/communities_remote_datasource.dart';
 import '../../features/communities/data/repositories/communities_repository_impl.dart';
@@ -73,6 +75,13 @@ import '../../features/profile/domain/usecases/profile_usecases.dart';
 import '../../features/profile/presentation/bloc/profile_cubit.dart';
 import '../../features/profile/presentation/bloc/public_profile_cubit.dart';
 import '../../features/profile/presentation/bloc/shared_posts_cubit.dart';
+import '../../features/safety/data/datasources/safety_remote_datasource.dart';
+import '../../features/safety/data/repositories/safety_repository_impl.dart';
+import '../../features/safety/domain/repositories/safety_repository.dart';
+import '../../features/safety/domain/usecases/safety_usecases.dart';
+import '../../features/safety/presentation/bloc/feedback_cubit.dart';
+import '../../features/safety/presentation/bloc/privacy_safety_cubit.dart';
+import '../../features/safety/presentation/bloc/report_post_cubit.dart';
 import '../../features/search/data/datasources/search_remote_datasource.dart';
 import '../../features/search/data/repositories/search_repository_impl.dart';
 import '../../features/search/domain/repositories/search_repository.dart';
@@ -112,6 +121,12 @@ final GetIt sl = GetIt.instance;
 Future<void> configureDependencies() async {
   _registerCore();
   _registerAuth();
+  // Before the feed: `FeedCubit` and `PostDetailCubit` both take safety use
+  // cases (hide a post, mute its author). Lazy singletons resolve on first
+  // read rather than on registration, so this is about reading order rather
+  // than correctness — but keeping the dependency above its dependents
+  // saves the next person the check.
+  _registerSafety();
   _registerFeed();
   _registerFriends();
   _registerNotifications();
@@ -323,14 +338,41 @@ void _registerChat() {
   // and avatars through yello-api and caches them for the session.
   sl.registerLazySingleton(() => UserDirectory(sl()));
 
-  // (remote, directory, getMe, networkInfo)
-  sl.registerLazySingleton<ChatRepository>(() => ChatRepositoryImpl(sl(), sl(), sl(), sl()));
+  // One live connection for the whole app; it opens when a chat screen
+  // subscribes and closes when the last one leaves. Authenticates with the
+  // stored access token and refreshes it once on rejection.
+  sl.registerLazySingleton(() => ChatSocket(secureStorage: sl(), tokenRefresh: sl()));
+
+  // (remote, directory, getMe, networkInfo, socket)
+  sl.registerLazySingleton<ChatRepository>(() => ChatRepositoryImpl(sl(), sl(), sl(), sl(), sl()));
 
   sl.registerLazySingleton(() => GetConversationsUseCase(sl()));
+  sl.registerLazySingleton(() => GetConversationUseCase(sl()));
   sl.registerLazySingleton(() => GetMessagesUseCase(sl()));
   sl.registerLazySingleton(() => SendMessageUseCase(sl()));
+  sl.registerLazySingleton(() => EditMessageUseCase(sl()));
+  sl.registerLazySingleton(() => DeleteMessageUseCase(sl()));
+  sl.registerLazySingleton(() => ReactToMessageUseCase(sl()));
+  sl.registerLazySingleton(() => UploadAttachmentUseCase(sl()));
+  sl.registerLazySingleton(() => RefreshAttachmentUseCase(sl()));
   sl.registerLazySingleton(() => MarkReadUseCase(sl()));
   sl.registerLazySingleton(() => StartDirectConversationUseCase(sl()));
+  // No composer for a new group yet — `POST /ws/conversations` with
+  // `type: GROUP` is reachable, the UI for it is not. Registered so the
+  // Inbox's compose action has its usecase ready when it gets one.
+  sl.registerLazySingleton(() => StartGroupConversationUseCase(sl()));
+
+  // Groups and invite cards — every one of these is 400 on a DM.
+  sl.registerLazySingleton(() => RenameGroupUseCase(sl()));
+  sl.registerLazySingleton(() => SetGroupPhotoUseCase(sl()));
+  sl.registerLazySingleton(() => RemoveGroupPhotoUseCase(sl()));
+  sl.registerLazySingleton(() => AddGroupMembersUseCase(sl()));
+  sl.registerLazySingleton(() => RemoveGroupMemberUseCase(sl()));
+  sl.registerLazySingleton(() => ChangeMemberRoleUseCase(sl()));
+  sl.registerLazySingleton(() => LeaveGroupUseCase(sl()));
+  sl.registerLazySingleton(() => InviteToGroupUseCase(sl()));
+  sl.registerLazySingleton(() => AcceptGroupInviteUseCase(sl()));
+  sl.registerLazySingleton(() => DeclineGroupInviteUseCase(sl()));
 
   // Long-lived: the Inbox list (and unread counts) survives tab switches.
   sl.registerLazySingleton(() => MessagesCubit(sl()));
@@ -338,12 +380,75 @@ void _registerChat() {
   sl.registerFactoryParam<ChatCubit, String, void>(
     (conversationId, _) => ChatCubit(
       conversationId: conversationId,
+      getConversation: sl(),
       getMessages: sl(),
       sendMessage: sl(),
+      editMessage: sl(),
+      deleteMessage: sl(),
+      reactToMessage: sl(),
+      uploadAttachment: sl(),
+      refreshAttachment: sl(),
+      acceptInvite: sl(),
+      declineInvite: sl(),
       markRead: sl(),
       repository: sl(),
       inbox: sl(),
     ),
+  );
+
+  // Fresh per push, like `ChatCubit`: the group screen's state has no reason
+  // to outlive it, and every change it makes is written to `MessagesCubit`
+  // for the rest of the app to read. `GetFriendsUseCase` (friends feature)
+  // feeds its add/invite pickers — only friends can be picked.
+  sl.registerFactoryParam<GroupInfoCubit, String, void>(
+    (conversationId, _) => GroupInfoCubit(
+      conversationId: conversationId,
+      getConversation: sl(),
+      rename: sl(),
+      setPhoto: sl(),
+      removePhoto: sl(),
+      addMembers: sl(),
+      removeMember: sl(),
+      changeRole: sl(),
+      leave: sl(),
+      invite: sl(),
+      getFriends: sl(),
+      inbox: sl(),
+    ),
+  );
+}
+
+/// Feedback, post reports, mute and hide — one feature slice over four
+/// small `yello-api` resources. The moderator half of reports
+/// (`/v1/admin/reports`) has no registration because it has no client: it
+/// answers `403 ACCESS_DENIED` for every account this app signs in.
+void _registerSafety() {
+  sl.registerLazySingleton<SafetyRemoteDataSource>(() => SafetyRemoteDataSourceImpl(sl()));
+  sl.registerLazySingleton<SafetyRepository>(() => SafetyRepositoryImpl(sl(), sl()));
+
+  sl.registerLazySingleton(() => SubmitFeedbackUseCase(sl()));
+  sl.registerLazySingleton(() => GetMyFeedbackUseCase(sl()));
+  sl.registerLazySingleton(() => ReportPostUseCase(sl()));
+  sl.registerLazySingleton(() => GetMyReportsUseCase(sl()));
+  sl.registerLazySingleton(() => MuteUserUseCase(sl()));
+  sl.registerLazySingleton(() => UnmuteUserUseCase(sl()));
+  sl.registerLazySingleton(() => GetMutedUsersUseCase(sl()));
+  sl.registerLazySingleton(() => HidePostUseCase(sl()));
+
+  // No caller yet: hiding is offered from the post menu, but nothing lists
+  // hidden posts to unhide them from — `GET /v1/feed` simply leaves them
+  // out and there is no "hidden posts" endpoint to build that screen on.
+  // Registered so the route is one screen away, not one layer away. Same
+  // reasoning as the friends feature's `GetBlockedUsersUseCase`.
+  sl.registerLazySingleton(() => UnhidePostUseCase(sl()));
+
+  // Factories: none of this state should outlive the screen or sheet that
+  // opened it — a half-written report or a stale muted list is worse than
+  // a fresh fetch.
+  sl.registerFactory(() => FeedbackCubit(submitFeedback: sl(), getMyFeedback: sl()));
+  sl.registerFactory(() => PrivacySafetyCubit(getMyReports: sl(), getMutedUsers: sl(), unmuteUser: sl()));
+  sl.registerFactoryParam<ReportPostCubit, String, void>(
+    (postId, _) => ReportPostCubit(postId: postId, reportPost: sl()),
   );
 }
 
@@ -397,6 +502,8 @@ void _registerFeed() {
       updatePost: sl(),
       deletePost: sl(),
       getShareLink: sl(),
+      hidePost: sl(),
+      muteUser: sl(),
     ),
   );
 
@@ -417,6 +524,8 @@ void _registerFeed() {
       getMe: sl(),
       repost: sl(),
       getUserPosts: sl(),
+      hidePost: sl(),
+      muteUser: sl(),
     ),
   );
 
@@ -512,12 +621,7 @@ void _registerShowcase() {
   // header paints before `GET /projects/{id}` answers. Null on a cold deep
   // link, which is why it is the nullable second param rather than required.
   sl.registerFactoryParam<ProjectDetailCubit, String, ProjectEntity?>(
-    (projectId, seed) => ProjectDetailCubit(
-      projectId: projectId,
-      seed: seed,
-      getProject: sl(),
-      recordView: sl(),
-      toggleLike: sl(),
-    ),
+    (projectId, seed) =>
+        ProjectDetailCubit(projectId: projectId, seed: seed, getProject: sl(), recordView: sl(), toggleLike: sl()),
   );
 }

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/usecase/usecase.dart';
 import '../../../profile/domain/usecases/profile_usecases.dart';
+import '../../../safety/domain/usecases/safety_usecases.dart';
 import '../../domain/entities/comment_entity.dart';
 import '../../domain/entities/post_entity.dart';
 import '../../domain/entities/reaction_breakdown.dart';
@@ -107,6 +108,8 @@ class PostDetailCubit extends Cubit<PostDetailState> {
     required GetMeUseCase getMe,
     required RepostUseCase repost,
     required GetUserPostsUseCase getUserPosts,
+    required HidePostUseCase hidePost,
+    required MuteUserUseCase muteUser,
   }) : _getPostDetail = getPostDetail,
        _getComments = getComments,
        _addComment = addComment,
@@ -121,6 +124,8 @@ class PostDetailCubit extends Cubit<PostDetailState> {
        _getMe = getMe,
        _repost = repost,
        _getUserPosts = getUserPosts,
+       _hidePost = hidePost,
+       _muteUser = muteUser,
        super(const PostDetailState());
 
   final String postId;
@@ -138,6 +143,8 @@ class PostDetailCubit extends Cubit<PostDetailState> {
   final GetMeUseCase _getMe;
   final RepostUseCase _repost;
   final GetUserPostsUseCase _getUserPosts;
+  final HidePostUseCase _hidePost;
+  final MuteUserUseCase _muteUser;
 
   Future<void> load() async {
     emit(state.copyWith(status: PostDetailStatus.loading));
@@ -267,6 +274,45 @@ class PostDetailCubit extends Cubit<PostDetailState> {
         return true;
       },
     );
+  }
+
+  /// True once a hide or a mute has taken this post off the screen —
+  /// either way there is nothing left here to look at, so the page pops.
+  /// A plain field rather than [PostDetailState]: it is a one-shot guard
+  /// against a double-tap firing a second request at a post that is already
+  /// on its way out, not something a widget renders.
+  bool _dismissed = false;
+
+  /// Hides this post from the viewer's own feed — `POST
+  /// /v1/posts/{id}/hide`. Answers whether it went through so the page can
+  /// pop and the feed underneath can drop the card.
+  Future<bool> hidePost() async {
+    if (_dismissed) return false;
+    _dismissed = true;
+    final result = await _hidePost(HidePostParams(postId));
+    // Same closed-page race as `load()`.
+    if (isClosed) return false;
+    return result.fold((failure) {
+      _dismissed = false;
+      emit(state.copyWith(errorMessage: failure.message));
+      return false;
+    }, (_) => true);
+  }
+
+  /// Mutes this post's author. Null when the post has not loaded yet, so
+  /// there is no author to mute.
+  Future<bool> muteAuthor() async {
+    final authorId = state.post?.authorId;
+    if (authorId == null || _dismissed) return false;
+    _dismissed = true;
+    final result = await _muteUser(MuteParams(authorId));
+    // Same closed-page race as `load()`.
+    if (isClosed) return false;
+    return result.fold((failure) {
+      _dismissed = false;
+      emit(state.copyWith(errorMessage: failure.message));
+      return false;
+    }, (_) => true);
   }
 
   Future<bool> deleteComment(String commentId) async {

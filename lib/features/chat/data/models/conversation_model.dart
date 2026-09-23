@@ -32,6 +32,27 @@ abstract final class ConversationMapper {
       lastMessage: _lastMessage(json['lastMessage']),
       unreadCount: json['unreadCount'] as int? ?? 0,
       viewerId: viewerId,
+      photoUrl: json['photoUrl'] as String?,
+      photoUrlExpiresAt: _date(json['photoUrlExpiresAt']),
+    );
+  }
+
+  /// `{ conversationId, participants[] }` — what the member and role routes
+  /// answer with instead of a whole conversation.
+  static List<ParticipantEntity> participantsFromJson(Map<String, dynamic> json) {
+    final raw = json['participants'];
+    return raw is List
+        ? raw.whereType<Map<String, dynamic>>().map(ParticipantMapper.fromJson).toList(growable: false)
+        : const <ParticipantEntity>[];
+  }
+
+  /// The `change` object on a `conversation.updated` frame.
+  static ConversationChange changeFromJson(Map<String, dynamic> json) {
+    final raw = json['userIds'];
+    return ConversationChange(
+      kind: ConversationChangeKind.fromWire(json['kind'] as String?),
+      actorId: json['actorId'] as String? ?? '',
+      userIds: raw is List ? raw.whereType<String>().toList(growable: false) : const [],
     );
   }
 
@@ -39,11 +60,15 @@ abstract final class ConversationMapper {
     if (raw is! Map<String, dynamic>) return null;
     final id = raw['id'] as String?;
     if (id == null) return null;
+    final body = raw['body'] as String? ?? '';
     return LastMessageEntity(
       id: id,
       senderId: raw['senderId'] as String? ?? '',
-      body: raw['body'] as String? ?? '',
+      body: body,
       createdAt: _date(raw['createdAt']) ?? DateTime.now(),
+      // The summary carries no attachments/invite/deleted flags, so an empty
+      // body can only be reported as "not text" — see `LastMessageKind`.
+      kind: body.isEmpty ? LastMessageKind.attachment : LastMessageKind.text,
     );
   }
 

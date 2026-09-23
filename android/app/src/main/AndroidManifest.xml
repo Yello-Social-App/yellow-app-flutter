@@ -12,10 +12,11 @@
         <!-- Channel a backgrounded/killed-app push is shown under — the OS
              draws that notification straight from the FCM payload without
              ever running Dart code, so it needs the channel id natively.
-             Must match `_androidChannel.id` in PushNotificationService. -->
+             `yello_default` is the id yello-notify's guide names; it must
+             match `_androidChannel.id` in PushNotificationService. -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="yello_default_channel" />
+            android:value="yello_default" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

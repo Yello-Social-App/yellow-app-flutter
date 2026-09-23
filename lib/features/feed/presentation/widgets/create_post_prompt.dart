@@ -25,41 +25,47 @@ class CreatePostPrompt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    return Material(
-      color: colors.surf,
-      borderRadius: BorderRadius.circular(AppRadii.pill),
-      // Floats above the now-flat-white page background — see PostCard's
-      // matching shadow for why.
-      elevation: 3,
-      shadowColor: colors.ink.withValues(alpha: 0.15),
-      child: InkWell(
-        onTap: onTap,
+    // Floats above the flat-white page background with the same shadow as
+    // the post cards right below it (a Material `elevation` shadow here used
+    // to look like a different, flatter surface next to them) — see
+    // [AppShadows.card].
+    return DecoratedBox(
+      decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadii.pill),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(7, 7, 12, 7),
-          decoration: BoxDecoration(
-            border: Border.all(color: colors.line, width: 1.5),
-            borderRadius: BorderRadius.circular(AppRadii.pill),
-          ),
-          child: Row(
-            children: [
-              AppAvatar(initials: myInitials, seed: mySeed, imageUrl: myAvatarUrl, size: 36),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Text('What did you notice today?', style: AppTextStyles.hint.copyWith(color: colors.ink3)),
-              ),
-              Container(
-                width: 34,
-                height: 34,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: colors.surf2,
-                  border: Border.all(color: colors.line2),
+        boxShadow: AppShadows.card(context),
+      ),
+      child: Material(
+        color: colors.surf,
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadii.pill),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(7, 7, 12, 7),
+            decoration: BoxDecoration(
+              border: Border.all(color: colors.line, width: 1.5),
+              borderRadius: BorderRadius.circular(AppRadii.pill),
+            ),
+            child: Row(
+              children: [
+                AppAvatar(initials: myInitials, seed: mySeed, imageUrl: myAvatarUrl, size: 36),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Text('What did you notice today?', style: AppTextStyles.hint.copyWith(color: colors.ink3)),
                 ),
-                child: Icon(Icons.photo_camera_outlined, size: 15, color: colors.ink2),
-              ),
-            ],
+                Container(
+                  width: 34,
+                  height: 34,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: colors.surf2,
+                    border: Border.all(color: colors.line2),
+                  ),
+                  child: Icon(Icons.photo_camera_outlined, size: 15, color: colors.ink2),
+                ),
+              ],
+            ),
           ),
         ),
       ),

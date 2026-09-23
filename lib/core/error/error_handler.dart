@@ -34,6 +34,49 @@ abstract final class ApiErrorCodes {
   static const String usernameChangeCooldown = 'USERNAME_CHANGE_COOLDOWN';
   static const String payloadTooLarge = 'PAYLOAD_TOO_LARGE';
   static const String internalError = 'INTERNAL_ERROR';
+
+  /// 400 — you tried to report your own post.
+  static const String cannotReportOwnPost = 'CANNOT_REPORT_OWN_POST';
+
+  /// 400 — you tried to mute yourself.
+  static const String cannotMuteSelf = 'CANNOT_MUTE_SELF';
+
+  /// 409 — you already have an `UNDER_REVIEW` report on this post. Not an
+  /// error the user can act on: the report they wanted already exists, so
+  /// `ReportPostCubit` reads this code and reports success ("already
+  /// reported") rather than showing a failure.
+  static const String reportAlreadyExists = 'REPORT_ALREADY_EXISTS';
+
+  /// 409 — moderators only (`PATCH /admin/reports/{id}` on a report that was
+  /// already decided). This app never calls that route; the code is listed
+  /// for completeness of the vocabulary.
+  static const String reportAlreadyResolved = 'REPORT_ALREADY_RESOLVED';
+}
+
+/// `yello-chat`'s own error vocabulary (`ErrorBody.code`). A different
+/// service with a different envelope — `{code, message, details}` and no
+/// `success` flag — but [ErrorHandler] reads `code` and `message` off the
+/// body the same way, so only the mapping to a [Failure] needs to know.
+/// `INTERNAL_ERROR` is shared with yello-api and lives in [ApiErrorCodes].
+abstract final class ChatErrorCodes {
+  /// 400 (bad input — `details.issues[]` lists the paths) or 413 (a file
+  /// over `CHAT_ATTACHMENT_MAX_BYTES`).
+  static const String validationError = 'VALIDATION_ERROR';
+  static const String unauthorized = 'UNAUTHORIZED';
+
+  /// A block between the two users, or the viewer lacks the right (not the
+  /// sender, not a group admin, not the owner).
+  static const String forbidden = 'FORBIDDEN';
+
+  /// Unknown id — or the viewer is not a member; ids cannot be probed.
+  static const String notFound = 'NOT_FOUND';
+
+  /// Already a member; invite already answered or no longer valid.
+  static const String conflict = 'CONFLICT';
+  static const String rateLimited = 'RATE_LIMITED';
+
+  /// Attachments / group photos are not configured on this deployment.
+  static const String unavailable = 'UNAVAILABLE';
 }
 
 /// Central translation point between transport-level errors and the app's
@@ -113,10 +156,19 @@ abstract final class ErrorHandler {
     ApiErrorCodes.invalidImage => 'Choose a JPEG, PNG, GIF, or WebP image.',
     ApiErrorCodes.alreadyReposted => 'You have already reposted this.',
     ApiErrorCodes.friendRequestConflict => 'There is already a request between you two.',
+    ApiErrorCodes.cannotReportOwnPost => 'You cannot report your own post.',
+    ApiErrorCodes.cannotMuteSelf => 'You cannot mute yourself.',
+    ApiErrorCodes.reportAlreadyExists => 'You have already reported this post.',
+    ApiErrorCodes.reportAlreadyResolved => 'That report has already been decided.',
     ApiErrorCodes.postNotVisible => 'That post is not visible to you.',
     ApiErrorCodes.accessDenied => 'You do not have access to that.',
     ApiErrorCodes.rateLimitExceeded => 'Slow down a moment, then try again.',
     ApiErrorCodes.resourceNotFound => 'That is no longer there.',
+    ChatErrorCodes.forbidden => 'You cannot do that here.',
+    ChatErrorCodes.notFound => 'That is no longer there.',
+    ChatErrorCodes.conflict => 'That has already been done.',
+    ChatErrorCodes.rateLimited => 'Slow down a moment, then try again.',
+    ChatErrorCodes.unavailable => 'File sharing is not available right now.',
     _ => null,
   };
 
@@ -158,13 +210,28 @@ abstract final class ErrorHandler {
     ApiErrorCodes.alreadyReposted ||
     ApiErrorCodes.friendRequestConflict ||
     ApiErrorCodes.communityMembershipRequired ||
-    ApiErrorCodes.rateLimitExceeded => ValidationFailure(e.message),
+    ApiErrorCodes.rateLimitExceeded ||
+    ApiErrorCodes.cannotReportOwnPost ||
+    ApiErrorCodes.cannotMuteSelf ||
+    ApiErrorCodes.reportAlreadyExists ||
+    ApiErrorCodes.reportAlreadyResolved ||
+    // yello-chat's 4xx family: every one of these carries a message a user
+    // can act on ("Only the sender can change this message", "The group is
+    // full"), which a ServerFailure would flatten into "Something went
+    // wrong on our end."
+    ChatErrorCodes.validationError ||
+    ChatErrorCodes.forbidden ||
+    ChatErrorCodes.notFound ||
+    ChatErrorCodes.conflict ||
+    ChatErrorCodes.rateLimited ||
+    ChatErrorCodes.unavailable => ValidationFailure(e.message, code: e.code),
     ApiErrorCodes.accountNotVerified ||
     ApiErrorCodes.accountSuspended ||
     ApiErrorCodes.invalidCredentials ||
     ApiErrorCodes.tokenInvalid ||
     ApiErrorCodes.tokenExpired ||
-    ApiErrorCodes.tokenRevoked => AuthFailure(e.message),
+    ApiErrorCodes.tokenRevoked ||
+    ChatErrorCodes.unauthorized => AuthFailure(e.message),
     _ => null,
   };
 }

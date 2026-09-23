@@ -58,9 +58,11 @@ class MessagesState extends Equatable {
 /// Owns the Inbox tab's conversation list — a long-lived singleton so the
 /// list (and its unread counts) persists across tab switches.
 ///
-/// It is also the write target for the chat screen: [ChatCubit] calls
-/// [markConversationRead] and [applyIncomingMessage] so opening or receiving
-/// a message updates this list in place instead of forcing a refetch.
+/// It is also the write target for the chat and group screens:
+/// [ChatCubit] calls [markConversationRead], [applyIncomingMessage] and
+/// [applyDeletedMessage]; `GroupInfoCubit` calls [applyConversation] and
+/// [removeConversation] — so opening, receiving, unsending, renaming or
+/// leaving updates this list in place instead of forcing a refetch.
 class MessagesCubit extends Cubit<MessagesState> {
   MessagesCubit(this._getConversations) : super(const MessagesState());
 
@@ -145,16 +147,47 @@ class MessagesCubit extends Cubit<MessagesState> {
     final current = state.conversations[index];
     final next = [...state.conversations];
     next[index] = current.copyWith(
-      lastMessage: LastMessageEntity(
-        id: message.id,
-        senderId: message.senderId,
-        body: message.body,
-        createdAt: message.createdAt,
-      ),
+      lastMessage: LastMessageEntity.fromMessage(message),
       lastMessageAtOrNull: message.createdAt,
       unreadCount: message.fromMe ? current.unreadCount : current.unreadCount + 1,
     );
     emit(state.copyWith(conversations: _sorted(next)));
+  }
+
+  /// A message was unsent. Only the row whose preview *is* that message
+  /// changes — an older one is not what the inbox shows anyway.
+  void applyDeletedMessage({required String conversationId, required String messageId}) {
+    final index = state.conversations.indexWhere((c) => c.id == conversationId);
+    if (index < 0) return;
+    final current = state.conversations[index];
+    final last = current.lastMessage;
+    if (last == null || last.id != messageId || last.kind == LastMessageKind.deleted) return;
+
+    final next = [...state.conversations];
+    next[index] = current.copyWith(lastMessage: last.copyWith(kind: LastMessageKind.deleted));
+    emit(state.copyWith(conversations: next));
+  }
+
+  /// Folds a fresh detail — rename, new photo, member change, or a group
+  /// the viewer just joined — into the list. An existing row keeps its
+  /// preview and unread count (`mergeDetail`); an unknown one is inserted,
+  /// which is how an accepted invite shows up without a refetch.
+  void applyConversation(ConversationEntity conversation) {
+    final index = state.conversations.indexWhere((c) => c.id == conversation.id);
+    final next = [...state.conversations];
+    if (index < 0) {
+      next.add(conversation);
+    } else {
+      next[index] = next[index].mergeDetail(conversation);
+    }
+    emit(state.copyWith(conversations: _sorted(next)));
+  }
+
+  /// The viewer left or was removed — the server answers 404 for it from
+  /// now on, so it must not stay tappable in the list.
+  void removeConversation(String conversationId) {
+    if (!state.conversations.any((c) => c.id == conversationId)) return;
+    emit(state.copyWith(conversations: state.conversations.where((c) => c.id != conversationId).toList()));
   }
 
   /// Newest activity first. Applied on every write so an arriving message

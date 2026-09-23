@@ -256,6 +256,7 @@ class _Body extends StatelessWidget {
             color: colors.surf,
             border: Border.all(color: colors.line, width: 1.5),
             borderRadius: BorderRadius.circular(AppRadii.lg),
+            boxShadow: AppShadows.card(context),
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -319,6 +320,7 @@ class _LinkRow extends StatelessWidget {
         color: colors.surf,
         border: Border.all(color: colors.line, width: 1.5),
         borderRadius: BorderRadius.circular(AppRadii.lg),
+        boxShadow: AppShadows.card(context),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -333,7 +335,7 @@ class _LinkRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(label, style: AppTextStyles.metaMono.copyWith(color: colors.ink3, fontSize: 9)),
+                    Text(label, style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink3)),
                     const SizedBox(height: 2),
                     Text(
                       url,

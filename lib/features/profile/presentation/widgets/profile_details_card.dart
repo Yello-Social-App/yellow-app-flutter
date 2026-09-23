@@ -93,6 +93,10 @@ class ProfileDetailsCard extends StatelessWidget {
             color: colors.surf,
             border: Border.all(color: colors.line, width: 1.5),
             borderRadius: BorderRadius.circular(AppRadii.xl),
+            // Static decoration on a plain DecoratedBox — the sanctioned
+            // shape for card depth (ADR-012). It rebuilds with the page, not
+            // per animation frame, which is the line `docs/GOTCHAS.md` draws.
+            boxShadow: AppShadows.card(context),
           ),
           child: Column(
             children: [
@@ -136,7 +140,7 @@ class _DetailRow extends StatelessWidget {
           Expanded(
             child: Text(
               value,
-              style: AppTextStyles.body.copyWith(color: muted ? colors.ink3 : colors.ink, fontSize: 14),
+              style: AppTextStyles.bodyMd.copyWith(color: muted ? colors.ink3 : colors.ink),
             ),
           ),
         ],

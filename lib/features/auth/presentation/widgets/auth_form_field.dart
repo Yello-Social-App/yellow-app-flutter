@@ -87,7 +87,6 @@ class AuthFormField extends StatelessWidget {
                     onSubmitted: onSubmitted,
                     onChanged: onChanged,
                     style: AppTextStyles.body.copyWith(
-                      fontSize: 15,
                       color: colors.ink,
                     ),
                     decoration: InputDecoration(
@@ -95,7 +94,6 @@ class AuthFormField extends StatelessWidget {
                       contentPadding: const EdgeInsets.symmetric(vertical: 7.5),
                       hintText: placeholder ?? label,
                       hintStyle: AppTextStyles.body.copyWith(
-                        fontSize: 15,
                         color: colors.ink3,
                       ),
                       border: InputBorder.none,
@@ -118,7 +116,6 @@ class AuthFormField extends StatelessWidget {
               helperText!,
               style: AppTextStyles.metaMono.copyWith(
                 color: helperColor ?? colors.ink2,
-                fontSize: 10.5,
               ),
             ),
           ),

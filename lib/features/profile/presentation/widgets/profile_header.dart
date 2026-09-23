@@ -193,7 +193,7 @@ class ProfileHeader extends StatelessWidget {
             child: Text(
               bio,
               textAlign: TextAlign.center,
-              style: AppTextStyles.bodySm.copyWith(color: colors.ink2, fontSize: 14),
+              style: AppTextStyles.bodyMd.copyWith(color: colors.ink2),
             ),
           ),
         ],
@@ -402,7 +402,7 @@ class _Fact extends StatelessWidget {
       children: [
         Icon(icon, size: 15, color: colors.ink3),
         const SizedBox(width: 6),
-        Text(label, style: AppTextStyles.bodySm.copyWith(color: colors.ink2, fontSize: 13.5)),
+        Text(label, style: AppTextStyles.bodySm.copyWith(color: colors.ink2)),
       ],
     );
   }
@@ -479,7 +479,7 @@ class _ConnectionsRow extends StatelessWidget {
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.bodySm.copyWith(color: colors.ink2, fontSize: 13.5),
+                  style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
                 ),
               ),
               const SizedBox(width: 2),

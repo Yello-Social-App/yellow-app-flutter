@@ -30,6 +30,7 @@ class PagedListView extends StatelessWidget {
     required this.onLoadMore,
     required this.itemBuilder,
     this.header,
+    this.skeleton = const [ShimmerListCard(), ShimmerListCard()],
     this.padding = const EdgeInsets.fromLTRB(14, 0, 14, 24),
     this.separatorHeight = 10,
     this.loadMoreThreshold = 400,
@@ -49,6 +50,14 @@ class PagedListView extends StatelessWidget {
   /// Optional content pinned above the list *inside* the same scrollable, so a
   /// long header scrolls away with the rows instead of eating the viewport.
   final Widget? header;
+
+  /// What the loading state shows in place of rows, laid out with the same
+  /// [separatorHeight] the real rows get. Defaults to two generic
+  /// [ShimmerListCard]s; a screen whose rows have their own distinctive shape
+  /// passes skeletons that mirror that card (`ShimmerCommunityPostCard`,
+  /// `ShimmerProjectCard`, ...) so the real rows swap in without the list
+  /// visibly re-flowing.
+  final List<Widget> skeleton;
   final EdgeInsets padding;
   final double separatorHeight;
 
@@ -63,9 +72,10 @@ class PagedListView extends StatelessWidget {
         padding: padding,
         children: [
           ?header,
-          const ShimmerListCard(),
-          const SizedBox(height: 10),
-          const ShimmerListCard(),
+          for (var i = 0; i < skeleton.length; i++) ...[
+            if (i > 0) SizedBox(height: separatorHeight),
+            skeleton[i],
+          ],
         ],
       );
     }
