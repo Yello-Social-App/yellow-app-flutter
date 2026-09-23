@@ -886,9 +886,15 @@ response, add the toggle and delete this ADR's reasoning —
 The Profile tab was restructured to a cover/avatar/details layout (modelled
 on a mainstream social profile). The avatar, its camera badge and the compose
 bubble all overlap the cover, and all three are tappable — so the overlap is
-built with `Stack` + `Positioned`, and the cover block reserves
-`coverHeight + avatarOverhang` of real height. Nothing is shifted with
+built with `Stack` + `Positioned`. Nothing is shifted with
 `Transform.translate`.
+
+*Amended:* the identity block went back to sitting on a surf card, as it does
+on `public_profile_page.dart`, with the avatar straddling the card's top edge.
+The mechanism is unchanged — the card is the header `Stack`'s only
+non-positioned child, so it is what gives the Stack its height, and the avatar
+is still `Positioned` on top of it rather than translated. `ShimmerOwnProfileView`
+mirrors the same shape.
 
 **Why:** `RenderTransform.hitTest` inverse-transforms a tap against the
 child's *untransformed* box, so a translated widget silently stops accepting
@@ -922,3 +928,240 @@ suite instead of shipping.
 
 **Revisit if:** the API grows real profile-detail fields, or Circle gets its
 own nav button.
+
+---
+
+## ADR-025 — Direct reply lives on alerts the app draws, so it needs data-only chat pushes
+
+**Status:** Accepted — client side complete, background coverage waiting on
+`yello-notify`.
+
+A chat notification now carries a Reply action: an Android `RemoteInput`
+action and, on iOS, a `UNTextInputNotificationAction` under the category
+`yello_chat_reply`. The text is sent straight to
+`POST /ws/conversations/{id}/messages` from whichever isolate the reply
+arrived on, and the alert is rewritten in place with the outcome —
+`chat_reply_action.dart` for the action and the send,
+`push_notification_service.dart` for the drawing and the two response
+handlers.
+
+**Why the send does not go through DI:** a reply typed while the app is not
+running is delivered to `flutter_local_notifications`' own background engine.
+`sl` is empty there and `bootstrap()` never ran, so `sendChatReply` builds a
+`SecureStorageServiceImpl` and a pinned `Dio` itself and re-seeds
+`AppConfig` from `AppConfig.defaultBaseUrl` (which is why the base URL is now
+a constant rather than a literal in `main.dart`). It reproduces
+`AuthInterceptor`'s two rules deliberately — skip a token already known to be
+expired, refresh once on a 401 — because the interceptor itself is attached
+to a `Dio` that does not exist over there. Both attempts reuse one
+`clientId`, so the refresh retry cannot post the reply twice.
+
+**Why this is currently foreground-only:** an action button exists only on a
+notification *Dart* drew. Android hands a push that carries its own
+`notification` block to the system tray and runs no app code at all — not
+`onMessage`, not the background handler — so the alert the user sees when
+Yello is closed is the OS's, and nothing can be attached to it. There is no
+client-side way around that; it is a property of FCM, not of this app. See
+`docs/GOTCHAS.md`.
+
+**What closes the gap** (both on `yello-notify`, both small — the app is
+already written for them, and needs no further change when they land):
+
+1. Send `CHAT_MESSAGE` **data-only** — no `notification` block, `title` and
+   `body` repeated as `data` keys, Android priority `high`. The background
+   handler then draws the alert itself, with the Reply action on it.
+   `firebaseMessagingBackgroundHandler` and `_onForegroundMessage` both
+   already take their copy from `data` when the block is absent.
+2. Set `apns.payload.aps.category` to `yello_chat_reply`. iOS will not accept
+   a data-only push as a visible alert, so there the notification block stays
+   and the category is what grows the reply field.
+
+*Amended:* a chat alert is drawn with `MessagingStyle` and
+`CATEGORY_MESSAGE`, not as plain title/body — that is what makes Android
+present it as a conversation with the reply field open rather than a
+one-liner with everything folded behind a chevron. `conversationTitle` stays
+null because the payload never says whether the conversation is a group, and
+setting it makes Android prefix every line with a sender name. How much of
+this a device honours is the device's call: One UI's *Notification pop-up
+style: Brief* collapses every heads-up to a pill regardless.
+
+*Amended:* a successful reply **clears** the notification (the action carries
+`cancelNotification: true`) rather than rewriting it with the sent line. It
+also means the shade never sits on the system's progress spinner, which only
+resolves when the notification changes or goes. A failed send puts a fresh
+alert back carrying the text that didn't go out, so the words are recoverable.
+
+*Amended:* the refresh after a reply goes through `IsolateNameServer`, not
+through `_updates` directly. Every action tap is delivered to the plugin's
+background dispatcher — even with the app foregrounded — so the handler runs
+in an engine that cannot see the service's streams. The running app publishes
+a port; the reply pings it. See `docs/GOTCHAS.md`.
+
+**Rejected:** redrawing the OS's alert from the app (cancel id `0`, re-show
+with the action). The handler that would do it never runs on Android for a
+notification-block push, so there is nothing to redraw from — and where it
+does run, iOS, it would double the alert.
+
+**Revisit if:** `yello-notify` starts sending chat pushes data-only (drop the
+foreground-only caveat), or iOS background replies to a service-drawn push
+turn out to need a Notification Service Extension of their own.
+
+---
+
+## ADR-026 — The Profile tab's chrome collapses into an app bar, driven by a `ValueNotifier` rather than a sliver
+
+**Status:** Accepted.
+
+The Profile tab's menu and search buttons already floated over the cover
+photo in a `Positioned` on top of the page's `ListView`. They now sit inside
+`_ProfileTopBar`, which fades a `surf` surface, a cast shadow and an
+identity — avatar, name, `@username`, entering from the left — in over the
+72px of scroll that ends 40px before the header's own name line would reach
+the top of the viewport. The buttons do not move.
+
+**Why not a `SliverAppBar`.** The obvious shape is `CustomScrollView` +
+a pinned `SliverAppBar` with a `flexibleSpace`, the way `FeedPage` does its
+top bar. It does not fit here. The header's avatar straddles the identity
+card's top edge with `Stack`/`Positioned` (ADR-024), the cover fades into
+`bg` behind it, and the whole thing is one `ListView` on purpose so there is
+exactly one scrollable on the screen. Converting to slivers to get a
+collapse would mean rebuilding that geometry inside a `FlexibleSpaceBar`'s
+`collapseMode`, and `docs/GOTCHAS.md` already records what chasing a
+`flexibleSpace` collapse cost on the feed. The bar here is an overlay that
+reads the scroll offset; the list underneath is untouched.
+
+**Why a `ValueNotifier` and not `setState`.** The page holds a `ListView`
+whose children are the header, the segmented switcher and a column of real
+`PostCard`s. A `setState` in the scroll listener rebuilds all of that once
+per frame for the length of a flick. The offset goes into a `ValueNotifier`
+instead, and only the ~56px bar listens. Two further cuts fall out of that:
+the offset is **clamped to the end of the collapse**, so scrolling on past it
+writes the same value and `ValueNotifier` stops notifying entirely; and the
+two buttons are passed as `ValueListenableBuilder`'s `child`, so they are
+built once and handed through every rebuild. The title reads the user from
+its own `BlocSelector`, not a `BlocBuilder`, so a scroll frame never re-runs
+a whole `ProfileState` comparison.
+
+**Why the collapse threshold lives on `ProfileHeader`.** The hand-off point
+is a fact about the header's geometry — cover height, card overlap, avatar
+size — not about the bar. `ProfileHeader.nameOffset` derives it from the
+constants that already exist there, and the bar subtracts from that. Change
+the cover height and the hand-off follows on its own.
+
+**Why the bar grows an `AbsorbPointer`.** The background is a
+`BoxDecoration` colour, and a `DecoratedBox` does not hit-test — only
+`ColoredBox` is opaque to pointers, and it is opaque at every alpha
+including zero. So an opaque-looking bar would have let a tap fall through
+to whatever post card was scrolled under it. A `Positioned.fill`
+`AbsorbPointer`, switched on only once the bar is no longer fully
+transparent, blocks that while leaving the resting state as see-through to
+cover drags as it was before.
+
+**The collapsed state's depth cue is a painted shadow, not a `boxShadow`.**
+The bar reads as floating — a `surf` surface over the page's `bg` with a
+shadow cast onto the list, deliberately the same elevation language
+`BottomNavBar` already uses at the other end of the screen (black at 0.08
+light / 0.45 dark, 16px blur, 4px offset), plus `AppShadows.card`'s tighter
+contact layer to anchor the edge.
+
+It cannot be a `BoxShadow` in this bar's `BoxDecoration`, because that
+decoration changes on every scroll frame, and a blurred shadow on a
+per-frame decoration is precisely the pattern that crashed Impeller on this
+project (`docs/GOTCHAS.md`; ADR-012 sets out where a declared blurred shadow
+is still fine — a decoration that only rebuilds with its parent, which this
+is not). So `_TopBarShadowPainter` draws it with a `MaskFilter.blur` on a
+`Paint` instead: the same animated-blur technique `_ActiveTabIndicatorPainter`
+has driven from a running animation since the bottom bar shipped. The painter
+clips to the strip *below* the bar, so the blur's top and side falloff never
+tints the bar itself at any point in the fade, and the inner `Stack` is
+`Clip.none` so the shadow can reach past the bar's own box at all.
+
+*Amended:* this ADR originally shipped with a bottom hairline and no shadow,
+on the reasoning that any blurred shadow here was too close to the Impeller
+crash to risk. The painter route gets the floating read without going near
+the banned pattern, and both modes are verified on-device (Samsung
+`R5CX11J4TPR`) — which the hairline version never was.
+
+**The title's `Transform.translate` is not a re-run of ADR-024.** That ADR
+bans `Transform` for *tappable* overlaps, because a translated child cannot
+hit-test a tap past its own untransformed box. The title is wrapped in an
+`IgnorePointer` and takes no taps at all, so the trap does not apply and a
+translate is the cheapest way to slide it.
+
+**Revisit if:** the profile ever needs a real collapsing cover (a parallax
+or a shrinking image), at which point the sliver rewrite buys something this
+overlay cannot give.
+
+---
+
+## ADR-027 — The profile's All / Shared / Saved filters are `SegmentedTabs`, not a chip row
+
+**Status:** Accepted.
+
+`SegmentedTabs` names this screen in its own doc comment as the example of
+what it is for, and draws the line: segments are for a choice that is
+exclusive and always made, `FilterChipPill` is for independent toggles any
+of which may be off. The profile had drifted to a horizontally scrolling row
+of bordered pills, which says the wrong thing about a three-way filter where
+one is always active. It is now the shared control, with the counts kept in
+the labels (`All 12`, `Shared 3`, `Saved 7`).
+
+The horizontal scroll went with it. `SegmentedTabs` splits the width evenly
+and each segment already ellipsises, so the reason the row scrolled — three
+count-carrying labels outgrowing a narrow screen — is handled inside the
+control. `ShimmerOwnProfileView` follows: one full-width 45px pill where it
+used to draw three 36px ones, because the skeleton should describe one
+control rather than three.
+
+---
+
+## ADR-028 — Settings is its own feature, and App version shows no update check
+
+**Status:** Accepted.
+
+The account menu on the profile (☰) had grown into two different things: a
+theme switch that acted in place, three shortcuts to screens that already
+had another way in (Your circle, Shared posts), and two real account
+screens. It is now one thing — a list where every row opens a screen —
+holding Theme, Send feedback, Notification preferences, App version and Log
+out.
+
+**The two new screens live in `lib/features/settings/`, not in `profile/`.**
+Neither one is about a profile; the only thing tying them to that screen is
+the button that opens them. `ThemeCubit` stays in `core/theme` (the root
+`MaterialApp` reads it, so it cannot belong to a feature) and grew
+`setMode`, replacing `toggle` — with the screen making the choice
+explicitly, a caller that flips whatever is current no longer has a user.
+
+**App version reads the device, through the usual layers.** It is a local
+read (`package_info_plus` + `device_info_plus`) behind
+`AppInfoLocalDataSource` → `AppInfoRepository` → `GetAppBuildInfoUseCase` →
+`AppVersionCubit`, the same shape `BookmarksLocalDataSource` already uses
+for a device-local feature. The repository skips the `NetworkInfo` gate the
+remote-backed ones open with: this data must still resolve with the radio
+off. The OS and device rows are best-effort and are simply left out when
+`device_info_plus` cannot answer, rather than failing the screen that was
+asked for a version number.
+
+**The reference design's "Updates" group is deliberately not built.** It
+carries a *Check now* button, a "checked 54 minutes ago" line and a "check
+automatically" toggle. The API serves no version resource to compare an
+installed build against, and Yello ships through the Play Store and the App
+Store, so all three controls could only ever invent their answer — a toggle
+nothing reads, a timestamp of a check that never happened. In its place a
+"This build" card states what is true (this is the installed build, new ones
+come from the store) and a *Copy* button puts the whole diagnostic line on
+the clipboard, which is what the version screen is actually opened for.
+
+**What removing the three menu rows costs.** Your circle (shell branch 1)
+now has exactly one entry point, the connections row on the profile header —
+noted in both places in the code. Shared posts keeps its own `Shared` tab on
+the profile, so only the full-screen version is now unreachable from the UI;
+its route stays registered. Privacy & safety is still reachable from the
+notifications screen and is still where a tapped `REPORT_RESOLVED` push
+lands, which is why that route must stay.
+
+**Revisit if:** the backend grows a "latest version" endpoint, at which
+point the Updates group can be built for real against it; or the app gains
+enough settings to want a settings *hub* screen rather than a bottom-sheet
+menu.

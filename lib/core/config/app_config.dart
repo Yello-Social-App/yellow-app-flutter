@@ -9,6 +9,15 @@ abstract final class AppConfig {
   static const String appDisplayName = 'yello';
   static const String packageName = 'social.yello.app';
 
+  /// The only backend that exists today — `main()` hands it to [init].
+  ///
+  /// It is a constant rather than only a literal in `main.dart` because the
+  /// notification background isolates (the FCM handler and the direct-reply
+  /// action) never run `bootstrap()`, and statics don't cross an isolate
+  /// boundary: over there this is the one thing that can re-seed [baseUrl].
+  /// Repoint it here if a dedicated production host is ever stood up.
+  static const String defaultBaseUrl = 'https://api.yello.cachewraith.com';
+
   static String? _baseUrl;
   static bool? _enableLogging;
 

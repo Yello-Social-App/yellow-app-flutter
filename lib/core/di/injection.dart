@@ -87,6 +87,11 @@ import '../../features/search/data/repositories/search_repository_impl.dart';
 import '../../features/search/domain/repositories/search_repository.dart';
 import '../../features/search/domain/usecases/search_users_usecase.dart';
 import '../../features/search/presentation/bloc/search_cubit.dart';
+import '../../features/settings/data/datasources/app_info_local_datasource.dart';
+import '../../features/settings/data/repositories/app_info_repository_impl.dart';
+import '../../features/settings/domain/repositories/app_info_repository.dart';
+import '../../features/settings/domain/usecases/get_app_build_info_usecase.dart';
+import '../../features/settings/presentation/bloc/app_version_cubit.dart';
 import '../../features/showcase/data/datasources/showcase_remote_datasource.dart';
 import '../../features/showcase/data/repositories/showcase_repository_impl.dart';
 import '../../features/showcase/domain/entities/project_entity.dart';
@@ -135,6 +140,7 @@ Future<void> configureDependencies() async {
   _registerSearch();
   _registerCommunities();
   _registerShowcase();
+  _registerSettings();
 }
 
 void _registerCore() {
@@ -624,4 +630,17 @@ void _registerShowcase() {
     (projectId, seed) =>
         ProjectDetailCubit(projectId: projectId, seed: seed, getProject: sl(), recordView: sl(), toggleLike: sl()),
   );
+}
+
+void _registerSettings() {
+  // Device-local only: the API has no version resource, so nothing here
+  // touches the network (`docs/BACKEND.md`).
+  sl.registerLazySingleton<AppInfoLocalDataSource>(() => AppInfoLocalDataSourceImpl());
+  sl.registerLazySingleton<AppInfoRepository>(() => AppInfoRepositoryImpl(sl()));
+
+  sl.registerLazySingleton(() => GetAppBuildInfoUseCase(sl()));
+
+  // Factory: one read per visit. The build cannot change while the process
+  // is alive, so there is nothing for a singleton to save.
+  sl.registerFactory(() => AppVersionCubit(getBuildInfo: sl()));
 }

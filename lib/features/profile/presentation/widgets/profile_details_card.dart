@@ -6,16 +6,18 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 
 /// The reference's "Personal details" block, mapped onto the fields this
-/// backend actually has on `UserResponse` — name, username, join date, and
-/// (once expanded) email, bio and account status. There is no place/work/
-/// school data in the API, so those rows have no Yello equivalent.
+/// backend actually has on `UserResponse` — name, username, join date and
+/// email. There is no place/work/school data in the API, so those rows have
+/// no Yello equivalent.
 ///
-/// [expanded] is driven by the chevron beside the name in `ProfileHeader`.
+/// Every row is always visible: this used to be an expander driven by a
+/// chevron beside the name in `ProfileHeader`, but that chevron is gone and a
+/// four-row card doesn't earn the extra tap. Bio lives in the header, and
+/// account status beside the header's connections row.
 class ProfileDetailsCard extends StatelessWidget {
-  const ProfileDetailsCard({super.key, required this.user, required this.expanded, required this.onEdit});
+  const ProfileDetailsCard({super.key, required this.user, required this.onEdit});
 
   final UserEntity user;
-  final bool expanded;
   final VoidCallback onEdit;
 
   static const List<String> _months = [
@@ -38,7 +40,6 @@ class ProfileDetailsCard extends StatelessWidget {
     final colors = AppColors.of(context);
     final createdAt = user.createdAt;
     final fullName = user.fullName?.trim() ?? '';
-    final bio = user.bio?.trim() ?? '';
 
     final rows = <Widget>[
       _DetailRow(
@@ -51,41 +52,15 @@ class ProfileDetailsCard extends StatelessWidget {
         icon: Icons.cake_outlined,
         value: 'Joined ${_months[createdAt.month - 1]} ${createdAt.day}, ${createdAt.year}',
       ),
-      if (expanded) ...[
-        _DetailRow(icon: Icons.mail_outline_rounded, value: user.email),
-        _DetailRow(
-          icon: Icons.format_quote_rounded,
-          value: bio.isEmpty ? 'Add a bio' : bio,
-          muted: bio.isEmpty,
-        ),
-        _DetailRow(
-          icon: Icons.verified_user_outlined,
-          value: 'Account ${user.status.toLowerCase()}',
-        ),
-      ],
+      _DetailRow(icon: Icons.mail_outline_rounded, value: user.email),
     ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Text('PERSONAL DETAILS', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
-            const Spacer(),
-            Material(
-              color: colors.surf2,
-              shape: const CircleBorder(),
-              child: InkWell(
-                onTap: onEdit,
-                customBorder: const CircleBorder(),
-                child: SizedBox(
-                  width: 34,
-                  height: 34,
-                  child: Icon(Icons.edit_outlined, size: 16, color: colors.ink2),
-                ),
-              ),
-            ),
-          ],
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Text('PERSONAL DETAILS', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
         ),
         const SizedBox(height: 10),
         DecoratedBox(
@@ -118,8 +93,8 @@ class _DetailRow extends StatelessWidget {
   final IconData icon;
   final String value;
 
-  /// A placeholder rather than real data ("Add a bio") — rendered in [ink3]
-  /// so an empty field doesn't read as content.
+  /// A placeholder rather than real data ("Add your name") — rendered in
+  /// [ink3] so an empty field doesn't read as content.
   final bool muted;
 
   @override
@@ -138,10 +113,7 @@ class _DetailRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              value,
-              style: AppTextStyles.bodyMd.copyWith(color: muted ? colors.ink3 : colors.ink),
-            ),
+            child: Text(value, style: AppTextStyles.bodyMd.copyWith(color: muted ? colors.ink3 : colors.ink)),
           ),
         ],
       ),

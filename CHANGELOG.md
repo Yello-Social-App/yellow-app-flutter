@@ -18,6 +18,22 @@ file only when it genuinely helps.
 
 ### Added
 
+- **Your name follows you down your own profile.** Scrolling your profile
+  now slides an app bar in over the top: your photo and name arrive from the
+  left as the big header name goes out under them, and the menu and search
+  buttons stay exactly where they were. The bar floats above the posts on a
+  soft shadow rather than a drawn line. Scroll back up and it hands the name
+  back to the header.
+- **Reply to a message from the notification itself.** Chat notifications
+  are now drawn as conversations — sender on top, the message below, and a
+  *Reply* field — so you can answer from the notification shade without
+  opening Yello. Sending clears the notification. If it doesn't go through
+  you get a new one saying so, with your text in it, so nothing is lost and
+  you can try again or tap into the chat. Today this works while Yello is
+  open; a notification that arrives with the app closed still has no Reply
+  button, because the phone draws that one straight from the push and never
+  gives the app a say — closing that gap needs a change on the notification
+  service (see `docs/BACKEND.md`).
 - **Hide a post, report it, or mute whoever wrote it.** The "···" menu on
   someone else's post now ends with three new choices. *Hide this post*
   takes it out of your feed for good, on every device you sign in on.
@@ -78,9 +94,39 @@ file only when it genuinely helps.
   assistant starts from the same facts and the same read order.
 - `tool/codemap.sh`, which regenerates `docs/CODEMAP.md` from the source tree
   (`--check` fails when the committed map is stale).
+- **A Theme screen, instead of a switch buried in a menu.** The account menu's
+  *Theme* item now opens a screen of its own, where Light and Dark are laid
+  out side by side with the one you are on ticked. The menu row tells you
+  which is active without opening it.
+- **App version, so you can say which build you are on.** A new screen under
+  the account menu shows the version and build number of the Yello installed
+  on this phone, along with the package, your Android/iOS version and your
+  device. *Copy* puts the lot on your clipboard in one line, ready to paste
+  into a bug report. It does not check for a newer version — updates come
+  from the store, and Yello has nothing to ask about them.
 
 ### Changed
 
+- **The account menu is shorter, and every row now opens a screen.** *Your
+  circle*, *Shared posts* and *Privacy & safety* have been taken out of the
+  menu behind the ☰ button on your profile, and *Theme* and *App version*
+  added in their place. Your circle is still one tap away from the
+  connections row on your profile header, and your shared posts are still
+  the *Shared* tab on your own profile.
+
+- **All / Shared / Saved is one switcher now, not three loose pills.** The
+  three filters on your profile share a single segmented control — the same
+  one the Communities and Showcase sort rows use — so it is clearer that
+  exactly one of them is ever on.
+- **Personal details on your profile is a plain list, not something you open.**
+  Every row — your name, username, join date and email — is on screen from
+  the moment the profile loads. Your bio no longer repeats there, since it
+  already reads under your name, and whether your account is active now sits
+  on the same line as your connections count.
+- **Your profile's name, stats and buttons sit on a card again.** The block
+  below the cover photo is once more a rounded, bordered panel, with your
+  profile picture straddling its top edge — half on the cover, half on the
+  card — the way it looks on someone else's profile.
 - **Muted accounts disappear from your feed straight away** rather than on
   the next refresh — the posts already on screen go with them.
 - **The app is lighter.** Borders are softer hairlines rather than drawn grey

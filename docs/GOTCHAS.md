@@ -80,6 +80,53 @@ phone becomes at Android's larger **Display size** settings. The feed's
 
 ## Framework / package versions
 
+### An FCM push with a `notification` block runs **no Dart** on Android
+
+Android's FCM SDK draws a push that carries a `notification` block straight
+into the system tray whenever the app is backgrounded or killed, and calls
+nothing: not `onMessage`, not the `onBackgroundMessage` handler. Only a
+**data-only** push wakes Dart in that state. (`CHAT_MESSAGE_DELETED` works
+today precisely because it is data-only.)
+
+- Anything that has to be *on* a backgrounded notification — an action
+  button, a direct-reply field, `MessagingStyle`, a custom grouping — can
+  only be attached by the code that draws it, so it needs the push to arrive
+  data-only. There is no client-side workaround: you cannot intercept,
+  decorate or redraw the OS's alert.
+- Don't "fix" a missing reply button by cancelling id `0` and re-showing.
+  The handler that would do it never runs on Android for such a push, and on
+  iOS — where the handler *can* run alongside a visible alert — it doubles
+  the notification. `firebaseMessagingBackgroundHandler` bails on
+  `message.notification != null` for that reason.
+- iOS is the mirror image: it will not show a data-only push as an alert at
+  all, so there the notification block stays and `aps.category` is what adds
+  the reply field. See ADR-025 and `docs/BACKEND.md`.
+
+### A notification *action* always runs in the background isolate, even with the app open
+
+`flutter_local_notifications`' `ActionBroadcastReceiver` routes every
+`ACTION_TAPPED` to the callback dispatcher in its own `FlutterEngine` and
+only ever uses the live method channel for a main-isolate *dismissal*. So on
+Android:
+
+- `onDidReceiveNotificationResponse` fires for a tap on the notification
+  **body** only. An action tap — including a direct reply — goes to
+  `onDidReceiveBackgroundNotificationResponse` whether or not the app is
+  running, in an engine with no `sl`, no `AppConfig`, and no access to the
+  service's streams.
+- Anything the running app has to do in response therefore needs a process-
+  wide hop. `PushNotificationService` publishes a `ReceivePort` under
+  `IsolateNameServer` (`_replyPortName`) and the reply pings it; a lookup
+  that returns null just means no app is running. Don't assume an `emit`,
+  a `StreamController` or a `get_it` lookup in an action handler will reach
+  anything.
+- The action's `PendingIntent` targets that receiver by component, so the
+  app's own manifest **must** declare
+  `com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver`. Without
+  it the button still draws and Send still dismisses the keyboard — the
+  broadcast just goes nowhere, silently. Manifest changes need a full
+  rebuild and reinstall, not a hot restart.
+
 ### `go_router` ^17.5.0: `GoRouterState.name` is `null` in a top-level `redirect`
 
 Reading `state.name` inside `AppRouter`'s redirect returns `null` regardless of

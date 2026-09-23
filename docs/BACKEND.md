@@ -274,6 +274,30 @@ safety net while the socket is up and drops to 5 s when it is not.
   push runs no Dart for it, so the affected screen catches up on its next
   load.
 
+### Direct reply needs two payload changes (2026-09-23)
+
+The app can now send a reply typed straight into the notification — the
+Reply action, `chat_reply_action.dart` + `PushNotificationService`, ADR-025.
+An action button only exists on an alert *Dart* drew, though, and Android
+runs no Dart for a push carrying its own `notification` block (see
+`docs/GOTCHAS.md`). So today the Reply button appears only while the app is
+foregrounded, and closing that gap is entirely on `yello-notify`:
+
+| Platform | What the service must send | Why |
+|---|---|---|
+| Android | `CHAT_MESSAGE` **data-only** — no `notification` block, `title` and `body` repeated as `data` keys, `android.priority: "high"` | the only state in which the app is woken to draw the alert itself |
+| iOS | keep the notification block, and set `apns.payload.aps.category` to `yello_chat_reply` | iOS won't show a data-only push at all; the category is what grows the reply field |
+
+Nothing else changes: the deep-link keys, the `chat:<conversationId>` tag and
+`CHAT_MESSAGE_DELETED` stay exactly as they are, and the app already reads
+its copy from `data` when the notification block is absent, so both payload
+shapes work today. Verified on-device: **not yet** — no emulator in this
+sandbox.
+
+An iOS reply to an alert *the system* drew may additionally need a
+Notification Service Extension; unverified, and irrelevant until the
+category is being sent.
+
 ## Deliberate gaps — do not "fix" these client-side
 
 | Feature | Status | Where |
@@ -281,6 +305,7 @@ safety net while the socket is up and drops to 5 s when it is not.
 | **Stories** | No `/stories` resource exists. Permanent client-side seed, in-memory only; "seen" resets each app session. | `feed/data/datasources/story_local_datasource.dart` |
 | **Saved posts / bookmarks** | No endpoint. Persisted on-device via `shared_preferences`; not synced across devices. | `feed/data/datasources/bookmarks_local_datasource.dart` |
 | **Chat** | *Does* have a backend (`yello-chat`, `/ws`, with a socket upgrade on the same path for live delivery). | `chat/data/datasources/chat_remote_datasource.dart` |
+| **App updates / version check** | No version resource on any of the three services — nothing to ask "is there a newer build?". The App version screen reports the installed build only and points at the store; don't add a check-now button or an auto-check toggle against a made-up endpoint. | `settings/data/datasources/app_info_local_datasource.dart` |
 
 ## Known backend limitations (not solvable in this repo)
 

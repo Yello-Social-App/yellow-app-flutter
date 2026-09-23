@@ -40,6 +40,15 @@ abstract final class RouteNames {
 
   static const String sendFeedback = 'send-feedback';
 
+  /// Account menu → Theme: the light/dark choice, which used to be a toggle
+  /// in the menu itself.
+  static const String theme = 'theme';
+
+  /// Account menu → App version: the installed build and the device facts a
+  /// support reply asks for. Shows no update check — the API has no version
+  /// resource, see `docs/BACKEND.md`.
+  static const String appVersion = 'app-version';
+
   // Communities. The `{slug}` path parameter is a community *slug*, never its
   // uuid — that is what every `/communities/...` API route takes.
   static const String communities = 'communities';

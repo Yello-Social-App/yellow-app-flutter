@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yello_social_app/core/notifications/chat_reply_action.dart';
 import 'package:yello_social_app/core/notifications/push_notification_service.dart';
 
 void main() {
@@ -67,6 +68,52 @@ void main() {
       expect(chatNotificationTag({'type': 'CHAT_MESSAGE_DELETED', 'conversationId': '7c1e'}), 'chat:7c1e');
       expect(chatNotificationTag({'type': 'CHAT_REACTION', 'conversationId': '7c1e'}), isNull);
       expect(chatNotificationTag({'type': 'POST_REACTED', 'postId': 'p'}), isNull);
+    });
+  });
+
+  group('chatAlertPayload', () {
+    test('carries the drawn copy alongside the push data', () {
+      final payload = chatAlertPayload(
+        {'type': 'CHAT_MESSAGE', 'conversationId': '7c1e'},
+        title: 'Alice',
+        body: 'hey',
+      );
+      expect(payload, {'type': 'CHAT_MESSAGE', 'conversationId': '7c1e', 'title': 'Alice', 'body': 'hey'});
+    });
+
+    test('leaves out copy it was not given, rather than writing nulls', () {
+      expect(chatAlertPayload({'conversationId': '7c1e'}, body: 'You: hi'), {
+        'conversationId': '7c1e',
+        'body': 'You: hi',
+      });
+    });
+  });
+
+  group('decodeNotificationPayload', () {
+    test('reads back a payload this app wrote', () {
+      expect(decodeNotificationPayload('{"conversationId":"7c1e"}'), {'conversationId': '7c1e'});
+    });
+
+    test('is null for nothing, junk, or a non-object', () {
+      expect(decodeNotificationPayload(null), isNull);
+      expect(decodeNotificationPayload(''), isNull);
+      expect(decodeNotificationPayload('not json'), isNull);
+      expect(decodeNotificationPayload('[1,2]'), isNull);
+    });
+  });
+
+  group('sendChatReply', () {
+    // Both of these return before touching secure storage or the network,
+    // which is what makes them testable without a device: a reply with
+    // nowhere to go, or nothing in it, is never sent.
+    test('refuses a payload that names no conversation', () async {
+      expect(await sendChatReply(data: const {'type': 'CHAT_MESSAGE'}, text: 'hi'), isFalse);
+      expect(await sendChatReply(data: const {'conversationId': '  '}, text: 'hi'), isFalse);
+    });
+
+    test('refuses a reply that is empty once sanitised', () async {
+      expect(await sendChatReply(data: const {'conversationId': '7c1e'}, text: '   '), isFalse);
+      expect(await sendChatReply(data: const {'conversationId': '7c1e'}, text: '​'), isFalse);
     });
   });
 }

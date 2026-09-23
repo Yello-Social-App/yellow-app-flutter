@@ -151,7 +151,7 @@ class _PostDetailViewState extends State<_PostDetailView> {
                       ),
                       PostDetailStatus.error => Center(
                         child: Padding(
-                          padding: const EdgeInsets.all(24),
+                          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                           child: ErrorView(
                             message:
                                 state.errorMessage ??

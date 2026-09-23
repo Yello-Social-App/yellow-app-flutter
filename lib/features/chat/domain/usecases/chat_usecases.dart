@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:dartz/dartz.dart';
 import 'package:equatable/equatable.dart';
@@ -66,6 +67,16 @@ const int chatMessageMaxLength = 4000;
 
 /// `CHAT_MESSAGE_MAX_ATTACHMENTS` — files per message.
 const int chatMessageMaxAttachments = 10;
+
+final _clientIdRandom = Random();
+
+/// Idempotency key for one composed message: time-ordered, collision-safe
+/// enough for a single device, and well inside the server's 64-char limit.
+/// Lives here rather than on `ChatCubit` because the notification's
+/// direct-reply action needs one too, from an isolate that has no Cubit.
+String newChatClientId() =>
+    '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-'
+    '${_clientIdRandom.nextInt(0x7fffffff).toRadixString(36)}';
 
 class SendMessageParams extends Equatable {
   const SendMessageParams({

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:dartz/dartz.dart';
 import 'package:equatable/equatable.dart';
@@ -299,13 +298,9 @@ class ChatCubit extends Cubit<ChatState> {
     }
   }
 
-  static final _random = Random();
-
-  /// Idempotency key for one composed message: time-ordered, collision-safe
-  /// enough for a single device, and well inside the server's 64-char limit.
-  static String newClientId() =>
-      '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-'
-      '${_random.nextInt(0x7fffffff).toRadixString(36)}';
+  /// Idempotency key for one composed message — see [newChatClientId],
+  /// which the notification reply action shares.
+  static String newClientId() => newChatClientId();
 
   Future<void> load() async {
     if (_isLoading || isClosed) return;

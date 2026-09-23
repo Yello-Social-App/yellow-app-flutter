@@ -5,8 +5,8 @@
 Index of every meaningful file in `lib/`, so you can jump straight to the
 right one instead of searching. **Read this before opening source files.**
 
-- Generated from commit `4a80307`
-- `lib/`: 260 Dart files · `test/`: 25 test files
+- Generated from commit `a6d3ca4`
+- `lib/`: 270 Dart files · `test/`: 26 test files
 - Regenerate: `bash tool/codemap.sh` · Staleness check: `bash tool/codemap.sh --check`
 
 Layer rule (see [ARCHITECTURE.md](ARCHITECTURE.md)): `presentation` → `domain/usecases`
@@ -53,6 +53,8 @@ Declared in `lib/core/router/app_router.dart`; names live in
 | `/notification-preferences` | `notificationPreferences` | `NotificationPreferencesPage` |
 | `/privacy-safety` | `privacySafety` | `PrivacySafetyPage` |
 | `/feedback` | `sendFeedback` | `SendFeedbackPage` |
+| `/theme` | `theme` | `ThemePage` |
+| `/app-version` | `appVersion` | `AppVersionPage` |
 | `/photo` | `photoViewer` | `CustomTransitionPage / PhotoViewerPage` |
 | `/communities/:slug/new` | `createCommunityPost` | `CommunityDetailPage / CreateCommunityPostPage` |
 | `/communities/:slug` | `community` | `CommunityDetailPage` |
@@ -77,6 +79,8 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `AddCommunityCommentUseCase`
 - `AddGroupMembersUseCase`
 - `ApiClient`
+- `AppInfoLocalDataSource`
+- `AppInfoRepository`
 - `AppRouter`
 - `AuthLocalDataSource`
 - `AuthRemoteDataSource`
@@ -108,6 +112,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `ForgotPasswordUseCase`
 - `FriendsRemoteDataSource`
 - `FriendsRepository`
+- `GetAppBuildInfoUseCase`
 - `GetBlockedUsersUseCase`
 - `GetCommentsUseCase`
 - `GetCommunitiesUseCase`
@@ -219,6 +224,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 A new instance per injection point — screen-scoped state that should reset
 on re-entry.
 
+- `AppVersionCubit`
 - `AuthCubit`
 - `CommunitiesCubit`
 - `CommunityFeedCubit`
@@ -303,7 +309,7 @@ on re-entry.
 
 **Usecases**
 
-- `lib/features/chat/domain/usecases/chat_usecases.dart` — CursorParams, GetConversationsUseCase, GetConversationUseCase, GetMessagesParams, GetMessagesUseCase, SendMessageParams, SendMessageUseCase, EditMessageParams, EditMessageUseCase, MessageRefParams, DeleteMessageUseCase, ReactToMessageParams, ReactToMessageUseCase, UploadAttachmentParams, UploadAttachmentUseCase, RefreshAttachmentUseCase, MarkReadParams, MarkReadUseCase, StartDirectConversationUseCase, StartGroupParams, StartGroupConversationUseCase, RenameGroupParams, RenameGroupUseCase, SetGroupPhotoParams, SetGroupPhotoUseCase, RemoveGroupPhotoUseCase, GroupMembersParams, AddGroupMembersUseCase, GroupMemberParams, RemoveGroupMemberUseCase, ChangeMemberRoleParams, ChangeMemberRoleUseCase, LeaveGroupUseCase, InviteToGroupUseCase, AcceptGroupInviteUseCase, DeclineGroupInviteUseCase
+- `lib/features/chat/domain/usecases/chat_usecases.dart` — CursorParams, GetConversationsUseCase, GetConversationUseCase, GetMessagesParams, GetMessagesUseCase, SendMessageParams, SendMessageUseCase, EditMessageParams, EditMessageUseCase, MessageRefParams, DeleteMessageUseCase, ReactToMessageParams, ReactToMessageUseCase, UploadAttachmentParams, UploadAttachmentUseCase, RefreshAttachmentUseCase, MarkReadParams, MarkReadUseCase, StartDirectConversationUseCase, StartGroupParams, StartGroupConversationUseCase, RenameGroupParams, RenameGroupUseCase, SetGroupPhotoParams, SetGroupPhotoUseCase, RemoveGroupPhotoUseCase, GroupMembersParams, AddGroupMembersUseCase, GroupMemberParams, RemoveGroupMemberUseCase, ChangeMemberRoleParams, ChangeMemberRoleUseCase, LeaveGroupUseCase, InviteToGroupUseCase, AcceptGroupInviteUseCase, DeclineGroupInviteUseCase, newChatClientId()
 
 **Entities**
 
@@ -664,6 +670,41 @@ on re-entry.
 
 - `lib/features/search/data/datasources/search_remote_datasource.dart` — SearchRemoteDataSourceImpl
 
+### Settings — `lib/features/settings`
+
+**Cubits + States**
+
+- `lib/features/settings/presentation/bloc/app_version_cubit.dart` — AppVersionState, AppVersionCubit
+
+**Pages**
+
+- `lib/features/settings/presentation/pages/app_version_page.dart` — AppVersionPage
+- `lib/features/settings/presentation/pages/theme_page.dart` — ThemePage
+
+**Widgets**
+
+- `lib/features/settings/presentation/widgets/settings_card.dart` — SettingsCard
+
+**Usecases**
+
+- `lib/features/settings/domain/usecases/get_app_build_info_usecase.dart` — GetAppBuildInfoUseCase
+
+**Entities**
+
+- `lib/features/settings/domain/entities/app_build_info.dart` — AppBuildInfo
+
+**Repository interfaces**
+
+- `lib/features/settings/domain/repositories/app_info_repository.dart`
+
+**Repository implementations**
+
+- `lib/features/settings/data/repositories/app_info_repository_impl.dart` — AppInfoRepositoryImpl
+
+**Data sources**
+
+- `lib/features/settings/data/datasources/app_info_local_datasource.dart` — AppInfoLocalDataSourceImpl
+
 ### Shell — `lib/features/shell`
 
 **Pages**
@@ -763,7 +804,8 @@ on re-entry.
 
 **`lib/core/notifications`**
 
-- `lib/core/notifications/push_notification_service.dart` — ConversationDestination, PostDestination, ProfileDestination, ReportsDestination, PushNotificationServiceImpl, cancelChatNotification(), chatNotificationTag(), firebaseMessagingBackgroundHandler()
+- `lib/core/notifications/chat_reply_action.dart` — sendChatReply()
+- `lib/core/notifications/push_notification_service.dart` — ConversationDestination, PostDestination, ProfileDestination, ReportsDestination, PushNotificationServiceImpl, cancelChatNotification(), chatAlertDetails(), chatAlertPayload(), chatNotificationTag(), decodeNotificationPayload(), firebaseMessagingBackgroundHandler(), notificationReplyBackgroundHandler(), replyFromNotification()
 
 **`lib/core/router`**
 
@@ -858,6 +900,7 @@ on re-entry.
 - `test/features/profile/profile_header_test.dart`
 - `test/features/profile/shared_posts_cubit_test.dart`
 - `test/features/safety/safety_cubits_test.dart`
+- `test/features/settings/app_version_cubit_test.dart`
 - `test/features/shell/bottom_nav_bar_test.dart`
 - `test/features/showcase/showcase_widgets_test.dart`
 - `test/helpers/mock_data.dart`

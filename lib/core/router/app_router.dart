@@ -26,6 +26,8 @@ import '../../features/profile/presentation/pages/shared_posts_page.dart';
 import '../../features/safety/presentation/pages/privacy_safety_page.dart';
 import '../../features/safety/presentation/pages/send_feedback_page.dart';
 import '../../features/search/presentation/pages/search_page.dart';
+import '../../features/settings/presentation/pages/app_version_page.dart';
+import '../../features/settings/presentation/pages/theme_page.dart';
 import '../../features/shell/presentation/pages/main_shell_page.dart';
 import '../../features/shell/presentation/pages/splash_page.dart';
 import '../../features/showcase/domain/entities/project_entity.dart';
@@ -205,6 +207,16 @@ class AppRouter {
               path: '/feedback',
               name: RouteNames.sendFeedback,
               builder: (context, state) => const SendFeedbackPage(),
+            ),
+            _overlayRoute(
+              path: '/theme',
+              name: RouteNames.theme,
+              builder: (context, state) => const ThemePage(),
+            ),
+            _overlayRoute(
+              path: '/app-version',
+              name: RouteNames.appVersion,
+              builder: (context, state) => const AppVersionPage(),
             ),
             // The photo viewer gets its own transition rather than
             // `_overlayRoute`'s slide-up: it is a lightbox over whatever is
