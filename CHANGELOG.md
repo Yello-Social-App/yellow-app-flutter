@@ -16,6 +16,10 @@ file only when it genuinely helps.
 
 ## [Unreleased]
 
+---
+
+## [0.3.0] — 2026-09-23
+
 ### Added
 
 - **Your name follows you down your own profile.** Scrolling your profile
