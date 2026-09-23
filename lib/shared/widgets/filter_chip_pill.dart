@@ -37,7 +37,10 @@ class FilterChipPill extends StatelessWidget {
       color: selected ? colors.yelb : colors.surf,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadii.pill),
-        side: BorderSide(color: selected ? colors.yel : colors.line, width: 1.5),
+        side: BorderSide(
+          color: selected ? colors.yel : colors.line,
+          width: 1.5,
+        ),
       ),
       child: InkWell(
         onTap: onTap,
@@ -54,7 +57,7 @@ class FilterChipPill extends StatelessWidget {
                 const SizedBox(width: 5),
                 Text(
                   trailing!,
-                  style: AppTextStyles.metaMono.copyWith(color: colors.ink3, fontSize: 9),
+                  style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink3),
                 ),
               ],
             ],

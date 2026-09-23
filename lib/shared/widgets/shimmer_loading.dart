@@ -66,11 +66,10 @@ class ShimmerListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(14),
-      decoration: _cardDecoration(colors),
+      decoration: _cardDecoration(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: const [
@@ -126,10 +125,9 @@ class ShimmerPostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      decoration: _cardDecoration(colors),
+      decoration: _cardDecoration(context),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -181,7 +179,12 @@ class ShimmerPostCard extends StatelessWidget {
                 SizedBox(width: 7),
                 ShimmerBox(width: 58, height: 33, borderRadius: AppRadii.pill),
                 Spacer(),
-                ShimmerBox(width: 82, height: 33, borderRadius: AppRadii.pill),
+                // Flexible so the trailing pill gives way on a 320dp screen,
+                // where these four fixed widths total more than the row. The
+                // real pills size to their (short) counts and fit; these are
+                // sized for the wide case, so this one shrinks instead of
+                // overflowing.
+                Flexible(child: ShimmerBox(width: 82, height: 33, borderRadius: AppRadii.pill)),
               ],
             ),
           ),
@@ -225,17 +228,12 @@ class _ShimmerTextLines extends StatelessWidget {
 
 /// The card chrome shared by both skeletons — identical to [PostCard]'s own
 /// decoration so the placeholder doesn't "pop" flat when real posts swap in.
-BoxDecoration _cardDecoration(AppColors colors) {
+BoxDecoration _cardDecoration(BuildContext context) {
+  final colors = AppColors.of(context);
   return BoxDecoration(
     color: colors.surf,
     borderRadius: BorderRadius.circular(AppRadii.xxl),
     border: Border.all(color: colors.line, width: 1.5),
-    boxShadow: [
-      BoxShadow(
-        color: colors.ink.withValues(alpha: 0.06),
-        blurRadius: 20,
-        offset: const Offset(0, 8),
-      ),
-    ],
+    boxShadow: AppShadows.card(context),
   );
 }

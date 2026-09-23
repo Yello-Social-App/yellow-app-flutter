@@ -8,7 +8,6 @@ import '../../../../features/chat/presentation/bloc/messages_cubit.dart';
 import '../../../../features/feed/presentation/bloc/feed_cubit.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
-import 'explore_sheet.dart';
 
 /// The bottom nav: Feed, Explore, a raised "+" create button, Inbox, then
 /// Profile — five equal-width slots, with a short yellow accent line sitting
@@ -40,19 +39,22 @@ import 'explore_sheet.dart';
 /// with a circular border that glows yellow while this tab is active and
 /// sits dim otherwise, matching the other tabs' icon-turns-yellow treatment.
 ///
-/// **Slot 2 is Explore, not a tab.** Signals used to sit there; it traded
+/// **Slot 2 is Explore, branch 5.** Signals used to sit there; it traded
 /// places with the feed app bar's Explore button, so Signals is now reached
-/// from that app bar (`goBranch(3)`) and this slot opens [showExploreSheet]
-/// instead. Communities and Showcase have no router branch of their own —
-/// the sheet's rows `push` over the shell — so this slot is a launcher
-/// button, not a destination: it never lights up as the active tab, and the
-/// indicator stays wherever it was. That also means the Signals unread dot
-/// no longer lives in this bar; the app bar's own Signals button carries it.
+/// from that app bar (`goBranch(3)`). Explore is a real tab like the others:
+/// its branch holds both Communities (the landing screen) and Showcase, and
+/// the title menu on those screens (`ExploreTitleMenu`) swaps between them
+/// inside the branch, so the slot stays lit for either. It went through two
+/// earlier shapes — a two-row sheet, then a bare push of Communities over
+/// the shell — both of which left the bar behind or the slot never active.
+/// The Signals unread dot no longer lives in this bar either; the app bar's
+/// own Signals button carries it.
 ///
-/// `currentIndex` is a router *branch* index (Feed 0, Inbox 2, Profile 4 —
-/// Circle's branch 1 and Signals' branch 3 have no slot here), which doesn't
-/// match this bar's left-to-right slot order, so [_slotForBranch] maps
-/// branch -> visual slot so the indicator lands under the right tab.
+/// `currentIndex` is a router *branch* index (Feed 0, Inbox 2, Profile 4,
+/// Explore 5 — Circle's branch 1 and Signals' branch 3 have no slot here),
+/// which doesn't match this bar's left-to-right slot order, so
+/// [_slotForBranch] maps branch -> visual slot so the indicator lands under
+/// the right tab.
 class BottomNavBar extends StatelessWidget {
   const BottomNavBar({
     super.key,
@@ -75,9 +77,8 @@ class BottomNavBar extends StatelessWidget {
   static const _barHeight = 62.0;
   static const _slotCount = 5;
   // Visual left-to-right order is Feed, Explore, Create, Inbox, Profile.
-  // Explore (slot 1) is deliberately absent: it opens a sheet rather than
-  // activating a branch, so no branch index ever maps onto it.
-  static const _slotForBranch = {0: 0, 2: 3, 4: 4};
+  // Create (slot 2) is a button, not a branch, so nothing maps onto it.
+  static const _slotForBranch = {0: 0, 5: 1, 2: 3, 4: 4};
 
   @override
   Widget build(BuildContext context) {
@@ -171,12 +172,8 @@ class BottomNavBar extends StatelessWidget {
                           child: _NavItem(
                             icon: Icons.widgets_outlined,
                             label: 'Explore',
-                            // Never active — see the class doc. It opens the
-                            // sheet in place rather than going through
-                            // `onTabSelected`, which only speaks branch
-                            // indices.
-                            active: false,
-                            onTap: () => showExploreSheet(context),
+                            active: currentIndex == 5,
+                            onTap: () => onTabSelected(5),
                           ),
                         ),
                         SizedBox(

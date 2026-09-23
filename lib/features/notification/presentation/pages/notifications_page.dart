@@ -40,6 +40,7 @@ IconData _iconFor(String type) => switch (type) {
   NotificationTypes.postReposted => Icons.repeat_rounded,
   NotificationTypes.friendRequestReceived => Icons.person_add_alt_1_outlined,
   NotificationTypes.friendRequestAccepted => Icons.person_outline,
+  NotificationTypes.reportResolved => Icons.shield_outlined,
   _ => Icons.notifications_none_rounded,
 };
 
@@ -62,6 +63,11 @@ void _openDeepLink(BuildContext context, NotificationEntity notification) {
     case NotificationTypes.friendRequestAccepted:
       final actorId = notification.actorId;
       if (actorId != null) context.pushNamed(RouteNames.userProfile, pathParameters: {'userId': actorId});
+    case NotificationTypes.reportResolved:
+      // No `postId` to open, by design: the row names neither the post nor
+      // its author. Privacy & safety is where the outcome is readable —
+      // the same place `ReportsDestination` sends a tapped push.
+      context.pushNamed(RouteNames.privacySafety);
   }
 }
 
@@ -319,7 +325,7 @@ class _NotificationRow extends StatelessWidget {
                       ),
                       child: Text(
                         '${notification.aggregateCount}',
-                        style: AppTextStyles.metaMono.copyWith(color: colors.bg, fontSize: 9),
+                        style: AppTextStyles.metaMonoSm.copyWith(color: colors.bg),
                       ),
                     ),
                   ),
@@ -337,7 +343,7 @@ class _NotificationRow extends StatelessWidget {
                     children: [
                       Text(
                         notification.title,
-                        style: AppTextStyles.titleMd.copyWith(fontSize: 13, color: colors.ink),
+                        style: AppTextStyles.titleMd.copyWith(color: colors.ink),
                       ),
                       if (notification.body.isNotEmpty) ...[
                         const SizedBox(height: 3),
@@ -345,7 +351,7 @@ class _NotificationRow extends StatelessWidget {
                           notification.body,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.bodySm.copyWith(fontSize: 12.5, color: colors.ink2),
+                          style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
                         ),
                       ],
                       const SizedBox(height: 7),

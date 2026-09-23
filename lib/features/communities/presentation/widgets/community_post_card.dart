@@ -8,6 +8,7 @@ import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
 import '../../../feed/domain/entities/post_entity.dart' show ReactionType;
 import '../../domain/entities/community_post_entity.dart';
+import 'vote_arrow_icon.dart';
 
 /// One thread row, used by both the cross-community timeline and a single
 /// community's list.
@@ -51,14 +52,18 @@ class CommunityPostCard extends StatelessWidget {
         color: colors.surf,
         border: Border.all(color: colors.line, width: 1.5),
         borderRadius: BorderRadius.circular(AppRadii.xl),
+        boxShadow: AppShadows.card(context),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 12, 14, 10),
+          padding: const EdgeInsets.fromLTRB(5, 12, 5, 12),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            // Centred, not top-aligned: the vote column is about the whole
+            // post, so it sits against the middle of the row rather than
+            // hanging off the first line of the title.
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               _VoteColumn(
                 score: post.score,
@@ -81,7 +86,9 @@ class CommunityPostCard extends StatelessWidget {
                                 '${post.community.emoji} ${post.community.name}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
+                                style: AppTextStyles.metaMono.copyWith(
+                                  color: colors.ink2,
+                                ),
                               ),
                             ),
                           ),
@@ -95,7 +102,9 @@ class CommunityPostCard extends StatelessWidget {
                       post.title,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.titleMd.copyWith(color: colors.ink, fontSize: 16),
+                      style: AppTextStyles.titleCard.copyWith(
+                        color: colors.ink,
+                      ),
                     ),
                     if (post.hasBody) ...[
                       const SizedBox(height: 6),
@@ -103,7 +112,7 @@ class CommunityPostCard extends StatelessWidget {
                         post.body,
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
+                        style: AppTextStyles.body.copyWith(color: colors.ink2),
                       ),
                     ],
                     const SizedBox(height: 10),
@@ -121,13 +130,17 @@ class CommunityPostCard extends StatelessWidget {
                             post.authorUsername.withAtSign,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
+                            style: AppTextStyles.metaMono.copyWith(
+                              color: colors.ink2,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Text(
                           Formatters.relativeShort(post.createdAt),
-                          style: AppTextStyles.metaMono.copyWith(color: colors.ink3),
+                          style: AppTextStyles.metaMono.copyWith(
+                            color: colors.ink3,
+                          ),
                         ),
                         const Spacer(),
                         _MetaPill(
@@ -159,7 +172,12 @@ class CommunityPostCard extends StatelessWidget {
 /// value, so "clear" is a real value (`0`) rather than a second write of the
 /// same direction.
 class _VoteColumn extends StatelessWidget {
-  const _VoteColumn({required this.score, required this.vote, required this.busy, required this.onVote});
+  const _VoteColumn({
+    required this.score,
+    required this.vote,
+    required this.busy,
+    required this.onVote,
+  });
 
   final int score;
   final CommunityVote vote;
@@ -172,13 +190,13 @@ class _VoteColumn extends StatelessWidget {
     return Column(
       children: [
         _VoteArrow(
-          icon: Icons.keyboard_arrow_up_rounded,
+          up: true,
           active: vote == CommunityVote.up,
           busy: busy,
           onTap: () => onVote(CommunityVote.up),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
+          padding: const EdgeInsets.symmetric(vertical: 10),
           child: Text(
             Formatters.compactCount(score),
             style: AppTextStyles.titleSm.copyWith(
@@ -191,7 +209,7 @@ class _VoteColumn extends StatelessWidget {
           ),
         ),
         _VoteArrow(
-          icon: Icons.keyboard_arrow_down_rounded,
+          up: false,
           active: vote == CommunityVote.down,
           busy: busy,
           onTap: () => onVote(CommunityVote.down),
@@ -202,22 +220,27 @@ class _VoteColumn extends StatelessWidget {
 }
 
 class _VoteArrow extends StatelessWidget {
-  const _VoteArrow({required this.icon, required this.active, required this.busy, required this.onTap});
+  const _VoteArrow({
+    required this.up,
+    required this.active,
+    required this.busy,
+    required this.onTap,
+  });
 
-  final IconData icon;
+  final bool up;
   final bool active;
   final bool busy;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    // A plain color change for the active state, not a glow: a blurred
-    // `BoxShadow` on anything that rebuilds from Cubit state crashed on this
-    // project's Impeller/Android renderer (see CLAUDE.md).
-    final color = active ? colors.yel : colors.ink3;
+    // No chip behind the arrow: the state is already legible from the artwork
+    // itself, outline vs filled. `Material` stays only to give the tap ripple
+    // a surface above the card's own background — hence transparent, and
+    // never a blurred `BoxShadow`, which crashed this project's
+    // Impeller/Android renderer when rebuilt from Cubit state (see CLAUDE.md).
     return Material(
-      color: active ? colors.yelb : Colors.transparent,
+      color: Colors.transparent,
       shape: const CircleBorder(),
       child: InkWell(
         onTap: busy ? null : onTap,
@@ -225,7 +248,14 @@ class _VoteArrow extends StatelessWidget {
         child: SizedBox(
           width: 30,
           height: 26,
-          child: Icon(icon, size: 20, color: busy ? colors.ink3 : color),
+          child: Center(
+            child: VoteArrowIcon(
+              up: up,
+              active: active,
+              dimmed: busy,
+              size: 24,
+            ),
+          ),
         ),
       ),
     );
@@ -248,7 +278,7 @@ class _TagPill extends StatelessWidget {
       ),
       child: Text(
         tag.toUpperCase(),
-        style: AppTextStyles.metaMono.copyWith(color: colors.yeld, fontSize: 9),
+        style: AppTextStyles.metaMonoSm.copyWith(color: colors.yeld),
       ),
     );
   }
@@ -300,20 +330,28 @@ class _ReactionPill extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: reacted ? colors.yelb : Colors.transparent,
-          border: Border.all(color: reacted ? colors.yel : colors.line, width: 1),
+          border: Border.all(
+            color: reacted ? colors.yel : colors.line,
+            width: 1,
+          ),
           borderRadius: BorderRadius.circular(AppRadii.pill),
         ),
         child: Row(
           children: [
             Text(
               viewerReaction?.emoji ?? ReactionType.like.emoji,
-              style: TextStyle(fontSize: 12, color: reacted ? null : colors.ink3),
+              style: TextStyle(
+                fontSize: 12,
+                color: reacted ? null : colors.ink3,
+              ),
             ),
             if (total > 0) ...[
               const SizedBox(width: 5),
               Text(
                 Formatters.compactCount(total),
-                style: AppTextStyles.metaMono.copyWith(color: reacted ? colors.yeld : colors.ink3),
+                style: AppTextStyles.metaMono.copyWith(
+                  color: reacted ? colors.yeld : colors.ink3,
+                ),
               ),
             ],
           ],
@@ -346,13 +384,20 @@ class _ReactionPill extends StatelessWidget {
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: viewerReaction == type ? colors.yelb : colors.surf2,
+                      color: viewerReaction == type
+                          ? colors.yelb
+                          : colors.surf2,
                       border: Border.all(
-                        color: viewerReaction == type ? colors.yel : colors.line,
+                        color: viewerReaction == type
+                            ? colors.yel
+                            : colors.line,
                         width: 1.5,
                       ),
                     ),
-                    child: Text(type.emoji, style: const TextStyle(fontSize: 22)),
+                    child: Text(
+                      type.emoji,
+                      style: const TextStyle(fontSize: 22),
+                    ),
                   ),
                 ),
             ],

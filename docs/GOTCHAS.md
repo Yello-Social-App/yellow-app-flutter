@@ -23,6 +23,12 @@ this project's Impeller/Android renderer.**
   `lib/features/shell/presentation/widgets/bottom_nav_bar.dart:422`.
 - For a simple "active" glow, a plain colour change is safest and is this
   app's existing convention.
+- What *is* fine: a static `BoxDecoration` on a plain `Container` /
+  `DecoratedBox` that only rebuilds with its parent — the feed card has
+  shipped that way since 0.2.0. Use `AppShadows.card(context)`
+  (`lib/core/theme/app_theme.dart`, ADR-012) rather than an inline
+  `BoxShadow` list; the line not to cross is a blurred shadow whose
+  decoration changes per animation frame.
 
 ### `Row`/`Column` directly in a `Scaffold` slot stretches to fill
 
@@ -31,7 +37,7 @@ A bare `Row`/`Column` placed straight into `bottomNavigationBar`,
 to fill it. This app shipped exactly this bug in `BottomNavBar`.
 
 - Fix: wrap in `IntrinsicHeight`, or set `mainAxisSize: MainAxisSize.min`
-  (see `explore_sheet.dart:31`).
+  (see `tech_filter_sheet.dart:65`).
 
 ### `Transform.translate` silently swallows taps past its own box
 
@@ -42,6 +48,33 @@ eats taps with no error and no warning.
 
 - Use `Stack` / `Positioned` (plain doubles, hit-test-safe) for anything that
   must stay tappable across an overlap.
+
+### A `Container` border disappears under an edge-to-edge child
+
+`Container` paints `decoration` *behind* its child. A border in `decoration`
+is therefore only visible where nothing covers it — fine while the child sits
+inside padding, invisible along any edge the child reaches. `clipBehavior`
+makes it worse: the child is clipped to the rounded shape, so it looks
+"right" apart from the border quietly vanishing. Bit the feed card's photo
+frame (`post_card.dart`) and then the Showcase featured card, whose tinted
+hero band fills the card top-to-edge (`project_card.dart`).
+
+- Put the border in `foregroundDecoration` with the same `borderRadius`; keep
+  `decoration` for the fill, shadow and the clip shape.
+
+### Fixed-width shimmer rows overflow at 320dp
+
+A loading skeleton is a `Row` of `ShimmerBox(width: N)` sized to what the
+real card's text *usually* measures. Real text is ellipsised or sized to a
+short count and fits; the fixed widths don't shrink, so a row that is fine
+at 360dp throws `RenderFlex overflowed` at 320dp — which is also what a 360dp
+phone becomes at Android's larger **Display size** settings. The feed's
+`ShimmerPostCard` action row shipped this way.
+
+- Give the trailing box `Flexible` (see `ShimmerPostCard`) or wrap the row in
+  `FittedBox(fit: BoxFit.scaleDown)` (see `ShimmerProfileView`).
+- `test/shared/widgets/shimmer_skeletons_test.dart` pumps every skeleton at
+  320×640 and fails on any overflow — add a new skeleton there.
 
 ---
 
@@ -72,6 +105,23 @@ twice. Fixed with a Cubit-private in-flight set.
 - **Check every new mutating button for this shape.** Any tappable action that
   hits the network and isn't disabled during flight needs a guard.
 
+### A field left out of `props` makes a Cubit silently drop the emit
+
+`Cubit.emit` skips a state that `==` the current one, and with `Equatable`
+that is decided by `props` alone. `MessageEntity.props` did not include
+`senderId`/`fromMe`, so replacing a message with a copy that differed only
+in its sender compared equal — `ChatCubit.refreshLatest` "applied" the
+server's copy and nothing changed on screen. It surfaced as a test that
+could not make `deleteMessage` see its own message.
+
+- When a widget or cubit reads a field, that field belongs in `props` —
+  the `attachments`/`reactions`/`groupInvite` additions went in at the same
+  time. The deliberate exceptions are presigned URLs (ADR-015), which are
+  *not* state.
+- In a test, the cubit's `stream` delivers asynchronously: assert on
+  `state` right after an `await`ed call, or `await
+  Future<void>.delayed(Duration.zero)` before reading what a listener saw.
+
 ### Long-lived singleton Cubits go stale
 
 A `registerLazySingleton` Cubit that short-circuits (`if (status == loaded)
@@ -95,6 +145,29 @@ defaults to **80** columns while this repo is hand-written at **120**.
 
 - Only ever: `dart format --line-length=120 <touched files>`.
 - Never repo-wide.
+
+### One `pump(duration)` does not run an animation — it starts it
+
+`tester.pump(const Duration(milliseconds: 300))` advances the clock *and
+then* produces the frame, so the widget's `Ticker` takes that frame as its
+**start** time: the animation is still at value 0 afterwards, and a following
+bare `pump()` adds no elapsed time either. A zoom/settle assertion written
+that way fails while the same code works on a device.
+
+- Pump **twice**: `await tester.pump();` to start the ticker, then
+  `await tester.pump(<past the duration>)` to run it out — see
+  `test/shared/widgets/photo_viewer_test.dart`.
+- `pumpAndSettle()` does the same thing implicitly, but is not usable on a
+  screen with a `CachedNetworkImage`, whose retry timers never settle.
+
+### `cached_network_image` needs a path_provider stub in widget tests
+
+Any screen that builds a `CachedNetworkImage` reaches for the temp directory
+through path_provider on first build, which has no implementation under
+`flutter_test` and logs a `MissingPluginException` per frame.
+
+- Stub the channel in `setUp` (see `photo_viewer_test.dart`); the photos
+  never load in a test either way, so a fake path is enough.
 
 ### `flutter analyze` is a floor, not a ceiling
 

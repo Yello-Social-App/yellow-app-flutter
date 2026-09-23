@@ -25,6 +25,46 @@ abstract final class AppSpacing {
   static const double xxl = 22;
 }
 
+/// Drop-shadow tokens for surfaces that float above the page.
+///
+/// Two layers, not one: a tight, faint *contact* shadow hugging the bottom
+/// edge, plus a wide, soft *key* shadow thrown further down. A single wide
+/// blur on its own reads as a smudge under the card; the pair reads as real
+/// lift. Always a black scrim, never the `ink` token — `ink` is near-white
+/// in dark mode, which would turn the shadow into a glow (same reasoning as
+/// `BottomNavBar`'s shadow).
+///
+/// For **static** decorations only. A plain `Container`/`DecoratedBox` that
+/// is rebuilt with its parent is fine — every card in the app already does
+/// that — but never put this inside an `AnimatedContainer` or anything that
+/// re-decorates per animation frame: that is the shape that crashed this
+/// project's Impeller/Android renderer (`docs/GOTCHAS.md`).
+abstract final class AppShadows {
+  /// A content card resting on the page — post, project, community row,
+  /// profile header, settings group. Callers keep their own border/radius;
+  /// this only supplies the `boxShadow` list.
+  static List<BoxShadow> card(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return [
+      // Key shadow: what actually sells the lift. Negative spread pulls its
+      // footprint in under the card so the sides don't grow a halo.
+      BoxShadow(
+        color: Colors.black.withValues(alpha: isDark ? 0.50 : 0.10),
+        blurRadius: 24,
+        spreadRadius: -4,
+        offset: const Offset(0, 10),
+      ),
+      // Contact shadow: anchors the bottom edge so the card doesn't look
+      // like it's hovering with nothing underneath.
+      BoxShadow(
+        color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.05),
+        blurRadius: 6,
+        offset: const Offset(0, 2),
+      ),
+    ];
+  }
+}
+
 /// Builds the light/dark [ThemeData] for the app, wiring the [AppColors]
 /// design-token extension alongside Material defaults so any un-styled
 /// widget (dialogs, default `Text`, system chrome) still lands close to the

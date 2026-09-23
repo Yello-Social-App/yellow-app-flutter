@@ -19,6 +19,7 @@ import '../../../feed/domain/entities/comment_entity.dart';
 import '../../../feed/domain/entities/post_entity.dart' show ReactionType;
 import '../../domain/entities/community_post_entity.dart';
 import '../bloc/community_post_cubit.dart';
+import '../widgets/vote_arrow_icon.dart';
 
 /// One community thread: the post, its comments, and a composer.
 ///
@@ -87,7 +88,9 @@ class CommunityPostRouteFallback extends StatelessWidget {
               else
                 AppButton(
                   label: 'Browse communities',
-                  onPressed: () => context.pushReplacementNamed(RouteNames.communities),
+                  // The hub is a shell tab now, so `go` — pushing a branch
+                  // route over the shell is not a thing.
+                  onPressed: () => context.goNamed(RouteNames.communities),
                 ),
               const Spacer(flex: 2),
             ],
@@ -366,6 +369,7 @@ class _ThreadHeader extends StatelessWidget {
         color: colors.surf,
         border: Border.all(color: colors.line, width: 1.5),
         borderRadius: BorderRadius.circular(AppRadii.xl),
+        boxShadow: AppShadows.card(context),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -407,7 +411,7 @@ class _ThreadHeader extends StatelessWidget {
                   ),
                   child: Text(
                     post.tag.toUpperCase(),
-                    style: AppTextStyles.metaMono.copyWith(color: colors.yeld, fontSize: 9),
+                    style: AppTextStyles.metaMonoSm.copyWith(color: colors.yeld),
                   ),
                 ),
             ],
@@ -464,7 +468,7 @@ class _VotePill extends StatelessWidget {
       child: Row(
         children: [
           _ArrowButton(
-            icon: Icons.keyboard_arrow_up_rounded,
+            up: true,
             active: vote == CommunityVote.up,
             busy: busy,
             onTap: () => onVote(CommunityVote.up),
@@ -480,7 +484,7 @@ class _VotePill extends StatelessWidget {
             ),
           ),
           _ArrowButton(
-            icon: Icons.keyboard_arrow_down_rounded,
+            up: false,
             active: vote == CommunityVote.down,
             busy: busy,
             onTap: () => onVote(CommunityVote.down),
@@ -492,22 +496,23 @@ class _VotePill extends StatelessWidget {
 }
 
 class _ArrowButton extends StatelessWidget {
-  const _ArrowButton({required this.icon, required this.active, required this.busy, required this.onTap});
+  const _ArrowButton({required this.up, required this.active, required this.busy, required this.onTap});
 
-  final IconData icon;
+  final bool up;
   final bool active;
   final bool busy;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
     return InkWell(
       onTap: busy ? null : onTap,
       child: SizedBox(
         width: 38,
         height: 34,
-        child: Icon(icon, size: 20, color: busy ? colors.ink3 : (active ? colors.yel : colors.ink2)),
+        child: Center(
+          child: VoteArrowIcon(up: up, active: active, dimmed: busy, size: 20),
+        ),
       ),
     );
   }
@@ -628,7 +633,7 @@ class _CommentTile extends StatelessWidget {
                       const SizedBox(width: 8),
                       Text(
                         Formatters.relativeShort(comment.createdAt),
-                        style: AppTextStyles.metaMono.copyWith(color: colors.ink3, fontSize: 9),
+                        style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink3),
                       ),
                     ],
                   ),
@@ -672,9 +677,8 @@ class _TextAction extends StatelessWidget {
       onTap: onTap,
       child: Text(
         label.toUpperCase(),
-        style: AppTextStyles.metaMono.copyWith(
+        style: AppTextStyles.metaMonoSm.copyWith(
           color: onTap == null ? colors.ink3 : (danger ? colors.red : colors.ink2),
-          fontSize: 9,
         ),
       ),
     );

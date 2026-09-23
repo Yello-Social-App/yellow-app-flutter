@@ -65,18 +65,12 @@ class PostCard extends StatelessWidget {
         color: colors.surf,
         border: Border.all(color: colors.line, width: 1.5),
         borderRadius: BorderRadius.circular(AppRadii.xxl),
-        // The page background is now flat white, same as this card's own
-        // fill (`colors.surf`) — without this the hairline border above was
-        // the *only* thing separating a card from the page. A soft drop
-        // shadow gives the card real depth again ("floating" on the page)
-        // instead of leaning on the border alone.
-        boxShadow: [
-          BoxShadow(
-            color: colors.ink.withValues(alpha: 0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        // The page background is flat white, same as this card's own fill
+        // (`colors.surf`) — without this the hairline border above would be
+        // the *only* thing separating a card from the page. The shared
+        // two-layer drop shadow is what makes the card read as floating on
+        // the page rather than drawn on it; see [AppShadows.card].
+        boxShadow: AppShadows.card(context),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -88,7 +82,7 @@ class PostCard extends StatelessWidget {
           if (!post.hasImages)
             _TextBody(post: post)
           else
-            _PhotoBody(post: post, onOpen: onOpen),
+            _PhotoBody(post: post),
           if (post.isRepost) RepostedPostPreview(original: post.originalPost!),
           _Actions(
             post: post,
@@ -365,9 +359,8 @@ class _TextBody extends StatelessWidget {
 }
 
 class _PhotoBody extends StatelessWidget {
-  const _PhotoBody({required this.post, required this.onOpen});
+  const _PhotoBody({required this.post});
   final PostEntity post;
-  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -393,6 +386,12 @@ class _PhotoBody extends StatelessWidget {
           // A single photo keeps the card's width and follows its own
           // aspect ratio (no fixed height); two or more become a swipeable
           // carousel with a page indicator — see [PostImageCarousel].
+          //
+          // Tapping the photo opens the full-screen zoomable viewer rather
+          // than the post (the header, the body text and the comment chip
+          // all still open the post) — the photo is cropped to the card
+          // here, so "expand it" is the more useful thing for that tap to
+          // mean, which is also what every other social app does with it.
           child: Container(
             // The border lives in `foregroundDecoration`, not `decoration`:
             // the photo (`Image.network(..., width: double.infinity)` for a
@@ -410,7 +409,7 @@ class _PhotoBody extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppRadii.lg),
             ),
             clipBehavior: Clip.antiAlias,
-            child: PostImageCarousel(imageUrls: post.imageUrls, onTap: onOpen),
+            child: PostImageCarousel(imageUrls: post.imageUrls),
           ),
         ),
       ],

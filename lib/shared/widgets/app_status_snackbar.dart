@@ -88,7 +88,7 @@ class _StatusCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(title, style: AppTextStyles.titleMd.copyWith(color: Colors.white, fontSize: 15)),
+                        Text(title, style: AppTextStyles.titleRow.copyWith(color: Colors.white)),
                         const SizedBox(height: 4),
                         Text(message, style: AppTextStyles.bodySm.copyWith(color: Colors.white.withValues(alpha: 0.9))),
                       ],

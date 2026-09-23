@@ -19,6 +19,7 @@ import 'package:yello_social_app/features/feed/domain/usecases/update_post_useca
 import 'package:yello_social_app/features/feed/presentation/bloc/post_detail_cubit.dart';
 import 'package:yello_social_app/features/profile/domain/repositories/profile_repository.dart';
 import 'package:yello_social_app/features/profile/domain/usecases/profile_usecases.dart';
+import 'package:yello_social_app/features/safety/domain/usecases/safety_usecases.dart';
 
 import '../../helpers/mock_data.dart';
 
@@ -50,6 +51,10 @@ class _MockRepost extends Mock implements RepostUseCase {}
 
 class _MockGetUserPosts extends Mock implements GetUserPostsUseCase {}
 
+class _MockHidePost extends Mock implements HidePostUseCase {}
+
+class _MockMuteUser extends Mock implements MuteUserUseCase {}
+
 void main() {
   late _MockGetPostDetail getPostDetail;
   late _MockGetComments getComments;
@@ -65,12 +70,16 @@ void main() {
   late _MockGetMe getMe;
   late _MockRepost repost;
   late _MockGetUserPosts getUserPosts;
+  late _MockHidePost hidePost;
+  late _MockMuteUser muteUser;
 
   setUpAll(() {
     registerFallbackValue(const PostIdParams('p1'));
     registerFallbackValue(buildPost());
     registerFallbackValue(const RepostParams(postId: 'p1'));
     registerFallbackValue(const GetUserPostsParams(userId: 'u1'));
+    registerFallbackValue(const HidePostParams('p1'));
+    registerFallbackValue(const MuteParams('u1'));
   });
 
   setUp(() {
@@ -88,6 +97,8 @@ void main() {
     getMe = _MockGetMe();
     repost = _MockRepost();
     getUserPosts = _MockGetUserPosts();
+    hidePost = _MockHidePost();
+    muteUser = _MockMuteUser();
     when(() => getMe(const NoParams())).thenAnswer((_) async => Right(buildUser()));
     // Empty by default — `load()`'s repost-recovery scan (`_seedMyRepostId`)
     // stops on the first "no more pages" response, same as an account with
@@ -112,6 +123,8 @@ void main() {
     getMe: getMe,
     repost: repost,
     getUserPosts: getUserPosts,
+    hidePost: hidePost,
+    muteUser: muteUser,
   );
 
   blocTest<PostDetailCubit, PostDetailState>(

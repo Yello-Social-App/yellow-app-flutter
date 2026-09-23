@@ -26,15 +26,9 @@ class StoriesRail extends StatelessWidget {
         color: colors.surf,
         border: Border.all(color: colors.line, width: 1.5),
         borderRadius: BorderRadius.circular(AppRadii.xl),
-        // Floats above the now-flat-white page background — see PostCard's
+        // Floats above the flat-white page background — see PostCard's
         // matching shadow for why.
-        boxShadow: [
-          BoxShadow(
-            color: colors.ink.withValues(alpha: 0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        boxShadow: AppShadows.card(context),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

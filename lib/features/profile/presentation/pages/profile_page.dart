@@ -24,6 +24,7 @@ import '../../../auth/domain/usecases/logout_usecase.dart';
 import '../../../feed/domain/entities/post_entity.dart';
 import '../../../feed/presentation/widgets/post_card.dart';
 import '../bloc/profile_cubit.dart';
+import '../widgets/shimmer_profile_view.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -54,7 +55,7 @@ class _ProfileView extends StatelessWidget {
         builder: (context, state) {
           if (state.status == ProfileStatus.initial ||
               (state.status == ProfileStatus.loading && state.user == null)) {
-            return const Center(child: CircularProgressIndicator());
+            return const ShimmerProfileView();
           }
           if (state.status == ProfileStatus.error && state.user == null) {
             return SafeArea(
@@ -130,7 +131,7 @@ class _ProfileView extends StatelessWidget {
                         ),
                       ),
                       Positioned(
-                        bottom: 24,
+                        bottom: 40,
                         right: 14,
                         child: IconButton.filled(
                           tooltip: 'Edit cover',
@@ -148,7 +149,7 @@ class _ProfileView extends StatelessWidget {
                   ),
                 ),
                 Transform.translate(
-                  offset: const Offset(0, -20),
+                  offset: const Offset(0, -25),
                   child: Container(
                     margin: const EdgeInsets.symmetric(horizontal: 14),
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
@@ -156,6 +157,7 @@ class _ProfileView extends StatelessWidget {
                       color: colors.surf,
                       border: Border.all(color: colors.line, width: 1.5),
                       borderRadius: BorderRadius.circular(AppRadii.huge),
+                      boxShadow: AppShadows.card(context),
                     ),
                     child: Column(
                       children: [
@@ -266,15 +268,23 @@ class _ProfileView extends StatelessWidget {
                                 Text(
                                   user.bio!,
                                   textAlign: TextAlign.center,
-                                  style: AppTextStyles.bodySm.copyWith(
+                                  style: AppTextStyles.bodyMd.copyWith(
                                     color: colors.ink2,
-                                    fontSize: 14,
                                   ),
                                 ),
                               ],
                               const SizedBox(height: 16),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                              // A `Wrap`, not a `Row`: four buttons of
+                              // text-scaled width do not fit on one line at
+                              // 320dp (which is also what a 360dp phone
+                              // becomes at Android's larger Display size),
+                              // and a `Row` has no way to say that except
+                              // by overflowing. See `docs/GOTCHAS.md` on
+                              // fixed-width rows.
+                              Wrap(
+                                alignment: WrapAlignment.center,
+                                spacing: 8,
+                                runSpacing: 8,
                                 children: [
                                   AppButton(
                                     label: 'Edit profile',
@@ -282,7 +292,6 @@ class _ProfileView extends StatelessWidget {
                                         _showEditSheet(context, cubit, user),
                                     borderColor: colors.ink3,
                                   ),
-                                  const SizedBox(width: 8),
                                   BlocBuilder<ThemeCubit, ThemeMode>(
                                     bloc: sl<ThemeCubit>(),
                                     builder: (context, mode) => AppButton(
@@ -294,7 +303,11 @@ class _ProfileView extends StatelessWidget {
                                           sl<ThemeCubit>().toggle(),
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
+                                  AppButton(
+                                    label: 'Settings',
+                                    variant: AppButtonVariant.outline,
+                                    onPressed: () => _showSettingsSheet(context),
+                                  ),
                                   AppButton(
                                     label: 'Log out',
                                     variant: AppButtonVariant.outline,
@@ -469,6 +482,74 @@ class _ProfileView extends StatelessWidget {
         );
       }
     }
+  }
+
+  /// The account-level screens that are not a profile field: Privacy &
+  /// safety (reports you filed, accounts you muted) and Send feedback.
+  ///
+  /// A sheet rather than four more buttons in the row above — that row is
+  /// for things you do *to this profile*, and these are not.
+  void _showSettingsSheet(BuildContext context) {
+    final colors = AppColors.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      // Same reason as `showPostOptionsSheet`: this opens from a tab whose
+      // Scaffold sits under `MainShellPage`'s floating nav bar, so a sheet
+      // on the nested Navigator would render behind it.
+      useRootNavigator: true,
+      backgroundColor: colors.surf,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadii.xl),
+        ),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              width: 80,
+              height: 4,
+              decoration: BoxDecoration(
+                color: colors.line,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            ListTile(
+              leading: Icon(Icons.shield_outlined, color: colors.ink),
+              title: Text(
+                'Privacy & safety',
+                style: AppTextStyles.body.copyWith(color: colors.ink),
+              ),
+              subtitle: Text(
+                'Your reports and muted accounts',
+                style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink2),
+              ),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                context.pushNamed(RouteNames.privacySafety);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.rate_review_outlined, color: colors.ink),
+              title: Text(
+                'Send feedback',
+                style: AppTextStyles.body.copyWith(color: colors.ink),
+              ),
+              subtitle: Text(
+                'Rate a feature and tell us why',
+                style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink2),
+              ),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                context.pushNamed(RouteNames.sendFeedback);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _confirmLogout(BuildContext context) async {

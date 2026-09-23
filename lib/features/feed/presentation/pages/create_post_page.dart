@@ -576,7 +576,7 @@ class _TopBar extends StatelessWidget {
           ),
           Column(
             children: [
-              Text('New post', style: AppTextStyles.titleMd.copyWith(fontSize: 14, color: colors.ink)),
+              Text('New post', style: AppTextStyles.titleMd.copyWith(color: colors.ink)),
               const SizedBox(height: 6),
               Text('STEP 2 OF 2 · REVIEW', style: AppTextStyles.metaMono.copyWith(fontSize: 10, color: colors.ink2)),
             ],
@@ -827,7 +827,7 @@ class _CheckRow extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(label, style: AppTextStyles.bodySm.copyWith(fontSize: 13.5, color: colors.ink)),
+              child: Text(label, style: AppTextStyles.bodySm.copyWith(color: colors.ink)),
             ),
           ],
         ),

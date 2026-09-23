@@ -17,7 +17,8 @@ const List<(Color bg, Color fg)> kAvatarPalette = [
   (Color(0xFF211E16), Color(0xFFF7F5F0)),
 ];
 
-(Color bg, Color fg) avatarColorsForSeed(int seed) => kAvatarPalette[seed % kAvatarPalette.length];
+(Color bg, Color fg) avatarColorsForSeed(int seed) =>
+    kAvatarPalette[seed % kAvatarPalette.length];
 
 /// Deterministic palette index for a real backend id/username: the backend
 /// has no "avatar color" concept, so real users get a stable pseudo-random
@@ -35,8 +36,9 @@ class AppAvatar extends StatelessWidget {
     this.size = 44,
     this.showOnlineDot = false,
     this.ringColor,
-    this.borderWidth = 1.5,
+    this.borderWidth = 1,
     this.imageUrl,
+    this.cacheKey,
   });
 
   final String initials;
@@ -48,6 +50,12 @@ class AppAvatar extends StatelessWidget {
   /// `UserResponse.avatarUrl`). Null/empty falls back to the initials tile —
   /// the only kind of avatar the mockup's demo people ever have.
   final String? imageUrl;
+
+  /// What the image cache files [imageUrl] under, when the URL itself is
+  /// not stable — a presigned link that is re-signed on every read (chat
+  /// group photos, invite cards). Null keys by URL, which is right for
+  /// yello-api avatars. See `presignedObjectKey` and ADR-015.
+  final String? cacheKey;
 
   /// Story-ring color (e.g. `AppColors.yel` for unseen, `line` for seen).
   /// Null renders no ring at all — the plain bordered-circle style used by
@@ -70,12 +78,13 @@ class AppAvatar extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: bg,
-        border: Border.all(color: colors.ink, width: borderWidth),
+        border: Border.all(color: colors.line, width: borderWidth),
         image: hasImage
             ? DecorationImage(
                 image: ResizeImage(
-                  CachedNetworkImageProvider(imageUrl!),
-                  width: (size * MediaQuery.devicePixelRatioOf(context)).round(),
+                  CachedNetworkImageProvider(imageUrl!, cacheKey: cacheKey),
+                  width: (size * MediaQuery.devicePixelRatioOf(context))
+                      .round(),
                 ),
                 fit: BoxFit.cover,
               )
@@ -85,7 +94,10 @@ class AppAvatar extends StatelessWidget {
           ? null
           : Text(
               initials,
-              style: AppTextStyles.titleSm.copyWith(color: fg, fontSize: size * 0.30),
+              style: AppTextStyles.titleSm.copyWith(
+                color: fg,
+                fontSize: size * 0.30,
+              ),
             ),
     );
 
