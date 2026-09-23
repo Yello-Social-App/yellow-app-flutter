@@ -11,10 +11,13 @@ import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../notification/presentation/bloc/notifications_cubit.dart';
+import '../../../safety/presentation/bloc/report_post_cubit.dart';
+import '../../../safety/presentation/widgets/report_post_sheet.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
+import '../../../../shared/widgets/date_label.dart';
 import '../../../../shared/widgets/error_view.dart';
 import '../../../../shared/widgets/shimmer_loading.dart';
 import '../../../../shared/widgets/yello_wordmark.dart';
@@ -108,17 +111,25 @@ class _FeedViewState extends State<_FeedView> {
                   slivers: [
                     const SliverPadding(
                       padding: EdgeInsets.fromLTRB(18, 14, 14, 0),
-                      sliver: SliverToBoxAdapter(child: _DateLabel()),
+                      sliver: SliverToBoxAdapter(child: DateLabel()),
                     ),
+
+                    const SliverToBoxAdapter(child: SizedBox(height: 8)),
+
                     _FeedAppBar(onLogoTap: _onLogoTap),
-                    if (state.status == FeedStatus.loading && state.posts.isEmpty)
+                    if (state.status == FeedStatus.loading &&
+                        state.posts.isEmpty)
                       SliverPadding(
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         sliver: SliverList.list(
-                          children: const [ShimmerPostCard(), ShimmerPostCard(hasImage: false)],
+                          children: const [
+                            ShimmerPostCard(),
+                            ShimmerPostCard(hasImage: false),
+                          ],
                         ),
                       )
-                    else if (state.status == FeedStatus.error && state.posts.isEmpty)
+                    else if (state.status == FeedStatus.error &&
+                        state.posts.isEmpty)
                       SliverPadding(
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         sliver: SliverToBoxAdapter(
@@ -245,7 +256,54 @@ void _showFeedPostMenu(BuildContext context, FeedCubit cubit, FeedState state, P
       onSave: ({content, visibility}) => cubit.updatePost(post.id, content: content, visibility: visibility),
     ),
     onDelete: () => _confirmDeleteFeedPost(context, cubit, post.id),
+    onHide: () => _hideFeedPost(context, cubit, post.id),
+    onReport: () => _reportFeedPost(context, post.id),
+    onMute: () => _muteFeedPostAuthor(context, cubit, post),
+    authorUsername: post.authorUsername,
   );
+}
+
+/// Hides one post — no confirmation, because it is reversible in spirit
+/// (the author is unaffected, nothing is reported) and asking twice for a
+/// "not this one" gesture makes the feed feel heavier than it is.
+Future<void> _hideFeedPost(BuildContext context, FeedCubit cubit, String postId) async {
+  final ok = await cubit.hidePost(postId);
+  if (!context.mounted) return;
+  if (ok) {
+    AppStatusSnackbar.showSuccess(context, message: "Hidden. You won't see this post again.");
+  } else {
+    AppStatusSnackbar.showError(context, message: 'Could not hide that post.');
+  }
+}
+
+/// The sheet owns the request; this only says how it went. A report is
+/// deliberately *not* followed by hiding the post — two different decisions,
+/// and quietly doing the second would make "report" feel like it deleted
+/// something.
+Future<void> _reportFeedPost(BuildContext context, String postId) async {
+  final outcome = await showReportPostSheet(context, postId: postId);
+  if (!context.mounted || outcome == null) return;
+  switch (outcome) {
+    case ReportOutcome.sent:
+      AppStatusSnackbar.showSuccess(context, message: 'Thanks — our team will take a look.');
+    case ReportOutcome.alreadyReported:
+      AppStatusSnackbar.showSuccess(context, message: "You've already reported this post.");
+    case ReportOutcome.failed:
+    case ReportOutcome.none:
+      break;
+  }
+}
+
+Future<void> _muteFeedPostAuthor(BuildContext context, FeedCubit cubit, PostEntity post) async {
+  if (!await confirmMuteAuthor(context, post.authorUsername)) return;
+  if (!context.mounted) return;
+  final ok = await cubit.muteAuthor(post.authorId);
+  if (!context.mounted) return;
+  if (ok) {
+    AppStatusSnackbar.showSuccess(context, message: '${post.authorUsername.withAtSign} is muted.');
+  } else {
+    AppStatusSnackbar.showError(context, message: 'Could not mute that account.');
+  }
 }
 
 Future<void> _copyFeedPostLink(BuildContext context, FeedCubit cubit, String postId) async {
@@ -271,53 +329,10 @@ Future<void> _confirmDeleteFeedPost(BuildContext context, FeedCubit cubit, Strin
   }
 }
 
-/// Plain, ordinary (non-sticky) date row sitting directly above
-/// `_FeedAppBar` in the sliver list — scrolls away normally with the rest
-/// of the feed content instead of living inside the `SliverAppBar` itself.
-///
-/// Pulled all the way out to its own sliver after three separate on-device
-/// bugs came from trying to keep both the date label and the wordmark
-/// inside one `SliverAppBar` (wordmark-in-title-with-date-below it
-/// overlapping; date-and-wordmark-together-in-`flexibleSpace` making the
-/// wordmark disappear on scroll instead of acting like a persistent app-bar
-/// identity; a parallax drift/jitter chase on top of that) — a
-/// `SliverAppBar`'s toolbar is always the one truly fixed, always-visible
-/// part of the widget, so the wordmark (the thing that should behave like
-/// an actual app-bar logo) belongs there and nowhere else, which leaves no
-/// good place left *inside* the app bar for the date. Living as its own
-/// separate sliver sidesteps that fight entirely: it's just normal
-/// scrolling content, no toolbar/`flexibleSpace` interaction to get backwards.
-class _DateLabel extends StatelessWidget {
-  const _DateLabel();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    final now = DateTime.now();
-    const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec', //
-    ];
-    final dateLabel = '${weekdays[now.weekday - 1]} · ${months[now.month - 1]} ${now.day}';
-    return Text(dateLabel.toUpperCase(), style: AppTextStyles.metaMono.copyWith(color: colors.ink2));
-  }
-}
-
 /// Feed's top bar — a real `SliverAppBar` (was a plain `SliverToBoxAdapter`
 /// row) so it can pin: `pinned: true` keeps this wordmark+icons bar
 /// permanently stuck to the top as the list scrolls down (rather than
-/// scrolling fully away like an ordinary sliver, the way `_DateLabel`
+/// scrolling fully away like an ordinary sliver, the way [DateLabel]
 /// above it still does).
 ///
 /// A single fixed-height toolbar — no `expandedHeight`/`flexibleSpace` at
@@ -325,7 +340,7 @@ class _DateLabel extends StatelessWidget {
 /// `title` so it's part of the toolbar itself: always rendered, at one
 /// constant size/position, in every scroll state, which is what makes it
 /// read as a real persistent app-bar identity rather than decorative
-/// content that happens to be visible sometimes. See `_DateLabel`'s doc
+/// content that happens to be visible sometimes. See [DateLabel]'s doc
 /// comment for why the date isn't in here too.
 ///
 /// `RepaintBoundary` around the wordmark is left over from an earlier
@@ -420,30 +435,42 @@ class _SignalsAction extends StatelessWidget {
         label: 'Signals',
         value: state.unreadCount > 0 ? 'Unread notifications' : null,
         button: true,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            AppIconButton(
-              icon: const Icon(Icons.favorite_border),
-              onPressed: () => _openSignals(context),
-            ),
-            if (state.unreadCount > 0)
-              Positioned(
-                top: 1,
-                right: 1,
-                child: Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: colors.red,
-                    // Ringed in the bar's own background so the dot reads as
-                    // cut into the button rather than pasted on top.
-                    border: Border.all(color: colors.bg, width: 1.5),
+        child: AppIconButton(
+          // The dot lives inside the icon slot (anchored to the gif's own
+          // bounds via this inner Stack) rather than around the outer
+          // AppIconButton circle, so it reads as sitting on the glyph
+          // itself instead of pasted onto the button's edge.
+          icon: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // Only animates while there is something unread — otherwise it
+              // sits on the static first frame, so it doesn't loop forever
+              // as chrome noise.
+              Image.asset(
+                state.unreadCount > 0 ? AssetConstants.notificationIconActive : AssetConstants.notificationIcon,
+                width: 22,
+                height: 22,
+                fit: BoxFit.contain,
+              ),
+              if (state.unreadCount > 0)
+                Positioned(
+                  top: -2,
+                  right: -2,
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: colors.red,
+                      // Ringed in the bar's own background so the dot reads as
+                      // cut into the icon rather than pasted on top.
+                      border: Border.all(color: colors.bg, width: 1.5),
+                    ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
+          onPressed: () => _openSignals(context),
         ),
       ),
     );
