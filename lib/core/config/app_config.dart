@@ -18,6 +18,20 @@ abstract final class AppConfig {
   /// Repoint it here if a dedicated production host is ever stood up.
   static const String defaultBaseUrl = 'https://api.yello.cachewraith.com';
 
+  /// Where the sideload updater looks for the published build.
+  ///
+  /// Yello ships as an APK people install themselves, not through a store,
+  /// so "is there a newer build?" is answered by a `latest.json` published
+  /// as a release asset — the API still serves no version resource
+  /// (`docs/BACKEND.md`). GitHub's `releases/latest/download/<name>` is a
+  /// permanent redirect onto whatever the newest release attached, so this
+  /// URL never has to change when a version is cut.
+  ///
+  /// Moving the channel off GitHub means changing this one line: nothing
+  /// below it knows where the manifest came from. See ADR-029.
+  static const String updateManifestUrl =
+      'https://github.com/Yello-Social-App/yellow-app-flutter/releases/latest/download/latest.json';
+
   static String? _baseUrl;
   static bool? _enableLogging;
 

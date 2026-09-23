@@ -4,9 +4,10 @@ import 'package:equatable/equatable.dart';
 /// reports it.
 ///
 /// Read from the platform (`package_info_plus` / `device_info_plus`), never
-/// from the API: the backend serves no version resource, so there is nothing
-/// to compare this against and no "an update is available" to show. See
-/// `docs/BACKEND.md`.
+/// from the API: the backend serves no version resource (`docs/BACKEND.md`).
+/// What a newer build would be is a separate question, answered by
+/// [AppUpdate] from the release channel's manifest — [buildNumber] here is
+/// the value it compares against.
 ///
 /// [osVersion] and [deviceModel] are best-effort — a device read that throws
 /// (a widget test has no platform channel) leaves them empty rather than

@@ -1117,7 +1117,9 @@ control rather than three.
 
 ## ADR-028 — Settings is its own feature, and App version shows no update check
 
-**Status:** Accepted.
+**Status:** Accepted; the "no update check" half is superseded by ADR-029,
+which builds the Updates group against the release channel's published
+manifest rather than against an API endpoint. Everything else below stands.
 
 The account menu on the profile (☰) had grown into two different things: a
 theme switch that acted in place, three shortcuts to screens that already
@@ -1161,7 +1163,88 @@ its route stays registered. Privacy & safety is still reachable from the
 notifications screen and is still where a tapped `REPORT_RESOLVED` push
 lands, which is why that route must stay.
 
-**Revisit if:** the backend grows a "latest version" endpoint, at which
-point the Updates group can be built for real against it; or the app gains
-enough settings to want a settings *hub* screen rather than a bottom-sheet
-menu.
+**Revisit if:** the app gains enough settings to want a settings *hub*
+screen rather than a bottom-sheet menu. (The other revisit condition here
+was "the backend grows a latest-version endpoint". ADR-029 took the group
+in a different direction — a manifest published with each release — without
+the backend growing anything.)
+
+---
+
+## ADR-029 — Yello updates itself from a published manifest, because it is sideloaded
+
+**Status:** Accepted. Supersedes ADR-028's "the Updates group is deliberately
+not built".
+
+Yello is not installed from a store. It is handed to people as an APK, which
+means every update so far has been a file sent by hand, and a user who never
+receives that file simply keeps running an old build forever. The Updates
+group ADR-028 declined to build is now built — against the release channel,
+not against the API.
+
+**The version check is a static manifest, not an endpoint.** Each release
+publishes a `latest.json` beside its APK:
+
+```json
+{
+  "version": "0.4.0",
+  "buildNumber": 3,
+  "notes": "What changed, one or two lines.",
+  "apkUrl": "https://github.com/Yello-Social-App/yellow-app-flutter/releases/download/v0.4.0/yello-0.4.0.apk",
+  "sizeBytes": 63779818
+}
+```
+
+`AppConfig.updateManifestUrl` points at
+`…/releases/latest/download/latest.json`, a permanent redirect onto whatever
+the newest release attached — so cutting a version never edits the app. The
+API is untouched: it still serves no version resource, and ADR-028's
+"revisit if the backend grows a latest-version endpoint" was too narrow a
+condition. It did not need one.
+
+**It does not go through `ApiClient`.** The manifest and the APK are fetched
+off-host, and `AuthInterceptor` attaches the session bearer token to every
+request on that Dio. Pointing it at a download host would hand the session
+to whoever runs it, so `AppUpdateRemoteDataSourceImpl` owns a bare `Dio`
+with no interceptors. A non-`https` `apkUrl` is refused outright — the file
+is about to be executed by the OS installer, so a plaintext hop is a
+code-execution hole, not a privacy one.
+
+**The comparison key is the build number, never the version string.** It is
+the Android `versionCode`, the one value the platform guarantees increases
+between installable builds. Equal build numbers are not an update:
+re-installing the running build is the case where Android shows its own
+unhelpful "app not installed". An unparseable installed build offers
+nothing rather than guessing.
+
+**Installing is three intents of Kotlin, not a package.** `MainActivity`
+holds the `yello/installer` channel: where to download to (app-private
+cache, so no storage permission), whether `REQUEST_INSTALL_PACKAGES` has
+been granted, the OS screen that grants it, and handing the file to the
+package installer through a `FileProvider` content URI. Every pub.dev option
+in this space bundles its own download stack, which this app already has in
+`dio`. A refusal comes back as `false`, not as an error: "install unknown
+apps" being off is the ordinary first run, and the card asks for it rather
+than reporting a failure.
+
+**Android only.** iOS can install nothing but what the App Store hands it,
+so the group is absent there rather than shown with a button that could only
+apologise. `AppUpdateCubit` is a singleton provided with
+`BlocProvider.value`, because a 60 MB download must survive the user leaving
+the App version screen — a factory would close the cubit mid-transfer.
+
+**This only works if every APK is signed with the same key.** Android
+refuses an update whose signature differs from the installed app, and the
+only way out is uninstalling, which takes the user's data with it. Release
+builds previously used the *debug* keystore — per-machine, auto-expiring —
+which is fine for `flutter run --release` and fatal for distribution.
+`android/app/build.gradle.kts` now reads `android/key.properties` (gitignored,
+as is `*.jks`) and falls back to the debug key only when that file is
+absent. **A build made without the keystore must not be handed to anyone.**
+
+**Revisit if:** Yello goes to the Play Store, at which point this whole path
+is replaced by Play in-app updates (`in_app_update`) — Play policy forbids
+an app updating itself and treats `REQUEST_INSTALL_PACKAGES` as a restricted
+permission. Also revisit if the update needs to be forced rather than
+offered, which would want a `minBuildNumber` field in the manifest and a
+gate at startup rather than a card in settings.

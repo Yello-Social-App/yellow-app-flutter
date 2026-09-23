@@ -5,6 +5,12 @@
          notification instead of showing it. PushNotificationService
          requests it via FirebaseMessaging.instance.requestPermission(). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Yello is installed from an APK rather than from a store, so it
+         fetches and installs its own updates (ADR-029). This lets the app
+         ask the OS package installer to open the build it downloaded; the
+         user still confirms every install, and still has to grant "install
+         unknown apps" to Yello once. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <application
         android:label="Yello."
         android:name="${applicationName}"
@@ -48,6 +54,19 @@
         <receiver
             android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"
             android:exported="false" />
+        <!-- Hands the downloaded APK to the package installer, which is a
+             different app and cannot read Yello's private cache without a
+             content URI. Authority must match MainActivity.kt's
+             "$packageName.fileprovider". -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

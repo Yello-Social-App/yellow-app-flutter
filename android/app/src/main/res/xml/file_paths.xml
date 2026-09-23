@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What the app's FileProvider is allowed to hand out. Exactly one entry:
+  the `updates` folder in the app's cache, where the in-app updater writes
+  the downloaded APK before passing it to the OS package installer
+  (ADR-029, MainActivity.kt).
+
+  Deliberately not a broader `<cache-path path="." />` — the provider is
+  the one door out of app-private storage, and it should open onto the one
+  folder that needs it.
+-->
+<paths>
+    <cache-path name="updates" path="updates/" />
+</paths>

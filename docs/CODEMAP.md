@@ -5,8 +5,8 @@
 Index of every meaningful file in `lib/`, so you can jump straight to the
 right one instead of searching. **Read this before opening source files.**
 
-- Generated from commit `a6d3ca4`
-- `lib/`: 270 Dart files · `test/`: 26 test files
+- Generated from commit `5431597`
+- `lib/`: 281 Dart files · `test/`: 27 test files
 - Regenerate: `bash tool/codemap.sh` · Staleness check: `bash tool/codemap.sh --check`
 
 Layer rule (see [ARCHITECTURE.md](ARCHITECTURE.md)): `presentation` → `domain/usecases`
@@ -79,9 +79,13 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `AddCommunityCommentUseCase`
 - `AddGroupMembersUseCase`
 - `ApiClient`
+- `ApkInstaller`
 - `AppInfoLocalDataSource`
 - `AppInfoRepository`
 - `AppRouter`
+- `AppUpdateCubit`
+- `AppUpdateRemoteDataSource`
+- `AppUpdateRepository`
 - `AuthLocalDataSource`
 - `AuthRemoteDataSource`
 - `AuthRepository`
@@ -93,6 +97,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `ChatRemoteDataSource`
 - `ChatRepository`
 - `ChatSocket`
+- `CheckForUpdateUseCase`
 - `CommunitiesRemoteDataSource`
 - `CommunitiesRepository`
 - `Connectivity`
@@ -104,6 +109,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `DeleteMessageUseCase`
 - `DeleteNotificationUseCase`
 - `DeletePostUseCase`
+- `DownloadUpdateUseCase`
 - `EditCommentUseCase`
 - `EditMessageUseCase`
 - `FeedCubit`
@@ -146,6 +152,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `GetUserPostsUseCase`
 - `GetUserUseCase`
 - `HidePostUseCase`
+- `InstallUpdateUseCase`
 - `InviteToGroupUseCase`
 - `JoinCommunityUseCase`
 - `JwtManager`
@@ -164,6 +171,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `NotificationRemoteDataSource`
 - `NotificationRepository`
 - `NotificationsCubit`
+- `OpenInstallSettingsUseCase`
 - `ProfileRemoteDataSource`
 - `ProfileRepository`
 - `PublishProjectUseCase`
@@ -674,6 +682,7 @@ on re-entry.
 
 **Cubits + States**
 
+- `lib/features/settings/presentation/bloc/app_update_cubit.dart` — AppUpdateState, AppUpdateCubit
 - `lib/features/settings/presentation/bloc/app_version_cubit.dart` — AppVersionState, AppVersionCubit
 
 **Pages**
@@ -684,26 +693,36 @@ on re-entry.
 **Widgets**
 
 - `lib/features/settings/presentation/widgets/settings_card.dart` — SettingsCard
+- `lib/features/settings/presentation/widgets/update_card.dart` — UpdateCard
 
 **Usecases**
 
+- `lib/features/settings/domain/usecases/check_for_update_usecase.dart` — CheckForUpdateUseCase
+- `lib/features/settings/domain/usecases/download_update_usecase.dart` — DownloadUpdateParams, DownloadUpdateUseCase
 - `lib/features/settings/domain/usecases/get_app_build_info_usecase.dart` — GetAppBuildInfoUseCase
+- `lib/features/settings/domain/usecases/install_update_usecase.dart` — InstallUpdateParams, InstallUpdateUseCase
+- `lib/features/settings/domain/usecases/open_install_settings_usecase.dart` — OpenInstallSettingsUseCase
 
 **Entities**
 
 - `lib/features/settings/domain/entities/app_build_info.dart` — AppBuildInfo
+- `lib/features/settings/domain/entities/app_update.dart` — AppUpdate
 
 **Repository interfaces**
 
 - `lib/features/settings/domain/repositories/app_info_repository.dart`
+- `lib/features/settings/domain/repositories/app_update_repository.dart`
 
 **Repository implementations**
 
 - `lib/features/settings/data/repositories/app_info_repository_impl.dart` — AppInfoRepositoryImpl
+- `lib/features/settings/data/repositories/app_update_repository_impl.dart` — AppUpdateRepositoryImpl
 
 **Data sources**
 
+- `lib/features/settings/data/datasources/apk_installer.dart` — ApkInstallerImpl
 - `lib/features/settings/data/datasources/app_info_local_datasource.dart` — AppInfoLocalDataSourceImpl
+- `lib/features/settings/data/datasources/app_update_remote_datasource.dart` — AppUpdateRemoteDataSourceImpl
 
 ### Shell — `lib/features/shell`
 
@@ -900,6 +919,7 @@ on re-entry.
 - `test/features/profile/profile_header_test.dart`
 - `test/features/profile/shared_posts_cubit_test.dart`
 - `test/features/safety/safety_cubits_test.dart`
+- `test/features/settings/app_update_cubit_test.dart`
 - `test/features/settings/app_version_cubit_test.dart`
 - `test/features/shell/bottom_nav_bar_test.dart`
 - `test/features/showcase/showcase_widgets_test.dart`

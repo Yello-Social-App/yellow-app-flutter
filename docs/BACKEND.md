@@ -305,7 +305,7 @@ category is being sent.
 | **Stories** | No `/stories` resource exists. Permanent client-side seed, in-memory only; "seen" resets each app session. | `feed/data/datasources/story_local_datasource.dart` |
 | **Saved posts / bookmarks** | No endpoint. Persisted on-device via `shared_preferences`; not synced across devices. | `feed/data/datasources/bookmarks_local_datasource.dart` |
 | **Chat** | *Does* have a backend (`yello-chat`, `/ws`, with a socket upgrade on the same path for live delivery). | `chat/data/datasources/chat_remote_datasource.dart` |
-| **App updates / version check** | No version resource on any of the three services — nothing to ask "is there a newer build?". The App version screen reports the installed build only and points at the store; don't add a check-now button or an auto-check toggle against a made-up endpoint. | `settings/data/datasources/app_info_local_datasource.dart` |
+| **App updates / version check** | Still no version resource on any of the three services. The app does not ask one: since it is sideloaded rather than installed from a store, the Updates group reads a `latest.json` published beside each release's APK (`AppConfig.updateManifestUrl`, ADR-029). Don't route that through `ApiClient` — it is off-host, and `AuthInterceptor` would attach the session token to it. | `settings/data/datasources/app_update_remote_datasource.dart` |
 
 ## Known backend limitations (not solvable in this repo)
 

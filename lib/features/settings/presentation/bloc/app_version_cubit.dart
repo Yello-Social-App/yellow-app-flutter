@@ -22,9 +22,9 @@ class AppVersionState extends Equatable {
 /// build cannot change while the app is running, so the only way this state
 /// goes stale is a reinstall, which restarts the process anyway.
 ///
-/// There is deliberately no "check for updates" here — the API serves no
-/// version resource to compare against, so any such button would only be
-/// able to lie. See `docs/BACKEND.md`.
+/// Checking for a newer build is [AppUpdateCubit]'s job, not this one's:
+/// it is a network call against the release channel, while everything here
+/// must still resolve with the radio off. See ADR-029.
 class AppVersionCubit extends Cubit<AppVersionState> {
   AppVersionCubit({required GetAppBuildInfoUseCase getBuildInfo})
     : _getBuildInfo = getBuildInfo,

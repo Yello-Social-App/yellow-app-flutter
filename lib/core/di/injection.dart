@@ -87,10 +87,19 @@ import '../../features/search/data/repositories/search_repository_impl.dart';
 import '../../features/search/domain/repositories/search_repository.dart';
 import '../../features/search/domain/usecases/search_users_usecase.dart';
 import '../../features/search/presentation/bloc/search_cubit.dart';
+import '../../features/settings/data/datasources/apk_installer.dart';
 import '../../features/settings/data/datasources/app_info_local_datasource.dart';
+import '../../features/settings/data/datasources/app_update_remote_datasource.dart';
 import '../../features/settings/data/repositories/app_info_repository_impl.dart';
+import '../../features/settings/data/repositories/app_update_repository_impl.dart';
 import '../../features/settings/domain/repositories/app_info_repository.dart';
+import '../../features/settings/domain/repositories/app_update_repository.dart';
+import '../../features/settings/domain/usecases/check_for_update_usecase.dart';
+import '../../features/settings/domain/usecases/download_update_usecase.dart';
 import '../../features/settings/domain/usecases/get_app_build_info_usecase.dart';
+import '../../features/settings/domain/usecases/install_update_usecase.dart';
+import '../../features/settings/domain/usecases/open_install_settings_usecase.dart';
+import '../../features/settings/presentation/bloc/app_update_cubit.dart';
 import '../../features/settings/presentation/bloc/app_version_cubit.dart';
 import '../../features/showcase/data/datasources/showcase_remote_datasource.dart';
 import '../../features/showcase/data/repositories/showcase_repository_impl.dart';
@@ -633,14 +642,38 @@ void _registerShowcase() {
 }
 
 void _registerSettings() {
-  // Device-local only: the API has no version resource, so nothing here
-  // touches the network (`docs/BACKEND.md`).
+  // Which build is installed is read off the device. Whether a newer one
+  // exists is read from the release channel's manifest — still not from the
+  // API, which has no version resource (`docs/BACKEND.md`, ADR-029).
   sl.registerLazySingleton<AppInfoLocalDataSource>(() => AppInfoLocalDataSourceImpl());
   sl.registerLazySingleton<AppInfoRepository>(() => AppInfoRepositoryImpl(sl()));
 
+  // Its own bare Dio, deliberately not `ApiClient`'s: the manifest and the
+  // APK are fetched off-host, and `AuthInterceptor` would attach the
+  // session token to both.
+  sl.registerLazySingleton<AppUpdateRemoteDataSource>(() => AppUpdateRemoteDataSourceImpl());
+  sl.registerLazySingleton<ApkInstaller>(() => ApkInstallerImpl());
+  sl.registerLazySingleton<AppUpdateRepository>(() => AppUpdateRepositoryImpl(sl(), sl(), sl(), sl()));
+
   sl.registerLazySingleton(() => GetAppBuildInfoUseCase(sl()));
+  sl.registerLazySingleton(() => CheckForUpdateUseCase(sl()));
+  sl.registerLazySingleton(() => DownloadUpdateUseCase(sl()));
+  sl.registerLazySingleton(() => InstallUpdateUseCase(sl()));
+  sl.registerLazySingleton(() => OpenInstallSettingsUseCase(sl()));
 
   // Factory: one read per visit. The build cannot change while the process
   // is alive, so there is nothing for a singleton to save.
   sl.registerFactory(() => AppVersionCubit(getBuildInfo: sl()));
+
+  // Singleton, unlike the one above: a 60 MB download has to survive the
+  // user leaving the App version screen, and a factory here would close the
+  // cubit mid-transfer. Provided with `BlocProvider.value` for that reason.
+  sl.registerLazySingleton(
+    () => AppUpdateCubit(
+      checkForUpdate: sl(),
+      downloadUpdate: sl(),
+      installUpdate: sl(),
+      openInstallSettings: sl(),
+    ),
+  );
 }

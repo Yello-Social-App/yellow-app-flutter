@@ -49,3 +49,11 @@ app.*.map.json
 
 # Claude Code local overrides (machine-specific, not shared)
 .claude/settings.local.json
+
+# Release signing. The keystore and its passwords sign every APK a user
+# installs — Android refuses an update signed by a different key, so losing
+# or leaking these is unrecoverable. Keep the .jks backed up somewhere that
+# is not this repo. See ADR-025 and android/app/build.gradle.kts.
+/android/key.properties
+*.jks
+*.keystore

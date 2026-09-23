@@ -1,3 +1,23 @@
+import java.io.FileInputStream
+import java.util.Properties
+
+// Release signing, read from `android/key.properties` — a file that is
+// gitignored and never leaves the machine that holds the keystore. Android
+// refuses an update whose signature differs from the installed app, and the
+// in-app updater (ADR-029) makes that a shipping concern rather than a Play
+// Store one: every build handed to a user has to come from this one key.
+//
+// The fallback below keeps `flutter run --release` working on a machine
+// that has no keystore, but a build signed that way must not be
+// distributed — see the comment on the release buildType.
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        FileInputStream(keystorePropertiesFile).use { load(it) }
+    }
+}
+val hasReleaseKeystore = keystorePropertiesFile.exists()
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -36,11 +56,27 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Without `key.properties` this falls back to the debug key so
+            // a local `flutter run --release` still works. That build is
+            // NOT distributable: the debug key is per-machine and expires,
+            // so a user who installs one can never be updated from another
+            // machine's build — Android rejects the signature change and
+            // the only way out is uninstalling, which takes their data with
+            // it. Create the keystore before handing anyone an APK.
+            signingConfig = signingConfigs.getByName(if (hasReleaseKeystore) "release" else "debug")
         }
     }
 }

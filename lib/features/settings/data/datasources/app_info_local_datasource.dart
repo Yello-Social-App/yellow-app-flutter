@@ -6,8 +6,9 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../../domain/entities/app_build_info.dart';
 
 /// Reads the installed build off the device. Local-only by necessity — the
-/// API has no version resource to ask (`docs/BACKEND.md`), which is also why
-/// there is no "check for updates" call anywhere in this feature.
+/// API has no version resource to ask (`docs/BACKEND.md`). Whether a newer
+/// build exists is `AppUpdateRemoteDataSource`'s question, and it asks the
+/// release channel rather than the API (ADR-029).
 abstract interface class AppInfoLocalDataSource {
   Future<AppBuildInfo> getBuildInfo();
 }

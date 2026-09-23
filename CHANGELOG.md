@@ -22,6 +22,14 @@ file only when it genuinely helps.
 
 ### Added
 
+- **Yello updates itself now.** Settings → App version has an Updates card:
+  it tells you whether a newer build has been published, downloads it, and
+  hands it straight to Android's installer — so a new version no longer has
+  to reach you as a file somebody sends you. The first time, Android asks
+  you to allow Yello to install apps; after that it is one tap. Nothing is
+  checked in the background and nothing downloads on its own: the card only
+  moves when you tap it. Android only — an iPhone can only be updated by
+  the App Store, so the card is not there.
 - **Your name follows you down your own profile.** Scrolling your profile
   now slides an app bar in over the top: your photo and name arrive from the
   left as the big header name goes out under them, and the menu and search

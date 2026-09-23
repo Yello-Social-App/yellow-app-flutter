@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -10,24 +12,40 @@ import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/error_view.dart';
 import '../../domain/entities/app_build_info.dart';
+import '../bloc/app_update_cubit.dart';
 import '../bloc/app_version_cubit.dart';
 import '../widgets/settings_card.dart';
+import '../widgets/update_card.dart';
 
 /// Account menu → App version: which build of Yello is installed here, plus
 /// the device facts a support reply asks for next.
 ///
-/// The reference design pairs this with an "Updates" group — a check-now
-/// button, a last-checked time, an auto-check toggle. None of that is here,
-/// on purpose: the API serves no version resource to compare against and the
-/// app ships through the stores, so each of those controls would have to
-/// invent its answer. The group that replaces it says only what is true and
-/// points at the store. See `docs/BACKEND.md`.
+/// Paired with the Updates group the reference design asks for — check,
+/// download, install. It answers from the release channel's `latest.json`,
+/// not from the API, which still serves no version resource
+/// (`docs/BACKEND.md`); [AppConfig.updateManifestUrl] is where that channel
+/// lives and ADR-029 is why it works this way.
+///
+/// Android only. An iOS build cannot install anything but what the App
+/// Store hands it, so the group is simply absent there rather than shown
+/// with a button that could only apologise.
 class AppVersionPage extends StatelessWidget {
   const AppVersionPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(create: (_) => sl<AppVersionCubit>()..load(), child: const _AppVersionView());
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (_) => sl<AppVersionCubit>()..load()),
+        // `.value`, because `AppUpdateCubit` is a singleton: a download
+        // that is running must not be closed by popping this screen.
+        // Not auto-checked on open either — an update check is a network
+        // call the user did not ask for, and this screen's first job is to
+        // answer "what am I running?" offline.
+        BlocProvider.value(value: sl<AppUpdateCubit>()),
+      ],
+      child: const _AppVersionView(),
+    );
   }
 }
 
@@ -91,9 +109,9 @@ class _Loaded extends StatelessWidget {
 
   final AppBuildInfo info;
 
-  /// Where a newer build actually comes from on this platform — the one
-  /// thing about updates this screen can state without guessing.
-  String get _storeName => info.platform == 'iOS' ? 'App Store' : 'Play Store';
+  /// Android installs Yello from a file and updates through the group
+  /// below; iOS can only be updated by the App Store.
+  bool get _isSideloaded => info.platform != 'iOS';
 
   /// Everything a bug report needs, on one line, in the order a human reads
   /// it. Rows the device would not tell us are left out rather than pasted
@@ -140,8 +158,11 @@ class _Loaded extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      'Build ${info.buildNumber} is the one installed on this device. '
-                      'New versions arrive through the $_storeName.',
+                      _isSideloaded
+                          ? 'Build ${info.buildNumber} is the one installed on this device. '
+                                'Updates are fetched below.'
+                          : 'Build ${info.buildNumber} is the one installed on this device. '
+                                'New versions arrive through the App Store.',
                       style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink2),
                     ),
                   ],
@@ -150,6 +171,7 @@ class _Loaded extends StatelessWidget {
             ],
           ),
         ),
+        if (Platform.isAndroid) ...[const SizedBox(height: 20), const UpdateCard()],
         const SizedBox(height: 20),
         Row(
           children: [
