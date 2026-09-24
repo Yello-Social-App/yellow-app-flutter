@@ -7,7 +7,6 @@ import '../entities/comment_entity.dart';
 import '../entities/post_entity.dart';
 import '../entities/reaction_breakdown.dart';
 import '../entities/reactor_entity.dart';
-import '../entities/story_entity.dart';
 
 /// One cursor-paginated page of the `/feed` endpoint.
 class FeedPage {
@@ -33,16 +32,15 @@ class ReactorsPage {
 }
 
 /// Domain-facing contract for everything the Home/Feed tab needs. Backed by
-/// the real `api.yello.cachewraith.com` API for posts/comments/
-/// reactions/reposts; stories have no backend endpoint at all and are
-/// served locally (see `StoryLocalDataSource`); "save" likewise has no
-/// backend endpoint and is a device-local bookmark (`BookmarksLocalDataSource`).
+/// the real `api.yello.cachewraith.com` API for posts/comments/reactions/
+/// reposts. "Save" has no backend endpoint and is a device-local bookmark
+/// (`BookmarksLocalDataSource`).
+///
+/// Stories are **not** here: they have their own resource and their own
+/// contract (`StoryRepository`). The rail is the only place the two
+/// features meet, and it holds both.
 abstract interface class FeedRepository {
   Future<Either<Failure, FeedPage>> getFeed({String? cursor});
-  Future<Either<Failure, List<StoryEntity>>> getStories();
-
-  /// Device-local — flips a story tray to seen (see [StoryEntity.seen] doc).
-  Future<Either<Failure, void>> markStorySeen(String userId);
   Future<Either<Failure, PostEntity>> getPost(String postId);
   Future<Either<Failure, CommentsPage>> getComments(String postId, {int page = 0});
   Future<Either<Failure, CommentEntity>> addComment(String postId, String content, {String? parentCommentId});

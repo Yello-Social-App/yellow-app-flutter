@@ -32,10 +32,12 @@ import '../../features/communities/presentation/bloc/community_post_cubit.dart';
 import '../../features/communities/presentation/bloc/create_community_post_cubit.dart';
 import '../../features/feed/data/datasources/bookmarks_local_datasource.dart';
 import '../../features/feed/data/datasources/feed_remote_datasource.dart';
-import '../../features/feed/data/datasources/story_local_datasource.dart';
+import '../../features/feed/data/datasources/story_remote_datasource.dart';
 import '../../features/feed/data/repositories/feed_repository_impl.dart';
+import '../../features/feed/data/repositories/story_repository_impl.dart';
 import '../../features/feed/domain/entities/post_entity.dart';
 import '../../features/feed/domain/repositories/feed_repository.dart';
+import '../../features/feed/domain/repositories/story_repository.dart';
 import '../../features/feed/domain/usecases/add_comment_usecase.dart';
 import '../../features/feed/domain/usecases/create_post_usecase.dart';
 import '../../features/feed/domain/usecases/delete_comment_usecase.dart';
@@ -47,16 +49,19 @@ import '../../features/feed/domain/usecases/get_post_detail_usecase.dart';
 import '../../features/feed/domain/usecases/get_post_usecase.dart';
 import '../../features/feed/domain/usecases/get_saved_post_ids_usecase.dart';
 import '../../features/feed/domain/usecases/get_share_link_usecase.dart';
-import '../../features/feed/domain/usecases/get_stories_usecase.dart';
 import '../../features/feed/domain/usecases/like_post_usecase.dart';
-import '../../features/feed/domain/usecases/mark_story_seen_usecase.dart';
+import '../../features/feed/domain/usecases/story_usecases.dart';
 import '../../features/feed/domain/usecases/react_usecases.dart';
 import '../../features/feed/domain/usecases/update_post_usecase.dart';
 import '../../features/feed/presentation/bloc/create_post_cubit.dart';
 import '../../features/feed/presentation/bloc/feed_cubit.dart';
 import '../../features/feed/presentation/bloc/post_detail_cubit.dart';
 import '../../features/feed/presentation/bloc/reactors_cubit.dart';
+import '../../features/feed/presentation/bloc/story_archive_cubit.dart';
+import '../../features/feed/presentation/bloc/story_compose_cubit.dart';
 import '../../features/feed/presentation/bloc/story_cubit.dart';
+import '../../features/feed/presentation/bloc/story_preview_cubit.dart';
+import '../../features/feed/presentation/bloc/story_viewers_cubit.dart';
 import '../../features/friends/data/datasources/friends_remote_datasource.dart';
 import '../../features/friends/data/repositories/friends_repository_impl.dart';
 import '../../features/friends/domain/repositories/friends_repository.dart';
@@ -470,15 +475,24 @@ void _registerSafety() {
 void _registerFeed() {
   // Live backend (posts/comments/reactions/reposts/feed).
   sl.registerLazySingleton<FeedRemoteDataSource>(() => FeedRemoteDataSourceImpl(sl()));
-  // No backend endpoint exists for either of these (see each class's doc).
-  sl.registerLazySingleton<StoryLocalDataSource>(() => StoryLocalDataSourceImpl());
+  // Live backend too, but its own resource and its own contract.
+  sl.registerLazySingleton<StoryRemoteDataSource>(() => StoryRemoteDataSourceImpl(sl()));
+  // No backend endpoint exists for bookmarks (see the class's own doc).
   sl.registerLazySingleton<BookmarksLocalDataSource>(() => BookmarksLocalDataSourceImpl());
 
-  sl.registerLazySingleton<FeedRepository>(() => FeedRepositoryImpl(sl(), sl(), sl(), sl()));
+  sl.registerLazySingleton<FeedRepository>(() => FeedRepositoryImpl(sl(), sl(), sl()));
+  sl.registerLazySingleton<StoryRepository>(() => StoryRepositoryImpl(sl(), sl()));
 
   sl.registerLazySingleton(() => GetFeedUseCase(sl()));
-  sl.registerLazySingleton(() => GetStoriesUseCase(sl()));
-  sl.registerLazySingleton(() => MarkStorySeenUseCase(sl()));
+  sl.registerLazySingleton(() => GetStoryRailUseCase(sl()));
+  sl.registerLazySingleton(() => GetUserStoriesUseCase(sl()));
+  sl.registerLazySingleton(() => GetStoryUseCase(sl()));
+  sl.registerLazySingleton(() => CreateStoryUseCase(sl()));
+  sl.registerLazySingleton(() => MarkStoryViewedUseCase(sl()));
+  sl.registerLazySingleton(() => GetStoryViewersUseCase(sl()));
+  sl.registerLazySingleton(() => GetStoryArchiveUseCase(sl()));
+  sl.registerLazySingleton(() => DeleteStoryUseCase(sl()));
+  sl.registerLazySingleton(() => ReplyToStoryUseCase(sl()));
   sl.registerLazySingleton(() => LikePostUseCase(sl()));
   sl.registerLazySingleton(() => ReactToPostUseCase(sl()));
   sl.registerLazySingleton(() => ReactToCommentUseCase(sl()));
@@ -506,7 +520,7 @@ void _registerFeed() {
   sl.registerLazySingleton(
     () => FeedCubit(
       getFeed: sl(),
-      getStories: sl(),
+      getStoryRail: sl(),
       likePost: sl(),
       reactToPost: sl(),
       repost: sl(),
@@ -549,7 +563,23 @@ void _registerFeed() {
   sl.registerFactoryParam<ReactorsCubit, ({String targetType, String targetId}), ReactionType?>(
     (ids, type) => ReactorsCubit(targetType: ids.targetType, targetId: ids.targetId, type: type, getReactors: sl()),
   );
-  sl.registerFactory(() => StoryCubit(sl(), sl()));
+  // One viewer session per push, disposed with the page.
+  sl.registerFactory(
+    () => StoryCubit(
+      getRail: sl(),
+      getUserStories: sl(),
+      getStory: sl(),
+      markViewed: sl(),
+      deleteStory: sl(),
+      replyToStory: sl(),
+    ),
+  );
+  // Singleton: it is a shared, id-keyed story cache for chat's reply
+  // bubbles, so it has to outlive any one bubble or conversation.
+  sl.registerLazySingleton(() => StoryPreviewCubit(sl()));
+  sl.registerFactory(() => StoryComposeCubit(sl()));
+  sl.registerFactory(() => StoryViewersCubit(sl()));
+  sl.registerFactory(() => StoryArchiveCubit(sl(), sl()));
   sl.registerFactory(() => CreatePostCubit(sl()));
 }
 

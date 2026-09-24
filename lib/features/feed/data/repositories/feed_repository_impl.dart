@@ -9,17 +9,14 @@ import '../../../../core/network/network_info.dart';
 import '../../domain/entities/comment_entity.dart';
 import '../../domain/entities/post_entity.dart';
 import '../../domain/entities/reaction_breakdown.dart';
-import '../../domain/entities/story_entity.dart';
 import '../../domain/repositories/feed_repository.dart';
 import '../datasources/bookmarks_local_datasource.dart';
 import '../datasources/feed_remote_datasource.dart';
-import '../datasources/story_local_datasource.dart';
 
 class FeedRepositoryImpl implements FeedRepository {
-  FeedRepositoryImpl(this._remote, this._stories, this._bookmarks, this._networkInfo);
+  FeedRepositoryImpl(this._remote, this._bookmarks, this._networkInfo);
 
   final FeedRemoteDataSource _remote;
-  final StoryLocalDataSource _stories;
   final BookmarksLocalDataSource _bookmarks;
   final NetworkInfo _networkInfo;
 
@@ -42,12 +39,6 @@ class FeedRepositoryImpl implements FeedRepository {
     final posts = await Future.wait(result.posts.map(_withSaved));
     return FeedPage(posts: posts, hasMore: result.hasMore, nextCursor: result.nextCursor);
   });
-
-  @override
-  Future<Either<Failure, List<StoryEntity>>> getStories() => _run(_stories.getStories);
-
-  @override
-  Future<Either<Failure, void>> markStorySeen(String userId) => _run(() => _stories.markSeen(userId));
 
   @override
   Future<Either<Failure, PostEntity>> getPost(String postId) => _run(() async {

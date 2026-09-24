@@ -5,8 +5,8 @@
 Index of every meaningful file in `lib/`, so you can jump straight to the
 right one instead of searching. **Read this before opening source files.**
 
-- Generated from commit `5431597`
-- `lib/`: 281 Dart files · `test/`: 27 test files
+- Generated from commit `00b2307`
+- `lib/`: 290 Dart files · `test/`: 29 test files
 - Regenerate: `bash tool/codemap.sh` · Staleness check: `bash tool/codemap.sh --check`
 
 Layer rule (see [ARCHITECTURE.md](ARCHITECTURE.md)): `presentation` → `domain/usecases`
@@ -45,8 +45,9 @@ Declared in `lib/core/router/app_router.dart`; names live in
 | `/user/:userId` | `userProfile` | `PublicProfilePage` |
 | `/chat/:conversationId` | `chat` | `ChatPage` |
 | `/chat/:conversationId/info` | `groupInfo` | `GroupInfoPage` |
-| `/story/:userIndex` | `storyViewer` | `StoryViewerPage` |
+| `/story/:authorId` | `storyViewer` | `StoryViewerPage` |
 | `/story-compose` | `storyCompose` | `StoryComposePage` |
+| `/story-archive` | `storyArchive` | `StoryArchivePage` |
 | `/create` | `createPost` | `CreatePostPage` |
 | `/search` | `search` | `SearchPage` |
 | `/shared-posts` | `sharedPosts` | `SharedPostsPage` |
@@ -103,12 +104,14 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `Connectivity`
 - `CreateCommunityPostUseCase`
 - `CreatePostUseCase`
+- `CreateStoryUseCase`
 - `DeclineFriendRequestUseCase`
 - `DeclineGroupInviteUseCase`
 - `DeleteCommentUseCase`
 - `DeleteMessageUseCase`
 - `DeleteNotificationUseCase`
 - `DeletePostUseCase`
+- `DeleteStoryUseCase`
 - `DownloadUpdateUseCase`
 - `EditCommentUseCase`
 - `EditMessageUseCase`
@@ -147,9 +150,13 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `GetReactorsUseCase`
 - `GetSavedPostIdsUseCase`
 - `GetShareLinkUseCase`
-- `GetStoriesUseCase`
+- `GetStoryArchiveUseCase`
+- `GetStoryRailUseCase`
+- `GetStoryUseCase`
+- `GetStoryViewersUseCase`
 - `GetUnreadNotificationCountUseCase`
 - `GetUserPostsUseCase`
+- `GetUserStoriesUseCase`
 - `GetUserUseCase`
 - `HidePostUseCase`
 - `InstallUpdateUseCase`
@@ -164,7 +171,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `MarkAllNotificationsReadUseCase`
 - `MarkNotificationReadUseCase`
 - `MarkReadUseCase`
-- `MarkStorySeenUseCase`
+- `MarkStoryViewedUseCase`
 - `MessagesCubit`
 - `MuteUserUseCase`
 - `NetworkInfo`
@@ -187,6 +194,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `RemoveGroupMemberUseCase`
 - `RemoveGroupPhotoUseCase`
 - `RenameGroupUseCase`
+- `ReplyToStoryUseCase`
 - `ReportPostUseCase`
 - `RepostUseCase`
 - `ResendOtpUseCase`
@@ -207,7 +215,9 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `ShowcaseRepository`
 - `StartDirectConversationUseCase`
 - `StartGroupConversationUseCase`
-- `StoryLocalDataSource`
+- `StoryPreviewCubit`
+- `StoryRemoteDataSource`
+- `StoryRepository`
 - `SubmitFeedbackUseCase`
 - `ThemeCubit`
 - `ToggleProjectLikeUseCase`
@@ -247,7 +257,10 @@ on re-entry.
 - `SearchCubit`
 - `SharedPostsCubit`
 - `ShowcaseCubit`
+- `StoryArchiveCubit`
+- `StoryComposeCubit`
 - `StoryCubit`
+- `StoryViewersCubit`
 
 ---
 
@@ -315,6 +328,10 @@ on re-entry.
 - `lib/features/chat/presentation/pages/group_info_page.dart` — GroupInfoPage
 - `lib/features/chat/presentation/pages/messages_page.dart` — MessagesPage
 
+**Widgets**
+
+- `lib/features/chat/presentation/widgets/story_reply_preview.dart` — StoryReplyPreview
+
 **Usecases**
 
 - `lib/features/chat/domain/usecases/chat_usecases.dart` — CursorParams, GetConversationsUseCase, GetConversationUseCase, GetMessagesParams, GetMessagesUseCase, SendMessageParams, SendMessageUseCase, EditMessageParams, EditMessageUseCase, MessageRefParams, DeleteMessageUseCase, ReactToMessageParams, ReactToMessageUseCase, UploadAttachmentParams, UploadAttachmentUseCase, RefreshAttachmentUseCase, MarkReadParams, MarkReadUseCase, StartDirectConversationUseCase, StartGroupParams, StartGroupConversationUseCase, RenameGroupParams, RenameGroupUseCase, SetGroupPhotoParams, SetGroupPhotoUseCase, RemoveGroupPhotoUseCase, GroupMembersParams, AddGroupMembersUseCase, GroupMemberParams, RemoveGroupMemberUseCase, ChangeMemberRoleParams, ChangeMemberRoleUseCase, LeaveGroupUseCase, InviteToGroupUseCase, AcceptGroupInviteUseCase, DeclineGroupInviteUseCase, newChatClientId()
@@ -324,7 +341,7 @@ on re-entry.
 - `lib/features/chat/domain/entities/attachment_entity.dart` — AttachmentEntity
 - `lib/features/chat/domain/entities/conversation_entity.dart` — LastMessageEntity, ConversationChange, ConversationEntity
 - `lib/features/chat/domain/entities/group_invite_entity.dart` — GroupInviteCardEntity, GroupInviteEntity, GroupInviteResult
-- `lib/features/chat/domain/entities/message_entity.dart` — ReplyPreviewEntity, ReactionEntity, MessageEntity
+- `lib/features/chat/domain/entities/message_entity.dart` — ReplyPreviewEntity, ReactionEntity, StoryReplyEntity, MessageEntity
 - `lib/features/chat/domain/entities/participant_entity.dart` — ParticipantEntity
 
 **Repository interfaces**
@@ -407,13 +424,18 @@ on re-entry.
 - `lib/features/feed/presentation/bloc/feed_cubit.dart` — FeedState, FeedCubit
 - `lib/features/feed/presentation/bloc/post_detail_cubit.dart` — PostDetailState, PostDetailCubit
 - `lib/features/feed/presentation/bloc/reactors_cubit.dart` — ReactorsState, ReactorsCubit
+- `lib/features/feed/presentation/bloc/story_archive_cubit.dart` — StoryArchiveDay, StoryArchiveState, StoryArchiveCubit
+- `lib/features/feed/presentation/bloc/story_compose_cubit.dart` — StoryComposeState, StoryComposeCubit
 - `lib/features/feed/presentation/bloc/story_cubit.dart` — StoryState, StoryCubit
+- `lib/features/feed/presentation/bloc/story_preview_cubit.dart` — StoryPreviewState, StoryPreviewCubit
+- `lib/features/feed/presentation/bloc/story_viewers_cubit.dart` — StoryViewersState, StoryViewersCubit
 
 **Pages**
 
 - `lib/features/feed/presentation/pages/create_post_page.dart` — CreatePostPage
 - `lib/features/feed/presentation/pages/feed_page.dart` — FeedPage
 - `lib/features/feed/presentation/pages/post_detail_page.dart` — PostDetailPage
+- `lib/features/feed/presentation/pages/story_archive_page.dart` — StoryArchivePage
 - `lib/features/feed/presentation/pages/story_compose_page.dart` — StoryComposePage
 - `lib/features/feed/presentation/pages/story_viewer_page.dart` — StoryViewerPage
 
@@ -427,6 +449,8 @@ on re-entry.
 - `lib/features/feed/presentation/widgets/reaction_picker_sheet.dart` — showReactionPicker()
 - `lib/features/feed/presentation/widgets/reactors_sheet.dart` — showReactorsSheet()
 - `lib/features/feed/presentation/widgets/stories_rail.dart` — StoriesRail
+- `lib/features/feed/presentation/widgets/story_background.dart` — StoryCoverSwatch, storyBackgroundForeground(), storyBackgroundGradient()
+- `lib/features/feed/presentation/widgets/story_viewers_sheet.dart` — showStoryViewersSheet()
 
 **Usecases**
 
@@ -441,10 +465,9 @@ on re-entry.
 - `lib/features/feed/domain/usecases/get_post_usecase.dart` — GetPostUseCase
 - `lib/features/feed/domain/usecases/get_saved_post_ids_usecase.dart` — GetSavedPostIdsUseCase
 - `lib/features/feed/domain/usecases/get_share_link_usecase.dart` — GetShareLinkUseCase
-- `lib/features/feed/domain/usecases/get_stories_usecase.dart` — GetStoriesUseCase
 - `lib/features/feed/domain/usecases/like_post_usecase.dart` — PostIdParams, LikePostUseCase, RepostParams, RepostUseCase, ToggleSaveUseCase
-- `lib/features/feed/domain/usecases/mark_story_seen_usecase.dart` — MarkStorySeenUseCase
 - `lib/features/feed/domain/usecases/react_usecases.dart` — ReactToPostParams, ReactToPostUseCase, ReactToCommentParams, ReactToCommentUseCase, GetReactionSummaryParams, GetReactionSummaryUseCase, GetReactorsParams, GetReactorsUseCase
+- `lib/features/feed/domain/usecases/story_usecases.dart` — GetStoryRailUseCase, GetUserStoriesUseCase, GetStoryUseCase, CreateStoryParams, CreateStoryUseCase, MarkStoryViewedUseCase, GetStoryViewersParams, GetStoryViewersUseCase, GetStoryArchiveParams, GetStoryArchiveUseCase, DeleteStoryUseCase, ReplyToStoryParams, ReplyToStoryUseCase
 - `lib/features/feed/domain/usecases/update_post_usecase.dart` — UpdatePostParams, UpdatePostUseCase
 
 **Entities**
@@ -453,28 +476,30 @@ on re-entry.
 - `lib/features/feed/domain/entities/post_entity.dart` — PostEntity
 - `lib/features/feed/domain/entities/reaction_breakdown.dart` — ReactionBreakdown
 - `lib/features/feed/domain/entities/reactor_entity.dart` — ReactorEntity
-- `lib/features/feed/domain/entities/story_entity.dart` — StorySegmentEntity, StoryEntity
+- `lib/features/feed/domain/entities/story_entity.dart` — StoryImageEntity, StoryAuthorEntity, StoryEntity, StoryRingEntity, StoryRailEntity, StoryViewerEntity, StoryReplyReceipt
 
 **Repository interfaces**
 
 - `lib/features/feed/domain/repositories/feed_repository.dart` — FeedPage, CommentsPage, ReactorsPage
+- `lib/features/feed/domain/repositories/story_repository.dart` — StoryArchivePage, StoryViewersPage, StoryArchiveFilter
 
 **Repository implementations**
 
 - `lib/features/feed/data/repositories/feed_repository_impl.dart` — FeedRepositoryImpl
+- `lib/features/feed/data/repositories/story_repository_impl.dart` — StoryRepositoryImpl
 
 **Models (JSON ⇄ entity)**
 
 - `lib/features/feed/data/models/comment_model.dart` — CommentModel
 - `lib/features/feed/data/models/post_model.dart` — PostModel
 - `lib/features/feed/data/models/reactor_model.dart` — ReactorModel
-- `lib/features/feed/data/models/story_model.dart` — StorySegmentModel, StoryModel
+- `lib/features/feed/data/models/story_model.dart`
 
 **Data sources**
 
 - `lib/features/feed/data/datasources/bookmarks_local_datasource.dart` — BookmarksLocalDataSourceImpl
 - `lib/features/feed/data/datasources/feed_remote_datasource.dart` — ReactionSummary, FeedRemoteDataSourceImpl
-- `lib/features/feed/data/datasources/story_local_datasource.dart` — StoryLocalDataSourceImpl
+- `lib/features/feed/data/datasources/story_remote_datasource.dart` — StoryRemoteDataSourceImpl
 
 ### Friends — `lib/features/friends`
 
@@ -914,6 +939,8 @@ on re-entry.
 - `test/features/feed/feed_cubit_test.dart`
 - `test/features/feed/post_detail_cubit_test.dart`
 - `test/features/feed/story_compose_page_test.dart`
+- `test/features/feed/story_cubit_test.dart`
+- `test/features/feed/story_mapper_test.dart`
 - `test/features/profile/profile_cubit_test.dart`
 - `test/features/profile/profile_details_card_test.dart`
 - `test/features/profile/profile_header_test.dart`

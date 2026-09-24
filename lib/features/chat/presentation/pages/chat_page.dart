@@ -31,6 +31,7 @@ import '../../domain/entities/message_entity.dart';
 import '../../domain/entities/participant_entity.dart';
 import '../bloc/chat_cubit.dart';
 import '../bloc/messages_cubit.dart';
+import '../widgets/story_reply_preview.dart';
 
 /// The quick-react palette on a long-pressed bubble. Any single emoji is
 /// accepted by the server; these six are what one tap offers.
@@ -407,6 +408,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                                 lastInRun: index == messages.length - 1 || !_sameRun(message, messages[index + 1]),
                                 isRead: _isReadByPeers(message, messages, conversation),
                                 busy: state.busyMessageIds.contains(message.id),
+                                viewerId: conversation?.viewerId,
                                 quotedAuthor: reply == null ? null : _authorName(reply.senderId, conversation),
                                 onLongPress: message.canInteract ? () => _showMessageActions(message) : null,
                                 onToggleReaction: (emoji) => context.read<ChatCubit>().toggleReaction(message, emoji),
@@ -1038,6 +1040,7 @@ class _MessageBubble extends StatelessWidget {
     required this.lastInRun,
     required this.isRead,
     required this.busy,
+    required this.viewerId,
     required this.onLongPress,
     required this.onToggleReaction,
     required this.onAttachmentExpired,
@@ -1059,6 +1062,10 @@ class _MessageBubble extends StatelessWidget {
 
   final bool isRead;
   final bool busy;
+
+  /// The signed-in user's id — a story reply's preview needs it to decide
+  /// whether an expired story is still loadable (its author's is).
+  final String? viewerId;
   final VoidCallback? onLongPress;
   final ValueChanged<String> onToggleReaction;
   final ValueChanged<String> onAttachmentExpired;
@@ -1075,6 +1082,7 @@ class _MessageBubble extends StatelessWidget {
     final mine = message.fromMe;
     final deleted = message.isDeleted;
     final reply = message.replyTo;
+    final storyReply = deleted ? null : message.storyReply;
     // Everything under an incoming bubble is pushed past the avatar column
     // so it lines up with the bubble, not with the avatar.
     final indent = mine ? 0.0 : _senderColumnWidth;
@@ -1083,7 +1091,7 @@ class _MessageBubble extends StatelessWidget {
 
     final images = deleted ? const <AttachmentEntity>[] : message.attachments.where((a) => a.isImage).toList();
     final files = deleted ? const <AttachmentEntity>[] : message.attachments.where((a) => !a.isImage).toList();
-    final hasBubble = deleted || reply != null || message.hasText || files.isNotEmpty;
+    final hasBubble = deleted || reply != null || storyReply != null || message.hasText || files.isNotEmpty;
 
     Widget? bubble;
     if (hasBubble) {
@@ -1098,6 +1106,15 @@ class _MessageBubble extends StatelessWidget {
           crossAxisAlignment: reply != null ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (storyReply != null) ...[
+              StoryReplyPreview(
+                storyReply: storyReply,
+                fromMe: mine,
+                viewerId: viewerId,
+                onYellow: mine,
+              ),
+              const SizedBox(height: 8),
+            ],
             if (reply != null) ...[
               _ReplyQuote(reply: reply, author: quotedAuthor ?? 'Unknown', onYellow: mine, onTap: onQuoteTap),
               const SizedBox(height: 8),

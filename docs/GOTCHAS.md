@@ -12,6 +12,25 @@ not pay for the same lesson twice.
 
 ## Rendering / device
 
+### A half-pinned `Positioned` gives its child **unbounded** height
+
+A `Positioned` inside a `Stack` only gets a tight height when *both* `top`
+and `bottom` (or one of them plus `height`) are set. Pin only `bottom` — the
+natural way to float a caption above the footer — and the child is laid out
+with `maxHeight: infinity`.
+
+- Anything that tries to fill that space throws: `Align`/`Center` without a
+  `heightFactor`, `Expanded`, a `Column` with `MainAxisSize.max`. The error
+  is a `RenderBox was not laid out` / infinite-size assertion, usually
+  pointing at a widget several levels below the `Positioned` that caused it.
+- Widgets that size to their content — `Text`, a `Column` with
+  `mainAxisSize: MainAxisSize.min`, a `Row` — are fine there.
+- Hit while building the story viewer: the full-frame text story pins top
+  *and* bottom, so it can centre its text in a real box, while an image
+  story's caption pins only its bottom and hands back the bare `Text`. See
+  `_StoryText` in
+  `lib/features/feed/presentation/pages/story_viewer_page.dart`.
+
 ### Blurred `BoxShadow` inside an animated or rebuilding widget → crash
 
 Putting `BoxDecoration(boxShadow: [BoxShadow(blurRadius: > 0)])` inside an

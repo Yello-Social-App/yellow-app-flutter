@@ -15,6 +15,7 @@ import '../../features/communities/presentation/pages/create_community_post_page
 import '../../features/feed/presentation/pages/create_post_page.dart';
 import '../../features/feed/presentation/pages/feed_page.dart';
 import '../../features/feed/presentation/pages/post_detail_page.dart';
+import '../../features/feed/presentation/pages/story_archive_page.dart';
 import '../../features/feed/presentation/pages/story_compose_page.dart';
 import '../../features/feed/presentation/pages/story_viewer_page.dart';
 import '../../features/friends/presentation/pages/friends_page.dart';
@@ -166,17 +167,28 @@ class AppRouter {
               builder: (context, state) =>
                   GroupInfoPage(conversationId: state.pathParameters['conversationId']!),
             ),
+            // Keyed by author id rather than by the rail's index: a ring
+            // that expired between the rail rendering and the tap would
+            // otherwise open somebody else's story. `?only=true` plays just
+            // that author's ring (`GET /users/{id}/stories`) instead of
+            // continuing through the whole rail.
             _overlayRoute(
-              path: '/story/:userIndex',
+              path: '/story/:authorId',
               name: RouteNames.storyViewer,
               builder: (context, state) => StoryViewerPage(
-                userIndex: int.tryParse(state.pathParameters['userIndex'] ?? '') ?? 0,
+                authorId: state.pathParameters['authorId']!,
+                onlyThisAuthor: state.uri.queryParameters['only'] == 'true',
               ),
             ),
             _overlayRoute(
               path: '/story-compose',
               name: RouteNames.storyCompose,
               builder: (context, state) => const StoryComposePage(),
+            ),
+            _overlayRoute(
+              path: '/story-archive',
+              name: RouteNames.storyArchive,
+              builder: (context, state) => const StoryArchivePage(),
             ),
             _overlayRoute(
               path: '/create',

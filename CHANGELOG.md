@@ -16,6 +16,39 @@ file only when it genuinely helps.
 
 ## [Unreleased]
 
+### Added
+
+- **Stories are real now.** The ring rail at the top of Home shows your
+  friends' actual stories instead of a fixed demo set — yellow ring for
+  something you have not seen, plain once you have, and the order the server
+  puts them in. Tap one and it plays from the first slide you have not seen,
+  then carries on into the next person's.
+- **Post your own story.** "Add to your story" takes a photo from the camera
+  or your gallery, or a few words on one of eight colour covers, with a
+  caption of up to 140 characters and a choice between friends and public.
+  It expires by itself after 24 hours. Photos are shrunk on the way out, so
+  posting one is quick even over a bad connection. A photo is shown whole,
+  sized to the width of the screen — nothing gets cropped off the top or the
+  sides, whatever shape you shot it in, and the composer frames it exactly
+  as it will play back.
+- **See who watched.** Your own slides show a "Seen by" button that opens
+  the list of names, and a delete button that removes the story for everyone
+  at once. Names are only kept for 48 hours after posting; the count stays
+  forever, and the sheet says so instead of looking broken.
+- **Reply to a story.** Typing in the box at the bottom of someone's story —
+  or tapping the heart — sends them a direct message, and it shows up in the
+  conversation like any other. The story you replied to appears above your
+  words in the chat, and reads "Story unavailable" once it has expired.
+- **Story archive.** Account menu → Story archive keeps every story you have
+  ever posted, grouped by day, long after it has expired. Only you can see
+  it. Filter it by photos, text, or a range of dates, and delete anything
+  you would rather not keep.
+
+### Changed
+
+- Your story typing now pauses the slide it is on, so a story never
+  disappears mid-sentence, and holding a finger on the screen pauses it too.
+
 ---
 
 ## [0.3.0] — 2026-09-23

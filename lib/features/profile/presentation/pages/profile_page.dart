@@ -267,6 +267,12 @@ class _ProfileViewState extends State<_ProfileView> {
         isDark ? 'Dark' : 'Light',
       ),
       (
+        'story-archive',
+        Icons.auto_stories_outlined,
+        'Story archive',
+        'Every story you have posted',
+      ),
+      (
         'feedback',
         Icons.rate_review_outlined,
         'Send feedback',
@@ -290,6 +296,8 @@ class _ProfileViewState extends State<_ProfileView> {
     switch (action) {
       case 'theme':
         context.pushNamed(RouteNames.theme);
+      case 'story-archive':
+        context.pushNamed(RouteNames.storyArchive);
       case 'feedback':
         context.pushNamed(RouteNames.sendFeedback);
       case 'notifications':

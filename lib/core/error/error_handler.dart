@@ -41,6 +41,11 @@ abstract final class ApiErrorCodes {
   /// 400 — you tried to mute yourself.
   static const String cannotMuteSelf = 'CANNOT_MUTE_SELF';
 
+  /// 400 — you tried to reply to your own story. The viewer hides the reply
+  /// box on your own stories, so this is a race (someone else's story you
+  /// were reading turned out to be yours) rather than a reachable button.
+  static const String cannotReplyToOwnStory = 'CANNOT_REPLY_TO_OWN_STORY';
+
   /// 409 — you already have an `UNDER_REVIEW` report on this post. Not an
   /// error the user can act on: the report they wanted already exists, so
   /// `ReportPostCubit` reads this code and reports success ("already
@@ -158,6 +163,7 @@ abstract final class ErrorHandler {
     ApiErrorCodes.friendRequestConflict => 'There is already a request between you two.',
     ApiErrorCodes.cannotReportOwnPost => 'You cannot report your own post.',
     ApiErrorCodes.cannotMuteSelf => 'You cannot mute yourself.',
+    ApiErrorCodes.cannotReplyToOwnStory => 'You cannot reply to your own story.',
     ApiErrorCodes.reportAlreadyExists => 'You have already reported this post.',
     ApiErrorCodes.reportAlreadyResolved => 'That report has already been decided.',
     ApiErrorCodes.postNotVisible => 'That post is not visible to you.',

@@ -22,6 +22,7 @@ abstract final class RouteNames {
   static const String groupInfo = 'group-info';
   static const String storyViewer = 'story-viewer';
   static const String storyCompose = 'story-compose';
+  static const String storyArchive = 'story-archive';
   static const String createPost = 'create-post';
   static const String search = 'search';
 

@@ -1,8 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:yello_social_app/core/di/injection.dart';
+import 'package:yello_social_app/features/feed/domain/usecases/story_usecases.dart';
+import 'package:yello_social_app/features/feed/presentation/bloc/story_compose_cubit.dart';
 import 'package:yello_social_app/features/feed/presentation/pages/story_compose_page.dart';
 
+class _MockCreateStory extends Mock implements CreateStoryUseCase {}
+
 void main() {
+  // The page resolves its cubit from the DI graph; nothing here posts, so a
+  // never-called usecase behind it is enough.
+  setUp(() => sl.registerFactory(() => StoryComposeCubit(_MockCreateStory())));
+
+  tearDown(() => sl.reset());
+
   // Regression coverage for a real safe-area gap: this is a full-bleed Stack
   // with hardcoded pixel offsets for its chrome (close button, tool rail,
   // caption field, "Share story" pill) and deliberately no SafeArea (it
@@ -27,7 +39,7 @@ void main() {
       await tester.pumpWidget(const MaterialApp(home: StoryComposePage()));
       await tester.pump();
       final flatCloseRect = tester.getRect(find.byIcon(Icons.close));
-      final flatShareRect = tester.getRect(find.text('Share story'));
+      final flatShareRect = tester.getRect(find.text('Share with friends'));
 
       // top ~ a Dynamic-Island-class notch; bottom ~ an iOS home indicator /
       // Android gesture pill.
@@ -37,7 +49,7 @@ void main() {
       expect(tester.takeException(), isNull);
 
       final insetCloseRect = tester.getRect(find.byIcon(Icons.close));
-      final insetShareRect = tester.getRect(find.text('Share story'));
+      final insetShareRect = tester.getRect(find.text('Share with friends'));
 
       // Top-anchored chrome must move further down (away from the notch);
       // bottom-anchored chrome must move further up (away from the home

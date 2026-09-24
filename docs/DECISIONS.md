@@ -1248,3 +1248,79 @@ an app updating itself and treats `REQUEST_INSTALL_PACKAGES` as a restricted
 permission. Also revisit if the update needs to be forced rather than
 offered, which would want a `minBuildNumber` field in the manifest and a
 gate at startup rather than a card in settings.
+
+---
+
+## ADR-030 — Stories moved onto the real API, keyed by author id, and kept inside the feed feature
+
+**Date:** 2026-09-24 · **Status:** accepted
+
+`/v1/stories` shipped, so the client-side seed that stood in for it
+(`StoryLocalDataSource`, an in-memory list whose "seen" flag reset every
+app launch) is gone, along with `GetStoriesUseCase` and
+`MarkStorySeenUseCase`. `docs/BACKEND.md` listed Stories as a permanent gap;
+it no longer is. Ten endpoints are wired: post, rail feed, my stories, one
+user's stories, one story, mark viewed, viewers, archive, delete, reply.
+
+**Stories live in `features/feed`, not a feature of their own.** They are
+already there, the rail is part of the Home tab, and the alternative meant
+moving twelve files to buy a boundary that only the rail ever crosses. What
+did get split is the *contract*: `StoryRepository` is separate from
+`FeedRepository` rather than adding ten methods to it — the two share
+nothing but a screen.
+
+**The viewer route takes an author id, not a rail index.** `/story/:authorId`
+replaced `/story/:userIndex`. A rail is a snapshot; a ring whose last story
+expires between the render and the tap shifts every index after it, and an
+index-keyed route would then play the wrong person's story. `?only=true`
+plays that one author's ring (`GET /users/{id}/stories`) instead of
+continuing through the rail — the deep-link and open-from-elsewhere shape.
+Nothing links to it from a profile yet; the route is the seam for when
+something does.
+
+**The rail is two calls, made together.** `/stories/feed` deliberately
+excludes your own stories, so "Your story" comes from `/stories/me`.
+`StoryRepositoryImpl.getRail` fires both and folds them into one
+`StoryRailEntity` whose `all` is your ring first, then the server's order.
+`Future.wait` rather than two sequential `await`s: it rethrows the original
+exception so `_run`'s `on AppException` still catches it, *and* consumes the
+other future's error instead of leaving it unhandled.
+
+**Cover keys map to gradients on the client.** The server stores
+`cover-0` … `cover-7` and never a colour, so
+`kStoryCoverGradients` is the entire definition of what a text story looks
+like — changing a pair restyles every existing story of that cover,
+archived ones included, with no migration. An unknown key renders as
+`cover-0` rather than a blank frame, so a newer backend adding `cover-8`
+degrades instead of breaking.
+
+**Progress ticks are kept out of the page rebuild.** The slide timer emits
+~16 times a second. The viewer's `BlocConsumer` has a `buildWhen` that
+ignores `progress` outright, and `_ProgressBars` reads it through a
+`BlocSelector` — without that, every tick would rebuild the decoded
+full-screen photo behind it.
+
+**The heart sends a reply, it does not react.** There are no story
+reactions server-side (the contract lists them as not built), so a local
+heart would be a button that does nothing off-device. It posts "❤️" through
+`POST /stories/{id}/replies`, which is what it visibly does in Messenger
+anyway.
+
+**Story replies reach chat as a reference, not content.** `Message.storyReply`
+carries `{storyId, storyAuthorId, storyType, storyExpiresAt}` and nothing
+else, so the bubble's preview has to fetch the story itself.
+`StoryPreviewCubit` is a **singleton** cache keyed by story id: several
+replies in one conversation commonly point at the same story, and a
+per-bubble fetch would be one request each. It also refuses to spend a
+request on a story that is expired and not the viewer's own — that is a
+guaranteed `404` — and remembers ids that 404'd so the same bubble never
+asks twice.
+
+**`viewCount` and the viewer list are not the same fact.** Names are deleted
+48 h after posting while the count survives, so an empty viewers sheet under
+"Seen by 23" is correct. The sheet says so in words rather than rendering an
+error.
+
+**Revisit if:** highlights, story reactions or video stories land (all three
+are listed as not built), or if a `STORY_POSTED` push appears — the rail is
+currently re-read on refresh, with no live invalidation.

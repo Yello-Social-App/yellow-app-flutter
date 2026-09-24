@@ -22,6 +22,7 @@ import '../../../../shared/widgets/error_view.dart';
 import '../../../../shared/widgets/shimmer_loading.dart';
 import '../../../../shared/widgets/yello_wordmark.dart';
 import '../../domain/entities/post_entity.dart';
+import '../../domain/entities/story_entity.dart';
 import '../bloc/feed_cubit.dart';
 import '../widgets/create_post_prompt.dart';
 import '../widgets/post_card.dart';
@@ -76,6 +77,14 @@ class _FeedViewState extends State<_FeedView> {
     }
   }
 
+  /// Opens the composer and, on a successful post, drops the created story
+  /// straight into "Your story" — `POST /stories` answers with the whole
+  /// `Story`, so no follow-up `GET /stories/me` is needed.
+  Future<void> _openComposer(BuildContext context, FeedCubit cubit) async {
+    final story = await context.pushNamed<Object?>(RouteNames.storyCompose);
+    if (story is StoryEntity) cubit.prependMyStory(story);
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
@@ -89,7 +98,7 @@ class _FeedViewState extends State<_FeedView> {
           buildWhen: (previous, current) =>
               previous.status != current.status ||
               previous.posts != current.posts ||
-              previous.stories != current.stories ||
+              previous.rail != current.rail ||
               previous.errorMessage != current.errorMessage ||
               previous.me != current.me,
           builder: (context, state) {
@@ -146,10 +155,16 @@ class _FeedViewState extends State<_FeedView> {
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         sliver: SliverToBoxAdapter(
                           child: StoriesRail(
-                            stories: state.stories,
-                            onAddStory: () => context.pushNamed(RouteNames.storyCompose),
-                            onOpenStory: (i) => context
-                                .pushNamed<void>(RouteNames.storyViewer, pathParameters: {'userIndex': '$i'})
+                            rail: state.rail,
+                            myAvatarUrl: state.me?.avatarUrl,
+                            myInitials: (state.me?.fullName ?? state.me?.username ?? 'You').initials,
+                            onAddStory: () => _openComposer(context, cubit),
+                            // Keyed by author id, not by rail index: the
+                            // rail this tap came from may be seconds old,
+                            // and an index would play the wrong ring if one
+                            // expired in between.
+                            onOpenRing: (authorId) => context
+                                .pushNamed<void>(RouteNames.storyViewer, pathParameters: {'authorId': authorId})
                                 .then((_) => cubit.reloadStories()),
                           ),
                         ),

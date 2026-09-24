@@ -298,11 +298,69 @@ An iOS reply to an alert *the system* drew may additionally need a
 Notification Service Extension; unverified, and irrelevant until the
 category is being sent.
 
+## Stories
+
+**Stories now have a real backend.** `/v1/stories` landed on 2026-09-24 and
+replaced the client-side seed this file used to list as a permanent gap.
+Routes live in `VersionedEndpoints`; the client is
+`feed/data/datasources/story_remote_datasource.dart`.
+
+| # | Method | Path | Success |
+|---|---|---|---|
+| 1 | POST | `/v1/stories` (JSON **or** multipart) | `201 Story` — 10/min, 100/day |
+| 2 | GET | `/v1/stories/feed?page=&size=` | `200 Page<StoryFeedGroup>` |
+| 3 | GET | `/v1/stories/me` | `200 Story[]` (bare array, ≤ 100) |
+| 4 | GET | `/v1/users/{id}/stories` | `200 Story[]` (bare array) |
+| 5 | GET | `/v1/stories/{id}` | `200 Story` |
+| 6 | POST | `/v1/stories/{id}/view` | `204` — 120/min |
+| 7 | GET | `/v1/stories/{id}/viewers?page=&size=` | `200 Page<StoryViewer>` |
+| 8 | GET | `/v1/stories/archive?page=&size=&from=&to=&type=` | `200 Page<Story>` |
+| 9 | DELETE | `/v1/stories/{id}` | `204` |
+| 10 | POST | `/v1/stories/{id}/replies` | `202 {storyId, recipientId, clientId}` — 30/min |
+
+Things that bite:
+
+- **The multipart field is `image`, singular and unbracketed** — the exact
+  opposite of `POST /posts`, which needs `images[]`. One file only.
+- **`background` is a key, not a colour.** `cover-0` … `cover-7`; the server
+  never stores CSS. The gradients live in
+  `feed/presentation/widgets/story_background.dart`, so restyling covers is
+  a client release, not a data migration.
+- **Image URLs are signed for 15 minutes**, served from R2's S3 API host
+  (`<account>.r2.cloudflarestorage.com`), *not* the public media domain.
+  They need no auth header. Past `image.urlExpiresAt` the only way to get a
+  working URL is re-fetching the story. Cache by
+  `presignedObjectKey(url)` — see ADR-015.
+- **Your own stories are not in `/stories/feed`.** The rail is
+  `/stories/me` + `/stories/feed`, fetched together
+  (`StoryRepositoryImpl.getRail`).
+- **`viewCount` outlives the viewer list.** Names are deleted 48 h after
+  posting while the count is kept, so an empty `viewers` page on an older
+  archived story is correct, not an error.
+- **A `404` means five different things on purpose** — missing, expired, not
+  visible, blocked either way, suspended. Don't try to tell them apart.
+- **Error codes** are `RESOURCE_NOT_FOUND` / `RATE_LIMIT_EXCEEDED` /
+  `VALIDATION_FAILED` / `INVALID_IMAGE`, plus the new
+  `CANNOT_REPLY_TO_OWN_STORY`. An earlier draft of the contract used
+  different names for the first three; branch on the ones above.
+
+**Replies cross services.** `POST /v1/stories/{id}/replies` is answered by
+yello-api with a `202` and nothing else — the DM is delivered by yello-chat
+a moment later as an ordinary `message.new` frame carrying a new
+`Message.storyReply` field (`{storyId, storyAuthorId, storyType,
+storyExpiresAt}`). Match it back to the optimistic bubble by `clientId`;
+reusing the same `clientId` on a retry can never duplicate the message.
+Chat stores only that reference, never the story's content, so the bubble's
+preview re-fetches the story (`StoryPreviewCubit` caches per id).
+
+Not built server-side: highlights, story reactions, video stories,
+close-friends lists, an archive on/off setting, and any live
+`STORY_POSTED` push. The rail is re-read on refresh, not pushed.
+
 ## Deliberate gaps — do not "fix" these client-side
 
 | Feature | Status | Where |
 |---|---|---|
-| **Stories** | No `/stories` resource exists. Permanent client-side seed, in-memory only; "seen" resets each app session. | `feed/data/datasources/story_local_datasource.dart` |
 | **Saved posts / bookmarks** | No endpoint. Persisted on-device via `shared_preferences`; not synced across devices. | `feed/data/datasources/bookmarks_local_datasource.dart` |
 | **Chat** | *Does* have a backend (`yello-chat`, `/ws`, with a socket upgrade on the same path for live delivery). | `chat/data/datasources/chat_remote_datasource.dart` |
 | **App updates / version check** | Still no version resource on any of the three services. The app does not ask one: since it is sideloaded rather than installed from a store, the Updates group reads a `latest.json` published beside each release's APK (`AppConfig.updateManifestUrl`, ADR-029). Don't route that through `ApiClient` — it is off-host, and `AuthInterceptor` would attach the session token to it. | `settings/data/datasources/app_update_remote_datasource.dart` |

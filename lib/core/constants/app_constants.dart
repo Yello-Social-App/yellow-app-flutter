@@ -16,6 +16,31 @@ abstract final class AppConstants {
   static const double postImageMaxDimension = 1600;
 
   static const Duration storySegmentDuration = Duration(milliseconds: 4200);
+
+  /// A story's text — the caption on an `IMAGE` story or the whole of a
+  /// `TEXT` one. The backend rejects anything longer with
+  /// `400 VALIDATION_FAILED` on `text`, so the composer counts down to it.
+  static const int storyMaxChars = 140;
+
+  /// Longest edge (px) a picked story photo is downscaled to before upload.
+  /// The backend re-encodes to fit 1080x1920 anyway and refuses anything
+  /// over 16 megapixels outright (`400 INVALID_IMAGE`) — a 12 MP phone
+  /// photo is under that, but a stitched panorama or a screenshot from a
+  /// high-DPI tablet is not, and 2160 is comfortably inside every limit
+  /// while still over-sampling the server's own 1080-wide target.
+  static const double storyImageMaxDimension = 2160;
+
+  /// How long a story lives. The server owns `expiresAt` (always
+  /// `createdAt + 24h`); this is only for copy like "23h left".
+  static const Duration storyLifetime = Duration(hours: 24);
+
+  /// A story reply is a DM, and the chat service's own body limit applies —
+  /// not [storyMaxChars], which is the story's text, not the reply's.
+  static const int storyReplyMaxChars = 4000;
+
+  static const int storyFeedPageSize = 20;
+  static const int storyViewersPageSize = 20;
+  static const int storyArchivePageSize = 30;
   static const Duration likePopDuration = Duration(milliseconds: 190);
   static const Duration typingIndicatorDelay = Duration(milliseconds: 1900);
 

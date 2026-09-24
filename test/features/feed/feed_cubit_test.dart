@@ -8,7 +8,8 @@ import 'package:yello_social_app/core/error/failures.dart';
 import 'package:yello_social_app/core/usecase/usecase.dart';
 import 'package:yello_social_app/features/feed/domain/repositories/feed_repository.dart';
 import 'package:yello_social_app/features/feed/domain/usecases/get_feed_usecase.dart';
-import 'package:yello_social_app/features/feed/domain/usecases/get_stories_usecase.dart';
+import 'package:yello_social_app/features/feed/domain/entities/story_entity.dart';
+import 'package:yello_social_app/features/feed/domain/usecases/story_usecases.dart';
 import 'package:yello_social_app/features/feed/domain/entities/post_entity.dart';
 import 'package:yello_social_app/features/feed/domain/usecases/delete_post_usecase.dart';
 import 'package:yello_social_app/features/feed/domain/usecases/get_share_link_usecase.dart';
@@ -24,7 +25,7 @@ import '../../helpers/mock_data.dart';
 
 class _MockGetFeed extends Mock implements GetFeedUseCase {}
 
-class _MockGetStories extends Mock implements GetStoriesUseCase {}
+class _MockGetStoryRail extends Mock implements GetStoryRailUseCase {}
 
 class _MockLikePost extends Mock implements LikePostUseCase {}
 
@@ -52,7 +53,7 @@ class _MockMuteUser extends Mock implements MuteUserUseCase {}
 
 void main() {
   late _MockGetFeed getFeed;
-  late _MockGetStories getStories;
+  late _MockGetStoryRail getStoryRail;
   late _MockLikePost likePost;
   late _MockReactToPost reactToPost;
   late _MockRepost repost;
@@ -80,7 +81,7 @@ void main() {
 
   setUp(() {
     getFeed = _MockGetFeed();
-    getStories = _MockGetStories();
+    getStoryRail = _MockGetStoryRail();
     likePost = _MockLikePost();
     reactToPost = _MockReactToPost();
     repost = _MockRepost();
@@ -93,7 +94,7 @@ void main() {
     getShareLink = _MockGetShareLink();
     hidePost = _MockHidePost();
     muteUser = _MockMuteUser();
-    when(() => getStories(const NoParams())).thenAnswer((_) async => const Right([]));
+    when(() => getStoryRail(const NoParams())).thenAnswer((_) async => const Right(StoryRailEntity.empty));
     when(() => getMe(const NoParams())).thenAnswer((_) async => Right(buildUser()));
     // Default: the signed-in user has no posts/reposts of their own — most
     // tests don't care about repost-recovery, so this keeps `refresh()`'s
@@ -103,7 +104,7 @@ void main() {
 
   FeedCubit buildCubit() => FeedCubit(
     getFeed: getFeed,
-    getStories: getStories,
+    getStoryRail: getStoryRail,
     likePost: likePost,
     reactToPost: reactToPost,
     repost: repost,
