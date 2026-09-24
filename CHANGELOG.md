@@ -16,6 +16,10 @@ file only when it genuinely helps.
 
 ## [Unreleased]
 
+---
+
+## [0.4.0] — 2026-09-24
+
 ### Added
 
 - **Stories are real now.** The ring rail at the top of Home shows your
