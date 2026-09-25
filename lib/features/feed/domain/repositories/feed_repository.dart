@@ -45,11 +45,13 @@ abstract interface class FeedRepository {
   Future<Either<Failure, CommentsPage>> getComments(String postId, {int page = 0});
   Future<Either<Failure, CommentEntity>> addComment(String postId, String content, {String? parentCommentId});
 
-  /// Toggles the current user's `LIKE` reaction on [post] via the single
-  /// `POST /reactions/{targetType}/{targetId}` toggle endpoint — the server
-  /// adds, changes, or removes the reaction based on its current state.
-  /// Returns the post merged with the backend's authoritative reaction
-  /// summary.
+  /// The quick-like tap: adds `LIKE` if the viewer hasn't reacted to [post],
+  /// otherwise **removes** whatever reaction they already left — of any
+  /// type, not just `LIKE`. Goes through the single
+  /// `POST /reactions/{targetType}/{targetId}` toggle endpoint, echoing the
+  /// viewer's current type so the server reads it as an un-react (see
+  /// [reactToPost] for the type-switching path). Returns the post merged
+  /// with the backend's authoritative reaction summary.
   Future<Either<Failure, PostEntity>> toggleLike(PostEntity post);
 
   /// Sets [post]'s reaction to [type] via the same POST toggle as

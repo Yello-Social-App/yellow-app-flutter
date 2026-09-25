@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -21,7 +22,7 @@ class AppWarningDialog extends StatelessWidget {
     required this.message,
     this.confirmLabel = 'Confirm',
     this.cancelLabel = 'Cancel',
-    this.icon = Icons.warning_rounded,
+    this.icon = CupertinoIcons.exclamationmark_triangle_fill,
   });
 
   final String title;
@@ -38,7 +39,7 @@ class AppWarningDialog extends StatelessWidget {
     required String message,
     String confirmLabel = 'Confirm',
     String cancelLabel = 'Cancel',
-    IconData icon = Icons.warning_rounded,
+    IconData icon = CupertinoIcons.exclamationmark_triangle_fill,
   }) async {
     final result = await showDialog<bool>(
       context: context,

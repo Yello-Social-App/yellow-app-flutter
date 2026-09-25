@@ -194,6 +194,12 @@ class CommunityFeedCubit extends Cubit<CommunityFeedState> {
     );
   }
 
+  /// Applies a change made on the thread screen (a vote, a reaction, or a new
+  /// comment) back onto this timeline, so popping back doesn't show stale
+  /// counts — the same handoff `CommunityDetailCubit.applyUpdated` does for a
+  /// single community's list. See ADR-032.
+  void applyUpdated(CommunityPostEntity post) => emit(state.copyWith(posts: _replace(post)));
+
   /// Swaps one post in place, keeping list order — a re-sort here would move a
   /// row out from under the finger that just voted on it, even though the
   /// server's `hot` ordering has genuinely changed.

@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -161,9 +162,9 @@ class _DetailsCardState extends State<_DetailsCard> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AuthHero(
-          icon: Icons.person_add_alt_1,
-          badgeA: Icons.celebration_outlined,
-          badgeB: Icons.badge_outlined,
+          icon: CupertinoIcons.person_add_solid,
+          badgeA: CupertinoIcons.gift,
+          badgeB: CupertinoIcons.person_crop_rectangle,
           filled: false,
           leading: _BackButton(onTap: () => Navigator.of(context).maybePop()),
         ),
@@ -191,7 +192,7 @@ class _DetailsCardState extends State<_DetailsCard> {
                 label: 'Full name',
                 controller: _fullNameController,
                 textInputAction: TextInputAction.next,
-                leadingIcon: Icons.badge_outlined,
+                leadingIcon: CupertinoIcons.person_crop_rectangle,
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 14),
@@ -199,7 +200,7 @@ class _DetailsCardState extends State<_DetailsCard> {
                 label: 'Username',
                 controller: _usernameController,
                 textInputAction: TextInputAction.next,
-                leadingIcon: Icons.alternate_email,
+                leadingIcon: CupertinoIcons.at,
                 onChanged: (_) => setState(() {}),
                 borderColor:
                     !_usernameTouched || _usernameController.text.isEmpty
@@ -220,13 +221,13 @@ class _DetailsCardState extends State<_DetailsCard> {
                 keyboardType: TextInputType.emailAddress,
                 autofillHints: const [AutofillHints.email],
                 textInputAction: TextInputAction.next,
-                leadingIcon: Icons.mail_outline,
+                leadingIcon: CupertinoIcons.mail,
                 onChanged: (_) => setState(() {}),
                 borderColor: _emailController.text.isEmpty
                     ? null
                     : (_emailLooksValid ? colors.grn : null),
                 trailing: _emailController.text.isNotEmpty && _emailLooksValid
-                    ? Icon(Icons.check_circle, size: 19, color: colors.grn)
+                    ? Icon(CupertinoIcons.checkmark_circle_fill, size: 19, color: colors.grn)
                     : null,
               ),
               const SizedBox(height: 14),
@@ -236,7 +237,7 @@ class _DetailsCardState extends State<_DetailsCard> {
                 obscureText: _obscurePassword,
                 autofillHints: const [AutofillHints.newPassword],
                 textInputAction: TextInputAction.next,
-                leadingIcon: Icons.lock_outline,
+                leadingIcon: CupertinoIcons.lock,
                 onChanged: (_) => setState(() => _passwordTouched = true),
                 borderColor:
                     _passwordTouched &&
@@ -256,8 +257,8 @@ class _DetailsCardState extends State<_DetailsCard> {
                       setState(() => _obscurePassword = !_obscurePassword),
                   child: Icon(
                     _obscurePassword
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
+                        ? CupertinoIcons.eye_slash
+                        : CupertinoIcons.eye,
                     size: 19,
                     color: colors.ink3,
                   ),
@@ -270,13 +271,13 @@ class _DetailsCardState extends State<_DetailsCard> {
                 obscureText: _obscurePassword,
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _submit(context),
-                leadingIcon: Icons.lock_outline,
+                leadingIcon: CupertinoIcons.lock,
                 onChanged: (_) => setState(() => _confirmTouched = true),
                 borderColor: _confirmMismatch ? colors.red : null,
                 helperText: _confirmMismatch ? 'Passwords do not match.' : null,
                 helperColor: colors.red,
                 trailing: _confirmMismatch
-                    ? Icon(Icons.error, size: 19, color: colors.red)
+                    ? Icon(CupertinoIcons.exclamationmark_circle_fill, size: 19, color: colors.red)
                     : null,
               ),
               const SizedBox(height: 16),
@@ -375,9 +376,9 @@ class _OtpCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           AuthHero(
-            icon: Icons.password_outlined,
-            badgeA: Icons.mail_outline,
-            badgeB: Icons.badge_outlined,
+            icon: CupertinoIcons.lock_shield,
+            badgeA: CupertinoIcons.mail,
+            badgeB: CupertinoIcons.person_crop_rectangle,
             filled: false,
             leading: _BackButton(
               onTap: () => context.read<AuthCubit>().reset(),
@@ -476,7 +477,7 @@ class _BackButton extends StatelessWidget {
         child: SizedBox(
           width: 38,
           height: 38,
-          child: Icon(Icons.arrow_back, size: 18, color: colors.ink),
+          child: Icon(CupertinoIcons.back, size: 18, color: colors.ink),
         ),
       ),
     );

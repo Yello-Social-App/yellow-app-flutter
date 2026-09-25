@@ -220,8 +220,19 @@ class FeedCubit extends Cubit<FeedState> {
   /// a full refetch.
   void prependPost(PostEntity post) => emit(state.copyWith(posts: [post, ...state.posts]));
 
-  /// Replaces a single post in place (e.g. after editing it elsewhere).
-  void replacePost(PostEntity post) => _replace(post.id, (_) => post);
+  /// Replaces a single post in place — after editing it elsewhere, or after
+  /// its own detail screen hands back what a reaction/comment made of it
+  /// (see ADR-032). No-ops on a post this feed doesn't list.
+  ///
+  /// [PostEntity.repostedByMe] is re-derived from [_myRepostIds] rather than
+  /// taken from [post]: that flag is on no wire response, so every copy of a
+  /// post arriving from elsewhere carries whatever *that* screen managed to
+  /// recover. This feed's own map is what [toggleRepost] reads to cancel, so
+  /// trusting someone else's copy is how the pill ends up saying "Reposted"
+  /// with nothing here able to undo it — or "Repost" on something already
+  /// reposted, one tap away from a duplicate.
+  void replacePost(PostEntity post) =>
+      _replace(post.id, (_) => post.copyWith(repostedByMe: _myRepostIds.containsKey(post.id)));
 
   /// Drops a post from the feed (e.g. after deleting it elsewhere).
   void removePost(String id) => emit(state.copyWith(posts: state.posts.where((p) => p.id != id).toList()));
@@ -275,7 +286,10 @@ class FeedCubit extends Cubit<FeedState> {
   /// [post] unchanged instead of leaving an unconfirmed guess on screen.
   Future<void> toggleLike(PostEntity post) async {
     if (!_pendingReactions.add(post.id)) return;
-    _replace(post.id, (current) => _predictReaction(current, ReactionType.like));
+    // Echoing the viewer's *current* type is what makes a plain tap remove
+    // an existing reaction of any type rather than switch it to LIKE — see
+    // `FeedRepositoryImpl.toggleLike`, which sends the same type on the wire.
+    _replace(post.id, (current) => _predictReaction(current, current.viewerReactionType ?? ReactionType.like));
     try {
       final result = await _likePost(post);
       result.fold((_) => _replace(post.id, (_) => post), (updated) => _replace(post.id, (_) => updated));

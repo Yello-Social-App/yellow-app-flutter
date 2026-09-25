@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yello_social_app/features/auth/domain/entities/user_entity.dart';
@@ -75,7 +76,7 @@ void main() {
     var tapped = false;
     await pumpHeader(tester, onEditAvatar: () => tapped = true);
 
-    await tester.tap(find.byIcon(Icons.photo_camera_rounded));
+    await tester.tap(find.byIcon(CupertinoIcons.camera_fill));
     expect(tapped, isTrue, reason: 'the avatar overlaps the cover — the overlap must stay hit-testable');
   });
 

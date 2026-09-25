@@ -69,9 +69,30 @@ abstract final class AttachmentMapper {
         fileName: json['fileName'] as String? ?? '',
         mimeType: json['mimeType'] as String? ?? 'application/octet-stream',
         sizeBytes: (json['sizeBytes'] as num?)?.toInt() ?? 0,
+        voice: _voiceFromJson(json['voice']),
         url: json['url'] as String?,
         urlExpiresAt: json['urlExpiresAt'] is String ? DateTime.tryParse(json['urlExpiresAt'] as String) : null,
       );
+
+  /// `voice` is present only on a VOICE attachment. A `durationMs` of 0 or
+  /// less means the server could not measure the audio, which leaves nothing
+  /// to draw — the attachment then renders as a plain file rather than as a
+  /// player stuck at 0:00.
+  static VoiceMetaEntity? _voiceFromJson(dynamic raw) {
+    if (raw is! Map<String, dynamic>) return null;
+    final durationMs = (raw['durationMs'] as num?)?.toInt() ?? 0;
+    if (durationMs <= 0) return null;
+    final waveform = raw['waveform'];
+    return VoiceMetaEntity(
+      durationMs: durationMs,
+      waveform: waveform is List
+          ? [
+              for (final value in waveform)
+                if (value is num) value.toInt().clamp(0, 100),
+            ]
+          : const [],
+    );
+  }
 
   static List<AttachmentEntity> fromJsonList(dynamic raw) => raw is List
       ? raw.whereType<Map<String, dynamic>>().where((e) => e['id'] is String).map(fromJson).toList(growable: false)

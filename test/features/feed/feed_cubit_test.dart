@@ -227,6 +227,33 @@ void main() {
   );
 
   blocTest<FeedCubit, FeedState>(
+    'toggleLike on a post the viewer reacted to with a non-LIKE type predicts '
+    'a removal, not a switch to LIKE — a plain tap takes the reaction back '
+    'whatever type it was (see `FeedRepositoryImpl.toggleLike`)',
+    build: buildCubit,
+    seed: () => FeedState(
+      status: FeedStatus.loaded,
+      posts: [
+        buildPost(id: 'p1').copyWith(reactionCounts: const {'HAHA': 1}, viewerReaction: 'HAHA'),
+      ],
+    ),
+    act: (cubit) {
+      // Failing on purpose: the optimistic emit is what's under test, and a
+      // rollback to the 😆 it started from proves it wasn't a switch to LIKE.
+      when(() => likePost(any())).thenAnswer((_) async => const Left(ServerFailure()));
+      return cubit.toggleLike(
+        buildPost(id: 'p1').copyWith(reactionCounts: const {'HAHA': 1}, viewerReaction: 'HAHA'),
+      );
+    },
+    expect: () => [
+      predicate<FeedState>((s) => s.posts.single.viewerReactionType == null && s.posts.single.reactionTotal == 0),
+      predicate<FeedState>(
+        (s) => s.posts.single.viewerReactionType == ReactionType.haha && s.posts.single.reactionTotal == 1,
+      ),
+    ],
+  );
+
+  blocTest<FeedCubit, FeedState>(
     'react replaces just the affected post with the repository result',
     build: buildCubit,
     seed: () => FeedState(
@@ -588,6 +615,73 @@ void main() {
         // fetch on; this keeps what is already on screen honest meanwhile.
         expect(cubit.state.posts.map((p) => p.id), ['p2']);
         verify(() => muteUser(const MuteParams('u2'))).called(1);
+      },
+    );
+  });
+
+  // What the post's own screen hands back on the way out — see ADR-032.
+  // Nothing re-fetches the feed when a detail screen pops, so this is the
+  // only thing that keeps the card's counts honest.
+  group('replacePost', () {
+    blocTest<FeedCubit, FeedState>(
+      'swaps the post the viewer came back from, leaving its neighbours alone',
+      build: buildCubit,
+      seed: () => FeedState(
+        status: FeedStatus.loaded,
+        posts: [
+          buildPost(id: 'p1', likeCount: 1).copyWith(commentCount: 2),
+          buildPost(id: 'p2', likeCount: 5),
+        ],
+      ),
+      act: (cubit) => cubit.replacePost(buildPost(id: 'p1', likeCount: 2, viewerReaction: 'LIKE').copyWith(
+        commentCount: 3,
+      )),
+      verify: (cubit) {
+        final first = cubit.state.posts.first;
+        expect(first.commentCount, 3);
+        expect(first.reactionTotal, 2);
+        expect(first.viewerReactionType, ReactionType.like);
+        expect(cubit.state.posts.last.reactionTotal, 5);
+      },
+    );
+
+    blocTest<FeedCubit, FeedState>(
+      'ignores a post the feed no longer lists',
+      build: buildCubit,
+      seed: () => FeedState(status: FeedStatus.loaded, posts: [buildPost(id: 'p1')]),
+      act: (cubit) => cubit.replacePost(buildPost(id: 'gone', likeCount: 9)),
+      verify: (cubit) => expect(cubit.state.posts.single.id, 'p1'),
+    );
+
+    blocTest<FeedCubit, FeedState>(
+      'keeps the repost flag this cubit knows about, not the one on the incoming copy',
+      build: () {
+        // The viewer has a repost of `p1` on record, so this feed knows how
+        // to cancel it — `_myRepostIds`, recovered by `refresh()`.
+        when(() => getFeed(any())).thenAnswer(
+          (_) async => Right(FeedPage(posts: [buildPost(id: 'p1')], hasMore: false, nextCursor: null)),
+        );
+        when(() => getUserPosts(any())).thenAnswer(
+          (_) async => Right(
+            UserPostsPage(
+              posts: [buildPost(id: 'r1', originalPost: buildPost(id: 'p1'))],
+              hasMore: false,
+            ),
+          ),
+        );
+        return buildCubit();
+      },
+      act: (cubit) async {
+        await cubit.refresh();
+        // A post that has been round the houses: `repostedByMe` is on no wire
+        // response, so a copy from another screen carries whatever that
+        // screen managed to recover — here, nothing.
+        cubit.replacePost(buildPost(id: 'p1', likeCount: 3));
+      },
+      verify: (cubit) {
+        // Still "Reposted", because this cubit is the one that has to undo it.
+        expect(cubit.state.posts.single.repostedByMe, isTrue);
+        expect(cubit.state.posts.single.reactionTotal, 3);
       },
     );
   });

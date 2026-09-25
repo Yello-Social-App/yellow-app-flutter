@@ -65,5 +65,10 @@ abstract final class AppConstants {
   static const String secureKeyPushToken = 'notify.push_token';
 
   static const String prefsKeyThemeMode = 'settings.theme_mode';
+
+  /// Stores an `AppThemeFlavor.name`. Absent on every install that
+  /// predates the second palette, which `AppThemeFlavor.fromName`
+  /// resolves to `classic` — so an upgrade keeps the theme it had.
+  static const String prefsKeyThemeFlavor = 'settings.theme_flavor';
   static const String prefsKeyOnboardingSeen = 'settings.onboarding_seen';
 }

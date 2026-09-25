@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -42,7 +43,7 @@ class PublishNudgeCard extends StatelessWidget {
                 height: 44,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(color: colors.yelb, borderRadius: BorderRadius.circular(AppRadii.xs)),
-                child: Icon(Icons.rocket_launch_outlined, size: 22, color: colors.yeld),
+                child: Icon(CupertinoIcons.rocket, size: 22, color: colors.yeld),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -67,7 +68,7 @@ class PublishNudgeCard extends StatelessWidget {
             child: AppButton(
               label: 'Publish',
               dense: true,
-              icon: const Icon(Icons.add, size: 14),
+              icon: const Icon(CupertinoIcons.add, size: 14),
               onPressed: onPublish,
             ),
           ),

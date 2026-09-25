@@ -69,9 +69,16 @@ abstract final class AppShadows {
 /// design-token extension alongside Material defaults so any un-styled
 /// widget (dialogs, default `Text`, system chrome) still lands close to the
 /// mockup's palette.
+///
+/// Both builders take an [AppThemeFlavor], because `MaterialApp` picks
+/// between `theme` and `darkTheme` by brightness on its own — the flavor is
+/// the axis it knows nothing about, so it has to be baked into both
+/// [ThemeData]s before they are handed over (`lib/app.dart`).
 abstract final class AppTheme {
-  static ThemeData get light => _build(AppColors.light, Brightness.light);
-  static ThemeData get dark => _build(AppColors.dark, Brightness.dark);
+  static ThemeData light(AppThemeFlavor flavor) =>
+      _build(AppColors.resolve(flavor, Brightness.light), Brightness.light);
+
+  static ThemeData dark(AppThemeFlavor flavor) => _build(AppColors.resolve(flavor, Brightness.dark), Brightness.dark);
 
   static ThemeData _build(AppColors colors, Brightness brightness) {
     final base = ThemeData(brightness: brightness, useMaterial3: true);

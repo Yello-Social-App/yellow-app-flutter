@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -99,7 +100,7 @@ class _ShowcaseView extends StatelessWidget {
                   AppButton(
                     label: 'Publish',
                     dense: true,
-                    icon: const Icon(Icons.add, size: 14),
+                    icon: const Icon(CupertinoIcons.add, size: 14),
                     onPressed: () => _publish(context, cubit),
                   ),
                 ],

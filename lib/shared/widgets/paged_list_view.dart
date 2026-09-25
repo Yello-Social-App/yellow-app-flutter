@@ -6,7 +6,7 @@ import 'shimmer_loading.dart';
 /// The loading / error / empty / paged-list switch that every
 /// offset-or-cursor-paged screen in this app needs, in one place.
 ///
-/// Two behaviours worth knowing about, because both are easy to get wrong and
+/// Two behaviors worth knowing about, because both are easy to get wrong and
 /// silent when you do:
 ///
 ///  * **Every branch returns a scrollable**, including the empty and error ones.
@@ -103,10 +103,12 @@ class PagedListView extends StatelessWidget {
       onNotification: (notification) {
         if (notification is! ScrollUpdateNotification) return false;
         final metrics = notification.metrics;
-        // Ignore horizontal scrollers nested inside rows (filter chips, etc.) —
+        // Ignore horizontal scroller nested inside rows (filter chips, etc.) —
         // only this list's own vertical scroll should page.
         if (metrics.axis != Axis.vertical) return false;
-        if (metrics.pixels >= metrics.maxScrollExtent - loadMoreThreshold) onLoadMore();
+        if (metrics.pixels >= metrics.maxScrollExtent - loadMoreThreshold) {
+          onLoadMore();
+        }
         return false;
       },
       child: ListView.separated(
@@ -121,7 +123,11 @@ class PagedListView extends StatelessWidget {
               return const Padding(
                 padding: EdgeInsets.symmetric(vertical: 20),
                 child: Center(
-                  child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)),
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
                 ),
               );
             }

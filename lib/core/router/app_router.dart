@@ -243,7 +243,11 @@ class AppRouter {
                   key: state.pageKey,
                   opaque: false,
                   child: args is PhotoViewerArgs
-                      ? PhotoViewerPage(imageUrls: args.imageUrls, initialIndex: args.initialIndex)
+                      ? PhotoViewerPage(
+                          imageUrls: args.imageUrls,
+                          initialIndex: args.initialIndex,
+                          cacheKeys: args.cacheKeys,
+                        )
                       : const PhotoViewerPage(imageUrls: []),
                   transitionsBuilder: (context, animation, secondary, child) => FadeTransition(
                     opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -227,7 +228,7 @@ class _FeedPostCard extends StatelessWidget {
         if (post == null) return const SizedBox.shrink();
         return PostCard(
           post: post,
-          onOpen: () => context.pushNamed(RouteNames.postDetail, pathParameters: {'postId': post.id}),
+          onOpen: () => _openPost(context, cubit, post.id),
           onLike: () => cubit.toggleLike(post),
           onReact: (type) => cubit.react(post, type),
           onSave: () => cubit.toggleSave(post.id),
@@ -241,6 +242,16 @@ class _FeedPostCard extends StatelessWidget {
       },
     );
   }
+}
+
+/// Opens the post's own screen and applies whatever it pops back onto this
+/// row — a reaction or a comment made in there changes counts the card here
+/// shows, and nothing re-fetches the feed on the way back (see ADR-032). The
+/// detail screen hands back null when it has nothing to hand back, and
+/// `replacePost` no-ops on a post this feed no longer lists.
+Future<void> _openPost(BuildContext context, FeedCubit cubit, String postId) async {
+  final updated = await context.pushNamed<PostEntity>(RouteNames.postDetail, pathParameters: {'postId': postId});
+  if (updated != null) cubit.replacePost(updated);
 }
 
 PostEntity? _findPost(List<PostEntity> posts, String id) {
@@ -406,7 +417,7 @@ class _FeedAppBar extends StatelessWidget {
         // the bar's active-tab indicator simply never lands on it any more.
         const _SignalsAction(),
         const SizedBox(width: 8),
-        AppIconButton(icon: const Icon(Icons.search), onPressed: () => context.pushNamed(RouteNames.search)),
+        AppIconButton(icon: const Icon(CupertinoIcons.search), onPressed: () => context.pushNamed(RouteNames.search)),
         const SizedBox(width: 8),
         // Circle (friends) button — the brand-mark icon, not a user photo
         // (contrast `BottomNavBar`'s Profile-tab avatar, a different

@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -179,7 +180,7 @@ class _SheetRow extends StatelessWidget {
                 const SizedBox(width: 10),
               ],
               Icon(
-                selected ? Icons.check_circle : Icons.circle_outlined,
+                selected ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.circle,
                 size: 18,
                 color: selected ? colors.yeld : colors.ink3,
               ),

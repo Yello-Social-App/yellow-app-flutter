@@ -58,7 +58,14 @@ class FeedRepositoryImpl implements FeedRepository {
 
   @override
   Future<Either<Failure, PostEntity>> toggleLike(PostEntity post) => _run(() async {
-    final summary = await _remote.react(post.id);
+    // The reaction endpoint is a single POST toggle keyed on the type sent:
+    // the same type as the viewer's current one removes it, a different one
+    // *switches* to it. So an un-react has to echo whatever the viewer
+    // already reacted with — hardcoding `LIKE` here turned a plain tap on a
+    // post the viewer had reacted to with 😆/😮/… into "change it to
+    // LIKE" instead of "take my reaction back".
+    final type = post.viewerReactionType ?? ReactionType.like;
+    final summary = await _remote.react(post.id, type: type.wireValue);
     return post.copyWith(reactionCounts: summary.counts, viewerReaction: summary.viewerReaction);
   });
 

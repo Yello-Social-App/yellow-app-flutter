@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -55,20 +56,20 @@ class _Body extends StatelessWidget {
       ),
 
       AppUpdateStatus.upToDate => _Row(
-        icon: _Badge(icon: Icons.check_rounded, color: colors.grn),
+        icon: _Badge(icon: CupertinoIcons.checkmark, color: colors.grn),
         title: 'You are on the newest build',
         body: 'Nothing newer has been published yet.',
         action: AppButton(label: 'Check again', variant: AppButtonVariant.outline, dense: true, onPressed: cubit.check),
       ),
 
       AppUpdateStatus.available when update != null => _Row(
-        icon: _Badge(icon: Icons.arrow_downward_rounded, color: colors.yeld),
+        icon: _Badge(icon: CupertinoIcons.arrow_down, color: colors.yeld),
         title: 'Yello ${update.version} is available',
         body: update.notes.isEmpty ? 'Build ${update.buildNumber} is ready to install.' : update.notes,
         action: AppButton(
           label: update.sizeLabel.isEmpty ? 'Download' : 'Download (${update.sizeLabel})',
           dense: true,
-          icon: const Icon(Icons.download_rounded, size: 14),
+          icon: const Icon(CupertinoIcons.arrow_down_to_line, size: 14),
           onPressed: cubit.download,
         ),
       ),
@@ -76,14 +77,14 @@ class _Body extends StatelessWidget {
       AppUpdateStatus.downloading => _Downloading(progress: state.progress, version: update?.version ?? ''),
 
       AppUpdateStatus.readyToInstall => _Row(
-        icon: _Badge(icon: Icons.install_mobile_rounded, color: colors.grn),
+        icon: _Badge(icon: CupertinoIcons.device_phone_portrait, color: colors.grn),
         title: 'Downloaded — finish in the installer',
         body: 'Android takes over from here. If the installer did not open, tap Install again.',
         action: AppButton(label: 'Install', dense: true, onPressed: cubit.install),
       ),
 
       AppUpdateStatus.needsPermission => _Row(
-        icon: _Badge(icon: Icons.lock_outline_rounded, color: colors.yeld),
+        icon: _Badge(icon: CupertinoIcons.lock, color: colors.yeld),
         title: 'Android needs your permission',
         body:
             'Allow Yello to install apps, then come back and tap Install. '
@@ -92,7 +93,7 @@ class _Body extends StatelessWidget {
       ),
 
       AppUpdateStatus.error => _Row(
-        icon: _Badge(icon: Icons.error_outline_rounded, color: colors.red),
+        icon: _Badge(icon: CupertinoIcons.exclamationmark_circle, color: colors.red),
         title: 'The update check failed',
         body: state.errorMessage ?? 'Could not reach the update channel.',
         action: AppButton(label: 'Try again', variant: AppButtonVariant.outline, dense: true, onPressed: cubit.check),
@@ -101,7 +102,7 @@ class _Body extends StatelessWidget {
       // `idle`, plus the `available` case with no update attached — which
       // cannot happen, but still has to build something.
       _ => _Row(
-        icon: _Badge(icon: Icons.refresh_rounded, color: colors.ink2),
+        icon: _Badge(icon: CupertinoIcons.refresh, color: colors.ink2),
         title: 'Check for a newer build',
         body: 'Yello is installed from a file, so updates are fetched here rather than from a store.',
         action: AppButton(label: 'Check now', variant: AppButtonVariant.outline, dense: true, onPressed: cubit.check),

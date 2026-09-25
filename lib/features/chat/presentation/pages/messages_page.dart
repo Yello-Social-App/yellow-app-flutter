@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -282,7 +283,7 @@ class _HeaderSlab extends StatelessWidget {
                     ),
                   ),
                   AppIconButton(
-                    icon: const Icon(Icons.edit_outlined),
+                    icon: const Icon(CupertinoIcons.pencil),
                     backgroundColor: _onSlab.surf2,
                     borderColor: _onSlab.line,
                     iconColor: _onSlab.ink,
@@ -379,7 +380,7 @@ class _SlabSearchField extends StatelessWidget {
       decoration: InputDecoration(
         hintText: 'Search your messages',
         hintStyle: AppTextStyles.hint.copyWith(color: hintInk),
-        prefixIcon: Icon(Icons.search, color: hintInk, size: 20),
+        prefixIcon: Icon(CupertinoIcons.search, color: hintInk, size: 20),
         prefixIconConstraints: const BoxConstraints(minWidth: 44, minHeight: 44),
         suffixIcon: ValueListenableBuilder<TextEditingValue>(
           valueListenable: controller,
@@ -387,7 +388,7 @@ class _SlabSearchField extends StatelessWidget {
             if (value.text.isEmpty) return const SizedBox.shrink();
             return IconButton(
               tooltip: 'Clear search',
-              icon: Icon(Icons.close, color: hintInk, size: 18),
+              icon: Icon(CupertinoIcons.xmark, color: hintInk, size: 18),
               // Bounded so the field's height doesn't jump when the button
               // appears; still a 40px target.
               constraints: const BoxConstraints(minWidth: 40, minHeight: 40),

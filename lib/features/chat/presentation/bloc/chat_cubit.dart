@@ -5,6 +5,7 @@ import 'package:dartz/dartz.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/audio/voice_note_player.dart';
 import '../../../../core/error/failures.dart';
 import '../../../../core/utils/logger.dart';
 import '../../domain/entities/attachment_entity.dart';
@@ -35,6 +36,7 @@ class ChatState extends Equatable {
     this.busyInviteIds = const {},
     this.actionError,
     this.wasRemoved = false,
+    this.attachmentRevision = 0,
   });
 
   final ChatStatus status;
@@ -87,6 +89,16 @@ class ChatState extends Equatable {
   /// The viewer was removed from, or left, this group: the page pops.
   final bool wasRemoved;
 
+  /// Bumped once every time a presigned attachment link is re-signed.
+  ///
+  /// [AttachmentEntity.props] deliberately leave the URL out — the history
+  /// poll re-signs every link, and counting that as a change would make the
+  /// whole transcript look different every few seconds. The cost is that
+  /// swapping a fresh link into a message yields a state that is `==` the
+  /// old one, and `emit` drops those: the re-signed URL would never reach
+  /// the screen. This counter is what makes that one emit land.
+  final int attachmentRevision;
+
   bool get hasMore => nextCursor != null;
   bool get isTyping => typingUserIds.isNotEmpty;
   bool get isComposingReply => replyingTo != null;
@@ -116,6 +128,7 @@ class ChatState extends Equatable {
     Set<String>? busyInviteIds,
     String? actionError,
     bool? wasRemoved,
+    int? attachmentRevision,
   }) {
     return ChatState(
       status: status ?? this.status,
@@ -134,6 +147,7 @@ class ChatState extends Equatable {
       busyInviteIds: busyInviteIds ?? this.busyInviteIds,
       actionError: actionError,
       wasRemoved: wasRemoved ?? this.wasRemoved,
+      attachmentRevision: attachmentRevision ?? this.attachmentRevision,
     );
   }
 
@@ -155,6 +169,7 @@ class ChatState extends Equatable {
     busyInviteIds,
     actionError,
     wasRemoved,
+    attachmentRevision,
   ];
 }
 
@@ -169,6 +184,7 @@ class ChatCubit extends Cubit<ChatState> {
     required ReactToMessageUseCase reactToMessage,
     required UploadAttachmentUseCase uploadAttachment,
     required RefreshAttachmentUseCase refreshAttachment,
+    required VoiceNotePlayer voicePlayer,
     required AcceptGroupInviteUseCase acceptInvite,
     required DeclineGroupInviteUseCase declineInvite,
     required MarkReadUseCase markRead,
@@ -183,6 +199,7 @@ class ChatCubit extends Cubit<ChatState> {
        _reactToMessage = reactToMessage,
        _uploadAttachment = uploadAttachment,
        _refreshAttachment = refreshAttachment,
+       _voicePlayer = voicePlayer,
        _acceptInvite = acceptInvite,
        _declineInvite = declineInvite,
        _markRead = markRead,
@@ -200,6 +217,7 @@ class ChatCubit extends Cubit<ChatState> {
   final ReactToMessageUseCase _reactToMessage;
   final UploadAttachmentUseCase _uploadAttachment;
   final RefreshAttachmentUseCase _refreshAttachment;
+  final VoiceNotePlayer _voicePlayer;
   final AcceptGroupInviteUseCase _acceptInvite;
   final DeclineGroupInviteUseCase _declineInvite;
   final MarkReadUseCase _markRead;
@@ -604,6 +622,80 @@ class ChatCubit extends Cubit<ChatState> {
     );
   }
 
+  /// Sends a recording the voice sheet has already uploaded.
+  ///
+  /// Deliberately not folded into [send]: a voice note travels alone (the
+  /// service's own guidance, and the reason it is not parked in
+  /// [ChatState.pendingAttachments] with the photos), carries no text, and
+  /// is not something a draft can be mixed into. Everything after the
+  /// optimistic bubble is [_deliver] though, so a voice note retries,
+  /// deduplicates on `clientId` and updates the inbox preview exactly like
+  /// every other message.
+  Future<void> sendVoiceNote(AttachmentEntity voice) async {
+    final replyTo = state.replyingTo;
+    final clientId = newClientId();
+    final optimistic = MessageEntity(
+      id: 'local-$clientId',
+      conversationId: conversationId,
+      senderId: state.conversation?.viewerId ?? '',
+      clientId: clientId,
+      body: '',
+      createdAt: DateTime.now(),
+      fromMe: true,
+      status: MessageDeliveryStatus.sending,
+      replyTo: replyTo?.toReplyPreview(),
+      attachments: [voice],
+    );
+    emit(state.copyWith(replyingTo: null));
+    _upsert(optimistic);
+    await _deliver(optimistic);
+  }
+
+  /// A link that will actually stream.
+  ///
+  /// R2 answers 403 on a presigned link past its hour, and a player given
+  /// one just fails silently, so a note that has been sitting in the
+  /// transcript is re-signed before it is handed over. Null when even the
+  /// fresh copy has no link — the deployment has storage switched off.
+  Future<String?> playableVoiceUrl(AttachmentEntity attachment) async {
+    if (attachment.url != null && !attachment.isUrlExpired) return attachment.url;
+    await refreshAttachment(attachment.id);
+    if (isClosed) return attachment.url;
+    final fresh = _attachmentById(attachment.id);
+    return fresh != null ? fresh.url : attachment.url;
+  }
+
+  /// Links the full-screen viewer can actually load, one per entry of
+  /// [attachments] and in the same order. Same reasoning as
+  /// [playableVoiceUrl] — R2 answers 403 on a presigned link past its hour,
+  /// and the viewer would just draw its error state — but for a whole
+  /// message's pictures at once, re-signed concurrently so expanding a
+  /// four-photo message costs one round trip rather than four.
+  ///
+  /// An entry is empty when even the fresh copy has no link (the deployment
+  /// has storage switched off); the viewer drops those.
+  Future<List<String>> viewableImageUrls(List<AttachmentEntity> attachments) async {
+    final stale = <String>{
+      for (final attachment in attachments)
+        if (attachment.url == null || attachment.isUrlExpired) attachment.id,
+    };
+    if (stale.isNotEmpty) await Future.wait(stale.map(refreshAttachment));
+    if (isClosed) return [for (final attachment in attachments) attachment.url ?? ''];
+    return [for (final attachment in attachments) _attachmentById(attachment.id)?.url ?? attachment.url ?? ''];
+  }
+
+  /// The transcript's own copy of an attachment — the one carrying whatever
+  /// URL the last refresh landed, rather than the snapshot a widget captured
+  /// when it was built. Null once the message is gone.
+  AttachmentEntity? _attachmentById(String attachmentId) {
+    for (final message in state.messages) {
+      for (final candidate in message.attachments) {
+        if (candidate.id == attachmentId) return candidate;
+      }
+    }
+    return null;
+  }
+
   /// A pending upload nobody else can see; dropping it locally is all there
   /// is to do — the service has no delete for an unsent attachment.
   void removePendingAttachment(String attachmentId) {
@@ -626,7 +718,7 @@ class ChatCubit extends Cubit<ChatState> {
             else
               m,
         ];
-        emit(state.copyWith(messages: next));
+        emit(state.copyWith(messages: next, attachmentRevision: state.attachmentRevision + 1));
       });
     } finally {
       _pendingAttachmentRefreshes.remove(attachmentId);
@@ -805,6 +897,13 @@ class ChatCubit extends Cubit<ChatState> {
   /// The tombstone, plus `replyTo.deleted` on every reply that quotes it —
   /// exactly what the next history fetch would show.
   void _applyDeleted(String messageId, DateTime deletedAt) {
+    // A voice note playing out of a bubble that is about to become a
+    // tombstone has nothing left to play out of — and the link behind it is
+    // gone from storage the moment the server accepts the unsend.
+    for (final message in state.messages) {
+      if (message.id != messageId) continue;
+      unawaited(_voicePlayer.stopIfPlayingAnyOf([for (final a in message.attachments) a.id]));
+    }
     final next = [
       for (final m in state.messages)
         if (m.id == messageId)

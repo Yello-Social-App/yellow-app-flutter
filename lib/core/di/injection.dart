@@ -114,6 +114,8 @@ import '../../features/showcase/domain/usecases/showcase_usecases.dart';
 import '../../features/showcase/presentation/bloc/project_detail_cubit.dart';
 import '../../features/showcase/presentation/bloc/publish_project_cubit.dart';
 import '../../features/showcase/presentation/bloc/showcase_cubit.dart';
+import '../audio/voice_note_player.dart';
+import '../audio/voice_note_plays_store.dart';
 import '../network/api_client.dart';
 import '../network/network_info.dart';
 import '../network/token_refresh_service.dart';
@@ -374,6 +376,7 @@ void _registerChat() {
   sl.registerLazySingleton(() => DeleteMessageUseCase(sl()));
   sl.registerLazySingleton(() => ReactToMessageUseCase(sl()));
   sl.registerLazySingleton(() => UploadAttachmentUseCase(sl()));
+  sl.registerLazySingleton(() => UploadVoiceAttachmentUseCase(sl()));
   sl.registerLazySingleton(() => RefreshAttachmentUseCase(sl()));
   sl.registerLazySingleton(() => MarkReadUseCase(sl()));
   sl.registerLazySingleton(() => StartDirectConversationUseCase(sl()));
@@ -394,6 +397,18 @@ void _registerChat() {
   sl.registerLazySingleton(() => AcceptGroupInviteUseCase(sl()));
   sl.registerLazySingleton(() => DeclineGroupInviteUseCase(sl()));
 
+  // One platform audio player for the whole app, which is what makes "only
+  // one voice note plays at a time" true rather than a rule each bubble has
+  // to remember. Lazy: nothing is constructed until a note is played, so a
+  // session that never touches one never opens an audio session.
+  sl.registerLazySingleton(VoiceNotePlayer.new);
+
+  // Which notes this device has already listened to. Restored on the
+  // first bubble that asks for it rather than at startup: until the read
+  // lands every note reads as heard, so the transcript never flashes the
+  // unheard accent over notes the user played days ago.
+  sl.registerLazySingleton(() => VoiceNotePlaysStore()..restore());
+
   // Long-lived: the Inbox list (and unread counts) survives tab switches.
   sl.registerLazySingleton(() => MessagesCubit(sl()));
 
@@ -408,6 +423,7 @@ void _registerChat() {
       reactToMessage: sl(),
       uploadAttachment: sl(),
       refreshAttachment: sl(),
+      voicePlayer: sl(),
       acceptInvite: sl(),
       declineInvite: sl(),
       markRead: sl(),
@@ -699,11 +715,6 @@ void _registerSettings() {
   // user leaving the App version screen, and a factory here would close the
   // cubit mid-transfer. Provided with `BlocProvider.value` for that reason.
   sl.registerLazySingleton(
-    () => AppUpdateCubit(
-      checkForUpdate: sl(),
-      downloadUpdate: sl(),
-      installUpdate: sl(),
-      openInstallSettings: sl(),
-    ),
+    () => AppUpdateCubit(checkForUpdate: sl(), downloadUpdate: sl(), installUpdate: sl(), openInstallSettings: sl()),
   );
 }

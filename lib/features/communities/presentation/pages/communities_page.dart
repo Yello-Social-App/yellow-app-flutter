@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -248,7 +249,7 @@ class _ThreadsTab extends StatelessWidget {
                     return CommunityPostCard(
                       post: post,
                       busy: state.busyIds.contains(post.id),
-                      onTap: () => _openThread(context, post),
+                      onTap: () => _openThread(context, cubit, post),
                       onVote: (vote) => cubit.toggleVote(post, vote),
                       onReact: (type) => cubit.react(post, type),
                       onCommunityTap: () =>
@@ -325,7 +326,7 @@ class _DirectoryTabState extends State<_DirectoryTab> {
                         ),
                       ),
                     ),
-                    Icon(Icons.search, size: 20, color: colors.ink3),
+                    Icon(CupertinoIcons.search, size: 20, color: colors.ink3),
                   ],
                 ),
               ),
@@ -498,7 +499,7 @@ class _CommunityCard extends StatelessWidget {
                       const SizedBox(height: 12),
                       Row(
                         children: [
-                          Icon(Icons.people_outline, size: 15, color: colors.ink3),
+                          Icon(CupertinoIcons.person_2, size: 15, color: colors.ink3),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
@@ -560,8 +561,17 @@ const List<(Color, Color)> _kCoverPalette = [
 
 (Color, Color) _coverColorsForSlug(String slug) => _kCoverPalette[slug.hashCode.abs() % _kCoverPalette.length];
 
-void _openThread(BuildContext context, CommunityPostEntity post) {
+Future<void> _openThread(BuildContext context, CommunityFeedCubit cubit, CommunityPostEntity post) async {
   // The thread route takes the entity through `extra` because the backend has
   // no `GET /community-posts/{id}` to rebuild it from an id alone.
-  context.pushNamed(RouteNames.communityPost, pathParameters: {'postId': post.id}, extra: post);
+  final updated = await context.pushNamed<CommunityPostEntity>(
+    RouteNames.communityPost,
+    pathParameters: {'postId': post.id},
+    extra: post,
+  );
+  // And it pops with whatever it ended up holding, so a vote, reaction or new
+  // comment made in there lands back on this row — same handoff the community
+  // screen's own list does (ADR-032). Nothing re-fetches this timeline on the
+  // way back, so without this the counts stay at what they were on tap.
+  if (updated != null) cubit.applyUpdated(updated);
 }

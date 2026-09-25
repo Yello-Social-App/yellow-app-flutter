@@ -5,8 +5,8 @@
 Index of every meaningful file in `lib/`, so you can jump straight to the
 right one instead of searching. **Read this before opening source files.**
 
-- Generated from commit `00b2307`
-- `lib/`: 290 Dart files · `test/`: 29 test files
+- Generated from commit `25e7d66`
+- `lib/`: 297 Dart files · `test/`: 37 test files
 - Regenerate: `bash tool/codemap.sh` · Staleness check: `bash tool/codemap.sh --check`
 
 Layer rule (see [ARCHITECTURE.md](ARCHITECTURE.md)): `presentation` → `domain/usecases`
@@ -129,23 +129,23 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `GetCommunityFeedUseCase`
 - `GetCommunityPostsUseCase`
 - `GetCommunityUseCase`
-- `GetConversationUseCase`
 - `GetConversationsUseCase`
+- `GetConversationUseCase`
 - `GetFeedUseCase`
 - `GetFriendRequestsUseCase`
 - `GetFriendsUseCase`
 - `GetInboxUseCase`
-- `GetMeUseCase`
 - `GetMessagesUseCase`
+- `GetMeUseCase`
 - `GetMutedUsersUseCase`
 - `GetMyFeedbackUseCase`
 - `GetMyReportsUseCase`
 - `GetNotificationPreferencesUseCase`
 - `GetPostDetailUseCase`
 - `GetPostUseCase`
+- `GetProjectsUseCase`
 - `GetProjectTechUseCase`
 - `GetProjectUseCase`
-- `GetProjectsUseCase`
 - `GetReactionSummaryUseCase`
 - `GetReactorsUseCase`
 - `GetSavedPostIdsUseCase`
@@ -233,8 +233,10 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `UpdatePostUseCase`
 - `UpdateProfileUseCase`
 - `UploadAttachmentUseCase`
+- `UploadVoiceAttachmentUseCase`
 - `UserDirectory`
 - `VerifyOtpUseCase`
+- `VoiceNotePlaysStore`
 - `VoteCommunityPostUseCase`
 
 ### Factories (`registerFactory`)
@@ -321,6 +323,7 @@ on re-entry.
 - `lib/features/chat/presentation/bloc/chat_cubit.dart` — ChatState, ChatCubit
 - `lib/features/chat/presentation/bloc/group_info_cubit.dart` — GroupInfoState, GroupInfoCubit
 - `lib/features/chat/presentation/bloc/messages_cubit.dart` — MessagesState, MessagesCubit
+- `lib/features/chat/presentation/bloc/voice_recorder_cubit.dart` — VoiceRecorderState, VoiceRecorderCubit
 
 **Pages**
 
@@ -331,14 +334,16 @@ on re-entry.
 **Widgets**
 
 - `lib/features/chat/presentation/widgets/story_reply_preview.dart` — StoryReplyPreview
+- `lib/features/chat/presentation/widgets/voice_note_bubble.dart` — VoiceNoteBubble
+- `lib/features/chat/presentation/widgets/voice_recorder_sheet.dart` — showVoiceRecorder()
 
 **Usecases**
 
-- `lib/features/chat/domain/usecases/chat_usecases.dart` — CursorParams, GetConversationsUseCase, GetConversationUseCase, GetMessagesParams, GetMessagesUseCase, SendMessageParams, SendMessageUseCase, EditMessageParams, EditMessageUseCase, MessageRefParams, DeleteMessageUseCase, ReactToMessageParams, ReactToMessageUseCase, UploadAttachmentParams, UploadAttachmentUseCase, RefreshAttachmentUseCase, MarkReadParams, MarkReadUseCase, StartDirectConversationUseCase, StartGroupParams, StartGroupConversationUseCase, RenameGroupParams, RenameGroupUseCase, SetGroupPhotoParams, SetGroupPhotoUseCase, RemoveGroupPhotoUseCase, GroupMembersParams, AddGroupMembersUseCase, GroupMemberParams, RemoveGroupMemberUseCase, ChangeMemberRoleParams, ChangeMemberRoleUseCase, LeaveGroupUseCase, InviteToGroupUseCase, AcceptGroupInviteUseCase, DeclineGroupInviteUseCase, newChatClientId()
+- `lib/features/chat/domain/usecases/chat_usecases.dart` — CursorParams, GetConversationsUseCase, GetConversationUseCase, GetMessagesParams, GetMessagesUseCase, SendMessageParams, SendMessageUseCase, EditMessageParams, EditMessageUseCase, MessageRefParams, DeleteMessageUseCase, ReactToMessageParams, ReactToMessageUseCase, UploadAttachmentParams, UploadAttachmentUseCase, UploadVoiceAttachmentUseCase, RefreshAttachmentUseCase, MarkReadParams, MarkReadUseCase, StartDirectConversationUseCase, StartGroupParams, StartGroupConversationUseCase, RenameGroupParams, RenameGroupUseCase, SetGroupPhotoParams, SetGroupPhotoUseCase, RemoveGroupPhotoUseCase, GroupMembersParams, AddGroupMembersUseCase, GroupMemberParams, RemoveGroupMemberUseCase, ChangeMemberRoleParams, ChangeMemberRoleUseCase, LeaveGroupUseCase, InviteToGroupUseCase, AcceptGroupInviteUseCase, DeclineGroupInviteUseCase, newChatClientId()
 
 **Entities**
 
-- `lib/features/chat/domain/entities/attachment_entity.dart` — AttachmentEntity
+- `lib/features/chat/domain/entities/attachment_entity.dart` — VoiceMetaEntity, AttachmentEntity, formatVoiceDuration()
 - `lib/features/chat/domain/entities/conversation_entity.dart` — LastMessageEntity, ConversationChange, ConversationEntity
 - `lib/features/chat/domain/entities/group_invite_entity.dart` — GroupInviteCardEntity, GroupInviteEntity, GroupInviteResult
 - `lib/features/chat/domain/entities/message_entity.dart` — ReplyPreviewEntity, ReactionEntity, StoryReplyEntity, MessageEntity
@@ -446,7 +451,8 @@ on re-entry.
 - `lib/features/feed/presentation/widgets/post_image_carousel.dart` — PostImageCarousel
 - `lib/features/feed/presentation/widgets/post_options_sheet.dart` — confirmDeletePost(), confirmMuteAuthor(), showEditPostSheet(), showPostOptionsSheet()
 - `lib/features/feed/presentation/widgets/reaction_breakdown_sheet.dart` — showReactionBreakdownSheet()
-- `lib/features/feed/presentation/widgets/reaction_picker_sheet.dart` — showReactionPicker()
+- `lib/features/feed/presentation/widgets/reaction_glyph.dart` — ReactionGlyphSlot, ReactionGlyph
+- `lib/features/feed/presentation/widgets/reaction_picker.dart` — showReactionPicker()
 - `lib/features/feed/presentation/widgets/reactors_sheet.dart` — showReactorsSheet()
 - `lib/features/feed/presentation/widgets/stories_rail.dart` — StoriesRail
 - `lib/features/feed/presentation/widgets/story_background.dart` — StoryCoverSwatch, storyBackgroundForeground(), storyBackgroundGradient()
@@ -811,6 +817,12 @@ on re-entry.
 ## Core (cross-cutting)
 
 
+**`lib/core/audio`**
+
+- `lib/core/audio/voice_note_player.dart` — VoiceNotePlayback, VoiceNotePlayer
+- `lib/core/audio/voice_note_plays_store.dart` — VoiceNotePlaysStore
+- `lib/core/audio/voice_recorder.dart` — VoiceRecorder
+
 **`lib/core/config`**
 
 - `lib/core/config/app_config.dart`
@@ -873,7 +885,7 @@ on re-entry.
 - `lib/core/theme/app_colors.dart` — AppColors
 - `lib/core/theme/app_text_styles.dart`
 - `lib/core/theme/app_theme.dart`
-- `lib/core/theme/theme_cubit.dart` — ThemeCubit
+- `lib/core/theme/theme_cubit.dart` — ThemeState, ThemeCubit
 
 **`lib/core/usecase`**
 
@@ -924,6 +936,7 @@ on re-entry.
 
 ## Tests
 
+- `test/core/audio/voice_note_plays_store_test.dart`
 - `test/core/network/error_handler_test.dart`
 - `test/core/notifications/push_destination_test.dart`
 - `test/core/security/input_sanitizer_test.dart`
@@ -936,8 +949,15 @@ on re-entry.
 - `test/features/chat/chat_socket_test.dart`
 - `test/features/chat/loading_test.dart`
 - `test/features/chat/message_mapper_test.dart`
+- `test/features/chat/voice_message_test.dart`
+- `test/features/chat/voice_note_bubble_test.dart`
+- `test/features/chat/voice_recorder_cubit_test.dart`
+- `test/features/communities/community_feed_cubit_test.dart`
 - `test/features/feed/feed_cubit_test.dart`
+- `test/features/feed/feed_reaction_toggle_test.dart`
 - `test/features/feed/post_detail_cubit_test.dart`
+- `test/features/feed/reaction_glyph_test.dart`
+- `test/features/feed/reaction_picker_test.dart`
 - `test/features/feed/story_compose_page_test.dart`
 - `test/features/feed/story_cubit_test.dart`
 - `test/features/feed/story_mapper_test.dart`

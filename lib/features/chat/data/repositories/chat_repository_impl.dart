@@ -172,6 +172,12 @@ class ChatRepositoryImpl implements ChatRepository {
       _run(() => _remote.uploadAttachment(conversationId: conversationId, file: file));
 
   @override
+  Future<Either<Failure, AttachmentEntity>> uploadVoiceAttachment({
+    required String conversationId,
+    required File file,
+  }) => _run(() => _remote.uploadVoiceAttachment(conversationId: conversationId, file: file));
+
+  @override
   Future<Either<Failure, AttachmentEntity>> getAttachment(String attachmentId) =>
       _run(() => _remote.getAttachment(attachmentId));
 

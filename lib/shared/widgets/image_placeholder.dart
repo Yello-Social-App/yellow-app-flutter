@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -36,7 +37,7 @@ class ImagePlaceholder extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.image_outlined, color: fg, size: 26),
+          Icon(CupertinoIcons.photo, color: fg, size: 26),
           const SizedBox(height: 6),
           Text(caption, style: AppTextStyles.bodySm.copyWith(color: fg), textAlign: TextAlign.center),
         ],

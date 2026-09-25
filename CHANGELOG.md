@@ -16,6 +16,96 @@ file only when it genuinely helps.
 
 ## [Unreleased]
 
+### Added
+
+- **Two more themes to pick from.** Account → Theme now lists four: the
+  original Classic pair and a new **Quiet rails** pair, drawn from Yello's
+  design system — near-black layers split by hairlines in dark, white cards
+  on a soft grey canvas in light, and one saturated yellow doing the
+  accenting in both. Each row shows a small preview of the palette it
+  switches to, and your pick is remembered between launches. Devices
+  upgrading keep the theme they were already on.
+
+- **Voice messages in chat.** With the message box empty, the send button
+  becomes a microphone: tap it and the recorder opens over the conversation
+  already recording, with a ring that moves as you speak and a clock running
+  up to the five-minute limit. Stop to hear it back before you send it, or
+  send straight from recording in one tap. Discard throws it away.
+  Recordings arrive as a bubble with a play button, the shape of the sound,
+  and how long it runs — tap anywhere along the bar to skip to that point.
+  A voice message you haven't listened to yet stands out: yellow play
+  button, yellow sound wave, and a dot after the length, the same yellow
+  Messages uses for an unread chat. It goes quiet the moment you start
+  playing it, and stays that way on this phone. One plays at a time, and
+  unsending a voice message stops it playing for anyone listening. Yello asks for the microphone the first time you open
+  the recorder, not before.
+
+- **Tap a photo in a chat to open it full screen.** Pinch or double-tap to
+  zoom in on it, and when a message carries several photos, swipe between
+  them without going back to the conversation. Tap anywhere, or the X, to
+  return. The same viewer photos on Home already opened into.
+
+- Drag a story downwards to close it. The frame follows your finger and
+  springs back if you let go early; pull it far enough, or flick it down,
+  and the story closes the same way the X does. Playback holds while you
+  drag. If the reply keyboard is up, the first swipe down just puts the
+  keyboard away so a half-written reply survives.
+
+### Changed
+
+- **Every icon in the app is now an iOS-style icon.** Same meanings, same
+  places — a lighter, rounder set throughout. The one exception is the Apple
+  mark on the sign-in button, which stays as it is.
+
+- The story viewer's progress line and author row sit higher on the screen,
+  closer to the status bar, leaving more of the photo uncovered.
+
+- The like button no longer changes size depending on which reaction is on
+  it. Every reaction — and the heart you get from a plain tap — now sits in
+  the same fixed space, so the button, the row it is in, and the six tiles in
+  the reaction picker all keep one shape. Same on community threads and on
+  comments.
+
+- **Hold the like button and the reactions now appear right above it**,
+  floating against the button, instead of sliding up from the bottom of the
+  screen. They drop below the button when it is too near the top, and stay
+  on screen when it is near an edge. Tap one to react, tap anywhere else to
+  back out. Community threads get the same picker — they had their own,
+  slightly different one before.
+
+- ❤️ is now 🖕. It is the same reaction underneath, just drawn differently
+  here — anyone on another app still sees a heart.
+
+### Fixed
+
+- **Photos and voice messages in an old conversation load again.** A chat
+  file's link is only good for an hour, and while Yello did ask for a fresh
+  one when it went stale, the new link never reached the screen — so a photo
+  in a conversation you had not opened in a while stayed a grey tile, and its
+  voice messages refused to play, for as long as the app stayed open.
+
+- **Writing a caption on a photo story is no longer hidden by the keyboard.**
+  The caption field, the cover picker and the Share button now lift with the
+  keyboard instead of staying pinned to the bottom of the screen behind it,
+  so you can see what you are typing and post without dismissing the keyboard
+  first.
+
+- **Opening a conversation now starts at the newest message.** It used to
+  land somewhere in the middle of the history, so the first thing you did in
+  a chat was scroll down to find where you were.
+
+- **Counts on a card now update when you come back from opening it.**
+  Reacting to a post or a community thread on its own screen, or leaving a
+  comment there, used to leave the card you tapped showing the numbers it had
+  before — on Home, on a community's Latest posts, on a profile, and on
+  Shared posts. Coming back now carries the change onto that card. Deleting a
+  comment takes the count back down the same way.
+
+- Tapping the like button on a post you had reacted to with 😆, 😮, 😢 or
+  😠 now **takes that reaction back**. It used to quietly change it to a
+  heart instead, so the only way to un-react was to long-press and find the
+  tile that was already highlighted. Same fix on comments and replies.
+
 ---
 
 ## [0.4.0] — 2026-09-24

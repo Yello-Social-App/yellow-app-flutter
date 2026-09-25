@@ -11,6 +11,11 @@
          user still confirms every install, and still has to grant "install
          unknown apps" to Yello once. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- Voice messages. Asked for at the moment the recorder opens, by
+         `record`'s own hasPermission() — a refusal is handled in the sheet
+         rather than on the way into the chat, so a user who never sends one
+         is never asked. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
         android:label="Yello."
         android:name="${applicationName}"

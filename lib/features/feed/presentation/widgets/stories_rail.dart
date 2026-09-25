@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -135,7 +136,7 @@ class _MyStoryTile extends StatelessWidget {
                         color: colors.surf2,
                         border: Border.all(color: colors.line, width: 1.5),
                       ),
-                      child: Icon(Icons.add, color: colors.ink3, size: 21),
+                      child: Icon(CupertinoIcons.add, color: colors.ink3, size: 21),
                     )
                   else
                     AppAvatar(
@@ -166,7 +167,7 @@ class _MyStoryTile extends StatelessWidget {
                             color: colors.yel,
                             border: Border.all(color: colors.surf, width: 2),
                           ),
-                          child: Icon(Icons.add, color: colors.onYel, size: 13),
+                          child: Icon(CupertinoIcons.add, color: colors.onYel, size: 13),
                         ),
                       ),
                     ),

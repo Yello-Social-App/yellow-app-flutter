@@ -235,6 +235,34 @@ class UploadAttachmentUseCase implements UseCase<AttachmentEntity, UploadAttachm
   }
 }
 
+/// `VOICE_MAX_DURATION_MS` — the server rejects anything longer with a 400.
+/// The recorder stops itself at this, so hitting it here means something
+/// went wrong rather than a user holding the button too long.
+const Duration voiceMaxDuration = Duration(minutes: 5);
+
+/// Shorter than this and there is nothing to listen to — a mis-tap on the
+/// mic rather than a message. Discarded without an upload, as the API's own
+/// client checklist asks.
+const Duration voiceMinDuration = Duration(seconds: 1);
+
+/// `POST /ws/conversations/{id}/attachments/voice`.
+///
+/// Size is checked here for the same reason [UploadAttachmentUseCase] checks
+/// it — a 413 after uploading a 10 MiB body is a slow way to learn — but the
+/// duration cap is the recorder's job: by the time a file exists it is too
+/// late to do anything but refuse it.
+class UploadVoiceAttachmentUseCase implements UseCase<AttachmentEntity, UploadAttachmentParams> {
+  UploadVoiceAttachmentUseCase(this._repository);
+  final ChatRepository _repository;
+
+  @override
+  Future<Either<Failure, AttachmentEntity>> call(UploadAttachmentParams params) async {
+    final size = await params.file.length();
+    if (size > chatAttachmentMaxBytes) return const Left(ValidationFailure('That recording is over 10 MB.'));
+    return _repository.uploadVoiceAttachment(conversationId: params.conversationId, file: params.file);
+  }
+}
+
 /// `GET /ws/attachments/{id}` — a fresh presigned URL for one whose link has
 /// expired.
 class RefreshAttachmentUseCase implements UseCase<AttachmentEntity, String> {

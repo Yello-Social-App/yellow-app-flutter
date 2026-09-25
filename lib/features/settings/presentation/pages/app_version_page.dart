@@ -1,5 +1,6 @@
 import 'dart:io' show Platform;
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -65,7 +66,7 @@ class _AppVersionView extends StatelessWidget {
           children: [
             Row(
               children: [
-                AppIconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.of(context).maybePop()),
+                AppIconButton(icon: const Icon(CupertinoIcons.back), onPressed: () => Navigator.of(context).maybePop()),
                 const SizedBox(width: 12),
                 Text('App version', style: AppTextStyles.titleLg.copyWith(color: colors.ink)),
               ],
@@ -145,7 +146,7 @@ class _Loaded extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(color: colors.grn.withValues(alpha: 0.14), shape: BoxShape.circle),
-                child: Icon(Icons.check_rounded, size: 20, color: colors.grn),
+                child: Icon(CupertinoIcons.checkmark, size: 20, color: colors.grn),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -182,7 +183,7 @@ class _Loaded extends StatelessWidget {
               label: 'Copy',
               variant: AppButtonVariant.outline,
               dense: true,
-              icon: const Icon(Icons.copy_rounded, size: 14),
+              icon: const Icon(CupertinoIcons.doc_on_doc, size: 14),
               onPressed: () => _copy(context),
             ),
           ],

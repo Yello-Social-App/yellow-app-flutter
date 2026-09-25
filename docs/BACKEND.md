@@ -86,7 +86,13 @@ Grouped as declared in `VersionedEndpoints`:
 - **Comments** — `/posts/{postId}/comments`, `/comments/{id}`
 - **Feed** — `/feed` (cursor-paginated)
 - **Reactions** — `/reactions/{targetType}/{targetId}`,
-  `/reactions/{targetType}/{targetId}/summary`
+  `/reactions/{targetType}/{targetId}/summary`. The `POST` is a **toggle keyed
+  on the type you send**, and there is no `DELETE`: a type the viewer does not
+  currently have is a *switch*, the type they do have is a *removal*. So an
+  un-react has to echo `viewerReaction` — see ADR-031. `ReactionType` is a
+  closed enum: `LIKE|LOVE|HAHA|WOW|SAD|ANGRY` (re-verified 2026-09-25). Note
+  the client draws `LOVE` as 🖕, not ❤️ — a display swap only (ADR-031); on
+  the wire and in every count it is still `LOVE`.
 - **Friends** — `/friends`, `/friends/{userId}`, `/friends/blocked`,
   `/friends/requests`, `/friends/requests/{userId}`(`/accept`,`/decline`),
   `/users/{userId}/block`
@@ -185,6 +191,17 @@ Routes, as declared in `ChatRoutes`:
   `GET /ws/attachments/{id}` for a fresh presigned URL. URLs live an hour
   and are **re-signed on every read** — cache images by attachment id, not
   URL (`_AttachmentThumb` does).
+- **Voice notes** — `POST /ws/conversations/{id}/attachments/voice`
+  (multipart, one `file`; M4A/MP4, WebM or Ogg, ≤ 5 minutes and ≤ 10 MiB),
+  then the same `attachmentIds` send as any attachment. Its own route, not
+  the general one: the server transcodes the upload to **mono AAC ~48 kbps
+  in M4A** (`audio/mp4`), throws the original away, and measures
+  `voice.durationMs` and `voice.waveform` (≤ 64 integers, 0–100) **from the
+  audio itself** — a recording posted to `…/attachments` comes back as a
+  plain `FILE` with no `voice` block and nothing to draw. `503 UNAVAILABLE`
+  means the deployment has no bucket or no ffmpeg: hide the mic. Playback is
+  the presigned `url` given straight to the player, no auth header, Range
+  supported. Verified against the live service's reference on 2026-09-25.
 - **Groups** (400 on a DM) — `PATCH /ws/conversations/{id}` (`title`),
   `PUT/DELETE …/photo`, `POST …/members`, `DELETE/PATCH …/members/{userId}`
   (`role: ADMIN | MEMBER`), `POST …/leave`. Roles: any member adds people,
@@ -199,7 +216,11 @@ Routes, as declared in `ChatRoutes`:
   `…/decline`. Only the invitee answers; a second answer is 409.
 
 Limits: message text ≤ 4 000 chars (`CHAT_MESSAGE_MAX_LENGTH`), ≤ 10
-attachments per message, ≤ 64-char `clientId` (the idempotency key).
+attachments per message, ≤ 64-char `clientId` (the idempotency key). A voice
+note is ≤ 5 minutes (`VOICE_MAX_DURATION_MS`, fixed) and goes **alone** in
+its message. Deleting the message deletes the audio from storage with it, so
+a note still playing out of a bubble that becomes a tombstone is playing a
+link that has gone (`ChatCubit._applyDeleted` stops it).
 
 **WebSocket** — `wss://…/ws`, frames `{ event, data }` ≤ 64 KiB, wired
 by `ChatSocket` (`chat/data/datasources/chat_socket.dart`). Handshake,

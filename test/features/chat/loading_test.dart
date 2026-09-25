@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dartz/dartz.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:yello_social_app/core/audio/voice_note_player.dart';
 import 'package:yello_social_app/core/error/failures.dart';
 import 'package:yello_social_app/features/chat/data/datasources/user_directory.dart';
 import 'package:yello_social_app/features/chat/domain/entities/participant_entity.dart';
@@ -130,6 +131,7 @@ void main() {
         reactToMessage: ReactToMessageUseCase(repository),
         uploadAttachment: UploadAttachmentUseCase(repository),
         refreshAttachment: RefreshAttachmentUseCase(repository),
+        voicePlayer: VoiceNotePlayer(),
         acceptInvite: AcceptGroupInviteUseCase(repository),
         declineInvite: DeclineGroupInviteUseCase(repository),
         markRead: MarkReadUseCase(repository),

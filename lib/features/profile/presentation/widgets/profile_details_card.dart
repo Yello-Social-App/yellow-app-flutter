@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -43,16 +44,16 @@ class ProfileDetailsCard extends StatelessWidget {
 
     final rows = <Widget>[
       _DetailRow(
-        icon: Icons.person_outline_rounded,
+        icon: CupertinoIcons.person,
         value: fullName.isEmpty ? 'Add your name' : fullName,
         muted: fullName.isEmpty,
       ),
-      _DetailRow(icon: Icons.alternate_email_rounded, value: user.username),
+      _DetailRow(icon: CupertinoIcons.at, value: user.username),
       _DetailRow(
-        icon: Icons.cake_outlined,
+        icon: CupertinoIcons.gift,
         value: 'Joined ${_months[createdAt.month - 1]} ${createdAt.day}, ${createdAt.year}',
       ),
-      _DetailRow(icon: Icons.mail_outline_rounded, value: user.email),
+      _DetailRow(icon: CupertinoIcons.mail, value: user.email),
     ];
 
     return Column(

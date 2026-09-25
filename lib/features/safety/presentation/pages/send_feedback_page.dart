@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -78,7 +79,7 @@ class _SendFeedbackViewState extends State<_SendFeedbackView> {
                 Row(
                   children: [
                     AppIconButton(
-                      icon: const Icon(Icons.arrow_back),
+                      icon: const Icon(CupertinoIcons.back),
                       onPressed: () => Navigator.of(context).maybePop(),
                     ),
                     const SizedBox(width: 12),
@@ -186,7 +187,7 @@ class _RatingPicker extends StatelessWidget {
               onPressed: onRate == null ? null : () => onRate!(value),
               tooltip: '$value out of 5',
               icon: Icon(
-                value <= rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                value <= rating ? CupertinoIcons.star_fill : CupertinoIcons.star,
                 size: 32,
                 color: value <= rating ? colors.yel : colors.ink3,
               ),
@@ -225,7 +226,7 @@ class _FeedbackRow extends StatelessWidget {
               ),
               for (var value = 1; value <= 5; value++)
                 Icon(
-                  value <= entry.rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                  value <= entry.rating ? CupertinoIcons.star_fill : CupertinoIcons.star,
                   size: 14,
                   color: value <= entry.rating ? colors.yel : colors.ink3,
                 ),

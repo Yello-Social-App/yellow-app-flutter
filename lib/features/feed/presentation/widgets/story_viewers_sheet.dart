@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -65,7 +66,7 @@ class _StoryViewersSheet extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
             child: Row(
               children: [
-                Icon(Icons.visibility_outlined, size: 18, color: colors.ink2),
+                Icon(CupertinoIcons.eye, size: 18, color: colors.ink2),
                 const SizedBox(width: 8),
                 Text(
                   viewCount == 1 ? 'Seen by 1 person' : 'Seen by $viewCount people',

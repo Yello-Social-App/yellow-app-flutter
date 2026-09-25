@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -13,6 +14,14 @@ import '../../domain/entities/story_entity.dart';
 import '../bloc/story_cubit.dart';
 import '../widgets/story_background.dart';
 import '../widgets/story_viewers_sheet.dart';
+
+/// How far the story chrome sits below the status bar, in logical pixels —
+/// both are added to `MediaQuery.paddingOf(context).top`, so they measure
+/// the gap under the notch, not from the physical top of the screen.
+/// Raise the pair to push the progress line and the author row further down;
+/// keep the ~20px difference so the 3px progress bar clears the 38px avatar.
+const double _kProgressTop = 28;
+const double _kHeaderTop = 48;
 
 /// The full-screen story viewer.
 ///
@@ -99,7 +108,7 @@ class _StoryViewState extends State<_StoryView> {
       title: 'Delete this story?',
       message: 'It disappears for everyone straight away, and leaves your archive.',
       confirmLabel: 'Delete',
-      icon: Icons.delete_outline,
+      icon: CupertinoIcons.delete,
     );
     if (!mounted) return;
     if (!confirmed) {
@@ -142,7 +151,10 @@ class _StoryViewState extends State<_StoryView> {
 
         final ring = state.currentRing;
         final story = state.currentStory;
-        if (state.status != StoryStatus.playing || ring == null || story == null) {
+        // `finished` keeps painting the slide it ended on — the page is
+        // already popping, and swapping the frame for a spinner underneath
+        // the pop animation is exactly the flicker the eye does catch.
+        if (state.status == StoryStatus.loading || ring == null || story == null) {
           return const Scaffold(
             backgroundColor: Color(0xFF0B0A07),
             body: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
@@ -164,105 +176,241 @@ class _StoryViewState extends State<_StoryView> {
           // The reply field rides above the keyboard by hand (see the
           // bottom `Positioned`), so the Scaffold must not also resize.
           resizeToAvoidBottomInset: false,
-          body: Stack(
-            children: [
-              Positioned.fill(child: _StoryFrame(story: story)),
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.72),
-                        Colors.transparent,
-                        Colors.transparent,
-                        Colors.black.withValues(alpha: 0.88),
-                      ],
-                      stops: const [0, 0.34, 0.6, 1],
+          body: _DragToDismiss(
+            replyFocus: _replyFocus,
+            onPause: cubit.pause,
+            onResume: cubit.resume,
+            onDismiss: cubit.dismiss,
+            child: Stack(
+              children: [
+                Positioned.fill(child: _StoryFrame(story: story)),
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.72),
+                          Colors.transparent,
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.88),
+                        ],
+                        stops: const [0, 0.34, 0.6, 1],
+                      ),
                     ),
                   ),
                 ),
-              ),
 
-              // Tap zones sit under the chrome so the close button, the
-              // reply field and the viewers button all win the hit test.
-              Positioned(
-                left: 0,
-                right: 0,
-                top: 120 + topInset,
-                bottom: 120 + bottomInset,
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 32,
-                      child: GestureDetector(
-                        onTap: cubit.previous,
-                        onLongPressStart: (_) => cubit.pause(),
-                        onLongPressEnd: (_) => cubit.resume(),
-                        behavior: HitTestBehavior.opaque,
-                      ),
-                    ),
-                    Expanded(
-                      flex: 52,
-                      child: GestureDetector(
-                        onTap: cubit.next,
-                        onLongPressStart: (_) => cubit.pause(),
-                        onLongPressEnd: (_) => cubit.resume(),
-                        behavior: HitTestBehavior.opaque,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              Positioned(
-                top: 52 + topInset,
-                left: 14,
-                right: 14,
-                child: _ProgressBars(slideCount: ring.stories.length),
-              ),
-
-              Positioned(
-                top: 72 + topInset,
-                left: 14,
-                right: 14,
-                child: _Header(
-                  story: story,
-                  onClose: cubit.dismiss,
-                  onDelete: story.isOwner ? _confirmDelete : null,
-                ),
-              ),
-
-              if (story.hasText)
+                // Tap zones sit under the chrome so the close button, the
+                // reply field and the viewers button all win the hit test.
                 Positioned(
-                  left: 16,
-                  right: 16,
-                  // A text story owns the middle of the frame; a caption on
-                  // a photo sits just above the footer.
-                  top: story.isImage ? null : 140 + topInset,
-                  bottom: story.isImage ? 104 + bottomInset : 140 + bottomInset,
-                  child: IgnorePointer(child: _StoryText(story: story)),
+                  left: 0,
+                  right: 0,
+                  top: 120 + topInset,
+                  bottom: 120 + bottomInset,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 32,
+                        child: GestureDetector(
+                          onTap: cubit.previous,
+                          onLongPressStart: (_) => cubit.pause(),
+                          onLongPressEnd: (_) => cubit.resume(),
+                          behavior: HitTestBehavior.opaque,
+                        ),
+                      ),
+                      Expanded(
+                        flex: 52,
+                        child: GestureDetector(
+                          onTap: cubit.next,
+                          onLongPressStart: (_) => cubit.pause(),
+                          onLongPressEnd: (_) => cubit.resume(),
+                          behavior: HitTestBehavior.opaque,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
 
-              Positioned(
-                left: 14,
-                right: 14,
-                bottom: 30 + bottomInset + keyboardInset,
-                child: story.isOwner
-                    ? _OwnerFooter(story: story, onTap: () => _openViewers(story))
-                    : _ReplyBar(
-                        controller: _replyController,
-                        focusNode: _replyFocus,
-                        sending: state.replying,
-                        authorName: story.author.firstName,
-                        onSend: _send,
-                      ),
-              ),
-            ],
+                Positioned(
+                  top: _kProgressTop + topInset,
+                  left: 14,
+                  right: 14,
+                  child: _ProgressBars(slideCount: ring.stories.length),
+                ),
+
+                Positioned(
+                  top: _kHeaderTop + topInset,
+                  left: 14,
+                  right: 14,
+                  child: _Header(
+                    story: story,
+                    onClose: cubit.dismiss,
+                    onDelete: story.isOwner ? _confirmDelete : null,
+                  ),
+                ),
+
+                if (story.hasText)
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    // A text story owns the middle of the frame; a caption on
+                    // a photo sits just above the footer.
+                    top: story.isImage ? null : 140 + topInset,
+                    bottom: story.isImage ? 104 + bottomInset : 140 + bottomInset,
+                    child: IgnorePointer(child: _StoryText(story: story)),
+                  ),
+
+                Positioned(
+                  left: 14,
+                  right: 14,
+                  bottom: 30 + bottomInset + keyboardInset,
+                  child: story.isOwner
+                      ? _OwnerFooter(story: story, onTap: () => _openViewers(story))
+                      : _ReplyBar(
+                          controller: _replyController,
+                          focusNode: _replyFocus,
+                          sending: state.replying,
+                          authorName: story.author.firstName,
+                          onSend: _send,
+                        ),
+                ),
+              ],
+            ),
           ),
         );
       },
+    );
+  }
+}
+
+/// Pull down to close: the frame follows the finger, and letting go past
+/// [_kDismissDistance] — or flinging it down — closes the viewer exactly the
+/// way the X button does. Anything shorter springs back and play resumes.
+///
+/// The child is held as a field rather than rebuilt: dragging emits a
+/// `setState` per frame, and the frame behind it is a decoded full-screen
+/// photo that must not be rebuilt 60 times a second. Only this wrapper's
+/// transform is rebuilt; the [Stack] element underneath is reused untouched.
+///
+/// At rest the transform is the identity, so the tap zones, the reply field
+/// and the header hit-test exactly as they did before it was added.
+class _DragToDismiss extends StatefulWidget {
+  const _DragToDismiss({
+    required this.replyFocus,
+    required this.onPause,
+    required this.onResume,
+    required this.onDismiss,
+    required this.child,
+  });
+
+  /// Read at gesture time, not at build time: a drag that starts while the
+  /// reply field has focus only dismisses the keyboard.
+  final FocusNode replyFocus;
+
+  final VoidCallback onPause;
+  final VoidCallback onResume;
+  final VoidCallback onDismiss;
+  final Widget child;
+
+  @override
+  State<_DragToDismiss> createState() => _DragToDismissState();
+}
+
+class _DragToDismissState extends State<_DragToDismiss> {
+  /// How far down a release has to land to close the story, and the fling
+  /// speed that closes it from any distance.
+  static const double _kDismissDistance = 120;
+  static const double _kDismissVelocity = 700;
+  static const Duration _kSpringBack = Duration(milliseconds: 220);
+
+  /// How much the frame shrinks by the time it reaches the dismiss
+  /// distance — enough to read as a card being peeled off the black
+  /// backdrop, not enough to letterbox the photo.
+  static const double _kDragScale = 0.08;
+
+  double _offset = 0;
+  bool _dragging = false;
+
+  void _onStart(DragStartDetails _) {
+    // Typing wins: the drag is not taken at all while the reply field has
+    // focus, so it can't close the story out from under a half-written
+    // reply — [_onUpdate] puts the keyboard away instead.
+    if (widget.replyFocus.hasFocus) return;
+    _dragging = true;
+    widget.onPause();
+  }
+
+  void _onUpdate(DragUpdateDetails details) {
+    if (!_dragging) {
+      // Keyboard up: swiping down dismisses it and keeps the story, the
+      // same bargain a scrollable makes. Swiping again then closes.
+      if (details.delta.dy > 0 && widget.replyFocus.hasFocus) widget.replyFocus.unfocus();
+      return;
+    }
+    // Downwards only — pulling up past the top just resists.
+    final next = (_offset + details.delta.dy).clamp(0.0, double.maxFinite);
+    if (next != _offset) setState(() => _offset = next);
+  }
+
+  void _onEnd(DragEndDetails details) {
+    if (!_dragging) return;
+    final velocity = details.velocity.pixelsPerSecond.dy;
+    if (_offset >= _kDismissDistance || velocity >= _kDismissVelocity) {
+      // Left where the finger let go: the page is popping over the top of
+      // it, so springing back first would only flash.
+      widget.onDismiss();
+      return;
+    }
+    _springBack();
+  }
+
+  /// A drag can be cancelled without ever starting (the pointer lifts before
+  /// the arena resolves), so the pause is only undone if it was taken.
+  void _onCancel() {
+    if (_dragging) _springBack();
+  }
+
+  void _springBack() {
+    setState(() {
+      _dragging = false;
+      _offset = 0;
+    });
+    widget.onResume();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = (_offset / _kDismissDistance).clamp(0.0, 1.0);
+    // `AnimatedSlide` takes a fraction of the child's own size, and the
+    // child is the full screen.
+    final height = MediaQuery.sizeOf(context).height;
+    // Zero while the finger is down so the frame tracks it exactly; the
+    // duration only exists for the spring back.
+    final duration = _dragging ? Duration.zero : _kSpringBack;
+
+    return GestureDetector(
+      // Opaque, not `deferToChild`: the drag has to be available over the
+      // whole frame, including the bands above and below the tap zones
+      // where nothing underneath hit-tests. Children are still hit-tested
+      // first, so the tap zones and the reply field keep their gestures.
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: _onStart,
+      onVerticalDragUpdate: _onUpdate,
+      onVerticalDragEnd: _onEnd,
+      onVerticalDragCancel: _onCancel,
+      child: AnimatedSlide(
+        offset: Offset(0, height == 0 ? 0 : _offset / height),
+        duration: duration,
+        curve: Curves.easeOutCubic,
+        child: AnimatedScale(
+          scale: 1 - _kDragScale * progress,
+          duration: duration,
+          curve: Curves.easeOutCubic,
+          child: widget.child,
+        ),
+      ),
     );
   }
 }
@@ -302,7 +450,7 @@ class _StoryFrame extends StatelessWidget {
       ),
       errorWidget: (_, _, _) => const ColoredBox(
         color: Color(0xFF0B0A07),
-        child: Center(child: Icon(Icons.broken_image_outlined, color: Colors.white38, size: 40)),
+        child: Center(child: Icon(CupertinoIcons.exclamationmark_triangle, color: Colors.white38, size: 40)),
       ),
     );
   }
@@ -415,7 +563,7 @@ class _Header extends StatelessWidget {
                   ),
                   if (story.visibility == StoryVisibility.public) ...[
                     const SizedBox(width: 6),
-                    Icon(Icons.public, size: 11, color: Colors.white.withValues(alpha: 0.62)),
+                    Icon(CupertinoIcons.globe, size: 11, color: Colors.white.withValues(alpha: 0.62)),
                   ],
                 ],
               ),
@@ -426,9 +574,9 @@ class _Header extends StatelessWidget {
           IconButton(
             onPressed: onDelete,
             tooltip: 'Delete story',
-            icon: const Icon(Icons.delete_outline, color: Colors.white),
+            icon: const Icon(CupertinoIcons.delete, color: Colors.white),
           ),
-        IconButton(onPressed: onClose, tooltip: 'Close', icon: const Icon(Icons.close, color: Colors.white)),
+        IconButton(onPressed: onClose, tooltip: 'Close', icon: const Icon(CupertinoIcons.xmark, color: Colors.white)),
       ],
     );
   }
@@ -458,7 +606,7 @@ class _OwnerFooter extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.visibility_outlined, color: Colors.white, size: 17),
+              const Icon(CupertinoIcons.eye, color: Colors.white, size: 17),
               const SizedBox(width: 8),
               Text(
                 count == 0 ? 'No views yet' : 'Seen by ${Formatters.compactCount(count)}',
@@ -525,7 +673,7 @@ class _ReplyBar extends StatelessWidget {
         const SizedBox(width: 9),
         _CircleAction(
           busy: sending,
-          icon: Icons.favorite_border,
+          icon: CupertinoIcons.heart,
           onTap: () => onSend('❤️'),
         ),
       ],
@@ -580,7 +728,7 @@ class _ErrorScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.auto_stories_outlined, color: Colors.white38, size: 42),
+              const Icon(CupertinoIcons.book, color: Colors.white38, size: 42),
               const SizedBox(height: 16),
               Text(
                 message,

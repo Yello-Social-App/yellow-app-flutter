@@ -43,6 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/build/
+
+# Sideloaded release APKs staged beside the repo (ADR-029). The APK the
+# release itself ships is built into build/, which is already ignored.
+*.apk
 
 # Backend repo nested in this project - not part of the Flutter app repo
 /yello_social_app_backend/

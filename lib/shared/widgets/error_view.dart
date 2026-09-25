@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -36,7 +37,7 @@ class ErrorView extends StatelessWidget {
                 color: colors.surf2,
                 border: Border.all(color: colors.line, width: 1.5),
               ),
-              child: Icon(Icons.error_outline, size: 18, color: colors.ink2),
+              child: Icon(CupertinoIcons.exclamationmark_circle, size: 18, color: colors.ink2),
             ),
             const SizedBox(height: 12),
             Text(

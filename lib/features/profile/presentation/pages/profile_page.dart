@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -226,12 +227,12 @@ class _ProfileViewState extends State<_ProfileView> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   AppIconButton(
-                    icon: const Icon(Icons.menu_rounded),
+                    icon: const Icon(CupertinoIcons.line_horizontal_3),
                     onPressed: () => _openAccountMenu(context),
                   ),
                   const SizedBox(width: 8),
                   AppIconButton(
-                    icon: const Icon(Icons.search_rounded),
+                    icon: const Icon(CupertinoIcons.search),
                     onPressed: () => context.pushNamed(RouteNames.search),
                   ),
                   const SizedBox(width: 8),
@@ -262,35 +263,35 @@ class _ProfileViewState extends State<_ProfileView> {
     final action = await _showMenu(context, [
       (
         'theme',
-        isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
+        isDark ? CupertinoIcons.moon : CupertinoIcons.sun_max,
         'Theme',
         isDark ? 'Dark' : 'Light',
       ),
       (
         'story-archive',
-        Icons.auto_stories_outlined,
+        CupertinoIcons.book,
         'Story archive',
         'Every story you have posted',
       ),
       (
         'feedback',
-        Icons.rate_review_outlined,
+        CupertinoIcons.text_bubble,
         'Send feedback',
         'Rate a feature and tell us why',
       ),
       (
         'notifications',
-        Icons.notifications_none_rounded,
+        CupertinoIcons.bell,
         'Notification preferences',
         null,
       ),
       (
         'version',
-        Icons.info_outline_rounded,
+        CupertinoIcons.info_circle,
         'App version',
         'The build running on this device',
       ),
-      ('logout', Icons.logout_rounded, 'Log out', null),
+      ('logout', CupertinoIcons.square_arrow_right, 'Log out', null),
     ]);
     if (action == null || !context.mounted) return;
     switch (action) {
@@ -375,7 +376,7 @@ class _ProfileViewState extends State<_ProfileView> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
+              leading: const Icon(CupertinoIcons.photo_on_rectangle),
               title: Text(cover ? 'Choose cover' : 'Choose avatar'),
               onTap: () => Navigator.pop(context, 'choose'),
             ),
@@ -384,7 +385,7 @@ class _ProfileViewState extends State<_ProfileView> {
                     : cubit.state.user?.avatarUrl) !=
                 null)
               ListTile(
-                leading: const Icon(Icons.delete_outline),
+                leading: const Icon(CupertinoIcons.delete),
                 title: Text(cover ? 'Remove cover' : 'Remove avatar'),
                 onTap: () => Navigator.pop(context, 'remove'),
               ),
@@ -438,7 +439,7 @@ class _ProfileViewState extends State<_ProfileView> {
       message: "You'll need to sign in again to continue using Yello.",
       confirmLabel: 'Log out',
       cancelLabel: 'Cancel',
-      icon: Icons.logout_rounded,
+      icon: CupertinoIcons.square_arrow_right,
     );
     if (confirmed) sl<LogoutUseCase>()(const NoParams());
   }
@@ -879,10 +880,7 @@ class _PostList extends StatelessWidget {
         for (final post in posts)
           PostCard(
             post: post,
-            onOpen: () => context.pushNamed(
-              RouteNames.postDetail,
-              pathParameters: {'postId': post.id},
-            ),
+            onOpen: () => _openPost(context, cubit, post.id),
             onLike: () => cubit.toggleLike(post),
             onReact: (type) => cubit.react(post, type),
             onSave: () => cubit.toggleSave(post.id),
@@ -891,4 +889,12 @@ class _PostList extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Opens the post's own screen and applies whatever it pops back onto this
+/// row — a reaction or a comment made in there changes counts the card here
+/// shows, and nothing re-fetches this list on the way back. See ADR-032.
+Future<void> _openPost(BuildContext context, ProfileCubit cubit, String postId) async {
+  final updated = await context.pushNamed<PostEntity>(RouteNames.postDetail, pathParameters: {'postId': postId});
+  if (updated != null) cubit.applyUpdated(updated);
 }

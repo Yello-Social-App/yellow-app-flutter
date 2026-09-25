@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
@@ -82,12 +83,21 @@ class _StoryComposeViewState extends State<_StoryComposeView> {
     // device rather than whichever one the design was eyeballed against.
     final topInset = MediaQuery.paddingOf(context).top;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
+    // The bottom chrome (caption/cover picker/share) rides above the keyboard
+    // by hand, because `resizeToAvoidBottomInset: false` below leaves the
+    // Stack at full height when the IME opens — without this the caption
+    // field sits behind the keyboard and the user types blind. Same trade as
+    // the viewer: resizing the Scaffold instead would reframe the photo
+    // preview away from how the story actually plays back.
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
 
     return BlocBuilder<StoryComposeCubit, StoryComposeState>(
       builder: (context, state) {
         final cubit = context.read<StoryComposeCubit>();
         return Scaffold(
           backgroundColor: const Color(0xFF0B0A07),
+          // The bottom chrome rides above the keyboard by hand (see
+          // `keyboardInset` above), so the Scaffold must not also resize.
           resizeToAvoidBottomInset: false,
           body: Stack(
             children: [
@@ -126,7 +136,7 @@ class _StoryComposeViewState extends State<_StoryComposeView> {
                   left: 22,
                   right: 22,
                   top: 150 + topInset,
-                  bottom: 220 + bottomInset,
+                  bottom: 220 + bottomInset + keyboardInset,
                   child: Center(
                     child: TextField(
                       controller: _textController,
@@ -163,7 +173,7 @@ class _StoryComposeViewState extends State<_StoryComposeView> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _RoundButton(icon: Icons.close, onTap: () => Navigator.of(context).maybePop()),
+                    _RoundButton(icon: CupertinoIcons.xmark, onTap: () => Navigator.of(context).maybePop()),
                     _VisibilityPill(
                       visibility: state.visibility,
                       onTap: () => cubit.setVisibility(
@@ -173,7 +183,7 @@ class _StoryComposeViewState extends State<_StoryComposeView> {
                       ),
                     ),
                     _RoundButton(
-                      icon: state.isPhoto ? Icons.text_fields : Icons.photo_library_outlined,
+                      icon: state.isPhoto ? CupertinoIcons.textformat : CupertinoIcons.photo_on_rectangle,
                       onTap: state.isPhoto ? cubit.clearImage : () => _pick(ImageSource.gallery),
                     ),
                   ],
@@ -185,9 +195,9 @@ class _StoryComposeViewState extends State<_StoryComposeView> {
                 right: 14,
                 child: Column(
                   children: [
-                    _RoundButton(icon: Icons.photo_camera_outlined, onTap: () => _pick(ImageSource.camera)),
+                    _RoundButton(icon: CupertinoIcons.camera, onTap: () => _pick(ImageSource.camera)),
                     const SizedBox(height: 9),
-                    _RoundButton(icon: Icons.photo_outlined, onTap: () => _pick(ImageSource.gallery)),
+                    _RoundButton(icon: CupertinoIcons.photo, onTap: () => _pick(ImageSource.gallery)),
                   ],
                 ),
               ),
@@ -198,7 +208,7 @@ class _StoryComposeViewState extends State<_StoryComposeView> {
                 Positioned(
                   left: 0,
                   right: 0,
-                  bottom: 96 + bottomInset,
+                  bottom: 96 + bottomInset + keyboardInset,
                   child: SizedBox(
                     height: 48,
                     child: ListView.builder(
@@ -224,7 +234,7 @@ class _StoryComposeViewState extends State<_StoryComposeView> {
                 Positioned(
                   left: 16,
                   right: 16,
-                  bottom: 96 + bottomInset,
+                  bottom: 96 + bottomInset + keyboardInset,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 17),
                     decoration: BoxDecoration(
@@ -251,7 +261,7 @@ class _StoryComposeViewState extends State<_StoryComposeView> {
               Positioned(
                 left: 14,
                 right: 14,
-                bottom: 30 + bottomInset,
+                bottom: 30 + bottomInset + keyboardInset,
                 child: _PostButton(
                   enabled: state.canPost,
                   busy: state.isPosting,
@@ -288,7 +298,7 @@ class _VisibilityPill extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(isPublic ? Icons.public : Icons.group_outlined, size: 13, color: Colors.white),
+            Icon(isPublic ? CupertinoIcons.globe : CupertinoIcons.person_2, size: 13, color: Colors.white),
             const SizedBox(width: 7),
             Text(
               '${visibility.label.toUpperCase()} · 24H',

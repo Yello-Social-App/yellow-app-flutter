@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -10,7 +11,8 @@ import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
 import '../../domain/entities/post_entity.dart';
 import 'post_image_carousel.dart';
-import 'reaction_picker_sheet.dart';
+import 'reaction_glyph.dart';
+import 'reaction_picker.dart';
 
 /// One feed card, matching the mockup's post article: text-only posts get
 /// the mockup's bold "quote" typography, but as of 2026-09-09 with **no
@@ -166,7 +168,7 @@ class _Header extends StatelessWidget {
               customBorder: const CircleBorder(),
               child: Padding(
                 padding: const EdgeInsets.all(8),
-                child: Icon(Icons.more_horiz, color: colors.ink3, size: 20),
+                child: Icon(CupertinoIcons.ellipsis, color: colors.ink3, size: 20),
               ),
             ),
           ),
@@ -187,7 +189,7 @@ class _RepostedLabel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
       child: Row(
         children: [
-          Icon(Icons.repeat, size: 13, color: colors.ink2),
+          Icon(CupertinoIcons.arrow_2_squarepath, size: 13, color: colors.ink2),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
@@ -434,9 +436,11 @@ class _Actions extends StatelessWidget {
   final VoidCallback onRepost;
   final VoidCallback onOpen;
 
-  Future<void> _pickReaction(BuildContext context) async {
+  /// [pillContext] is the like pill's own context, not this row's — the
+  /// picker anchors its floating rail to that box (see [showReactionPicker]).
+  Future<void> _pickReaction(BuildContext pillContext) async {
     final picked = await showReactionPicker(
-      context,
+      pillContext,
       current: post.viewerReactionType,
     );
     if (picked != null) onReact(picked);
@@ -450,29 +454,21 @@ class _Actions extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       child: Row(
         children: [
-          _Pill(
-            onTap: onLike,
-            onLongPress: () => _pickReaction(context),
-            border: reacted != null ? colors.red : colors.line,
-            background: reacted != null ? colors.red : Colors.transparent,
-            foreground: reacted != null ? Colors.white : colors.ink2,
-            label: Formatters.compactCount(post.reactionTotal),
-            iconBuilder: (fg) => AnimatedSwitcher(
-              duration: const Duration(milliseconds: 180),
-              transitionBuilder: (child, anim) =>
-                  ScaleTransition(scale: anim, child: child),
-              child: reacted == null || reacted == ReactionType.like
-                  ? Icon(
-                      reacted == null ? Icons.favorite_border : Icons.favorite,
-                      key: ValueKey(reacted),
-                      size: 15,
-                      color: fg,
-                    )
-                  : Text(
-                      reacted.emoji,
-                      key: ValueKey(reacted),
-                      style: const TextStyle(fontSize: 13),
-                    ),
+          // Wrapped so the long-press picker can anchor to the pill itself —
+          // `context` out here is the whole action row, which would float the
+          // rail above the comment and repost buttons too.
+          Builder(
+            builder: (pillContext) => _Pill(
+              onTap: onLike,
+              onLongPress: () => _pickReaction(pillContext),
+              border: reacted != null ? colors.red : colors.line,
+              background: reacted != null ? colors.red : Colors.transparent,
+              foreground: reacted != null ? Colors.white : colors.ink2,
+              label: Formatters.compactCount(post.reactionTotal),
+              // Fixed-size slot — see [ReactionGlyph]: the glyph swaps
+              // between an icon and an emoji, and sizing the pill to
+              // whichever is current made it shrink/grow as it changed.
+              iconBuilder: (fg) => ReactionGlyph(reaction: reacted, color: fg, size: 15, animate: true),
             ),
           ),
           const SizedBox(width: 7),
@@ -483,7 +479,7 @@ class _Actions extends StatelessWidget {
             foreground: colors.ink2,
             label: Formatters.compactCount(post.commentCount),
             iconBuilder: (fg) =>
-                Icon(Icons.mode_comment_outlined, size: 14, color: fg),
+                Icon(CupertinoIcons.bubble_left, size: 14, color: fg),
           ),
           const SizedBox(width: 7),
           _Pill(
@@ -492,7 +488,7 @@ class _Actions extends StatelessWidget {
             background: post.repostedByMe ? colors.grn : Colors.transparent,
             foreground: post.repostedByMe ? Colors.white : colors.ink2,
             label: Formatters.compactCount(post.repostCount),
-            iconBuilder: (fg) => Icon(Icons.repeat, size: 14, color: fg),
+            iconBuilder: (fg) => Icon(CupertinoIcons.arrow_2_squarepath, size: 14, color: fg),
           ),
           const Spacer(),
           _Pill(
@@ -502,7 +498,7 @@ class _Actions extends StatelessWidget {
             foreground: post.savedByMe ? colors.onYel : colors.ink2,
             label: post.savedByMe ? 'Saved' : 'Save',
             iconBuilder: (fg) => Icon(
-              post.savedByMe ? Icons.bookmark : Icons.bookmark_border,
+              post.savedByMe ? CupertinoIcons.bookmark_fill : CupertinoIcons.bookmark,
               size: 13,
               color: fg,
             ),
@@ -532,6 +528,12 @@ class _Pill extends StatelessWidget {
   final String label;
   final Widget Function(Color) iconBuilder;
 
+  /// Every pill's icon gets the same square slot regardless of the glyph it
+  /// draws (icons here range 13–15px, and the like pill's can be an emoji),
+  /// so the whole action row keeps one constant height instead of the pills
+  /// disagreeing on it — see [ReactionGlyphSlot].
+  static const double _iconSlot = 15;
+
   @override
   Widget build(BuildContext context) {
     return Material(
@@ -549,7 +551,7 @@ class _Pill extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              iconBuilder(foreground),
+              ReactionGlyphSlot(size: _iconSlot, child: iconBuilder(foreground)),
               const SizedBox(width: 7),
               Text(
                 label,

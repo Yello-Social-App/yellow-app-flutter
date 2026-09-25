@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -152,7 +153,7 @@ class _Thumb extends StatelessWidget {
           // size; x3 covers the densest screens this ships to.
           memCacheWidth: (_size * 3).round(),
           memCacheHeight: (_size * 3).round(),
-          errorWidget: (_, _, _) => _Placeholder(icon: Icons.broken_image_outlined, color: colors.ink3),
+          errorWidget: (_, _, _) => _Placeholder(icon: CupertinoIcons.exclamationmark_triangle, color: colors.ink3),
         ),
       );
     }
@@ -162,14 +163,14 @@ class _Thumb extends StatelessWidget {
         background: story!.background ?? StoryBackground.cover0,
         size: _size,
         borderRadius: radius,
-        child: Icon(Icons.text_fields, size: 14, color: storyBackgroundForeground(story!.background)),
+        child: Icon(CupertinoIcons.textformat, size: 14, color: storyBackgroundForeground(story!.background)),
       );
     }
 
     return _Placeholder(
       icon: missing
-          ? Icons.hide_source
-          : (storyReply.storyIsImage ? Icons.image_outlined : Icons.text_fields),
+          ? CupertinoIcons.eye_slash
+          : (storyReply.storyIsImage ? CupertinoIcons.photo : CupertinoIcons.textformat),
       color: colors.ink3,
     );
   }

@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -45,7 +46,7 @@ class _StoryArchiveView extends StatelessWidget {
       title: 'Delete this story?',
       message: 'It leaves your archive for good. If it is still live, it disappears for everyone too.',
       confirmLabel: 'Delete',
-      icon: Icons.delete_outline,
+      icon: CupertinoIcons.delete,
     );
     if (!confirmed || !context.mounted) return;
     final error = await cubit.delete(story.id);
@@ -97,7 +98,7 @@ class _StoryArchiveView extends StatelessWidget {
                     Row(
                       children: [
                         AppIconButton(
-                          icon: const Icon(Icons.arrow_back),
+                          icon: const Icon(CupertinoIcons.back),
                           onPressed: () => Navigator.of(context).maybePop(),
                         ),
                         const SizedBox(width: 12),
@@ -180,7 +181,7 @@ class _StoryArchiveView extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 60),
           child: Column(
             children: [
-              Icon(Icons.auto_stories_outlined, size: 40, color: colors.ink3),
+              Icon(CupertinoIcons.book, size: 40, color: colors.ink3),
               const SizedBox(height: 14),
               Text('Nothing here yet', style: AppTextStyles.body.copyWith(color: colors.ink)),
               const SizedBox(height: 6),
@@ -282,7 +283,7 @@ class _ArchiveRow extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Icon(
-                      story.visibility == StoryVisibility.public ? Icons.public : Icons.group_outlined,
+                      story.visibility == StoryVisibility.public ? CupertinoIcons.globe : CupertinoIcons.person_2,
                       size: 12,
                       color: colors.ink3,
                     ),
@@ -313,7 +314,7 @@ class _ArchiveRow extends StatelessWidget {
             ),
           ),
           AppIconButton(
-            icon: Icon(Icons.delete_outline, color: colors.ink2, size: 18),
+            icon: Icon(CupertinoIcons.delete, color: colors.ink2, size: 18),
             onPressed: onDelete,
           ),
         ],
@@ -352,7 +353,7 @@ class _Thumbnail extends StatelessWidget {
           errorWidget: (_, _, _) => SizedBox(
             width: _size,
             height: _size,
-            child: Icon(Icons.broken_image_outlined, size: 18, color: AppColors.of(context).ink3),
+            child: Icon(CupertinoIcons.exclamationmark_triangle, size: 18, color: AppColors.of(context).ink3),
           ),
         ),
       );
@@ -362,7 +363,7 @@ class _Thumbnail extends StatelessWidget {
       background: story.background ?? StoryBackground.cover0,
       size: _size,
       borderRadius: radius,
-      child: Icon(Icons.text_fields, size: 18, color: storyBackgroundForeground(story.background)),
+      child: Icon(CupertinoIcons.textformat, size: 18, color: storyBackgroundForeground(story.background)),
     );
   }
 }

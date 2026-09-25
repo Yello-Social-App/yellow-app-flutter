@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:yello_social_app/core/router/route_names.dart';
@@ -112,7 +113,7 @@ class ProfileHeader extends StatelessWidget {
           top: cardTop - 52,
           child: AppIconButton(
             size: 38,
-            icon: const Icon(Icons.photo_camera_outlined),
+            icon: const Icon(CupertinoIcons.camera),
             onPressed: isUploadingImage ? null : onEditCover,
           ),
         ),
@@ -200,7 +201,7 @@ class ProfileHeader extends StatelessWidget {
                           child: AppButton(
                             label: 'Add to story',
                             fullWidth: true,
-                            icon: Icon(Icons.add_circle_outline_rounded, size: 17, color: colors.onYel),
+                            icon: Icon(CupertinoIcons.add_circled, size: 17, color: colors.onYel),
                             // onPressed: onAddStory,
                             onPressed: () => context.pushNamed(RouteNames.createPost),
                           ),
@@ -211,7 +212,7 @@ class ProfileHeader extends StatelessWidget {
                             label: 'Edit profile',
                             variant: AppButtonVariant.subtle,
                             fullWidth: true,
-                            icon: Icon(Icons.edit_outlined, size: 17, color: colors.ink2),
+                            icon: Icon(CupertinoIcons.pencil, size: 17, color: colors.ink2),
                             onPressed: onEditProfile,
                           ),
                         ),
@@ -368,7 +369,7 @@ class _Avatar extends StatelessWidget {
                   color: colors.yel,
                   border: Border.all(color: colors.surf, width: 3),
                 ),
-                child: Icon(Icons.photo_camera_rounded, size: 16, color: colors.onYel),
+                child: Icon(CupertinoIcons.camera_fill, size: 16, color: colors.onYel),
               ),
             ),
         ],
@@ -453,7 +454,7 @@ class _AccountStatusRow extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.verified_user_outlined, size: 16, color: colors.ink3),
+          Icon(CupertinoIcons.checkmark_shield, size: 16, color: colors.ink3),
           const SizedBox(width: 6),
           Flexible(
             child: Text(
@@ -545,7 +546,7 @@ class _ConnectionsRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 2),
-              Icon(Icons.chevron_right_rounded, size: 18, color: colors.ink3),
+              Icon(CupertinoIcons.chevron_right, size: 18, color: colors.ink3),
             ],
           ),
         ),

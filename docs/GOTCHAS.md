@@ -58,6 +58,26 @@ to fill it. This app shipped exactly this bug in `BottomNavBar`.
 - Fix: wrap in `IntrinsicHeight`, or set `mainAxisSize: MainAxisSize.min`
   (see `tech_filter_sheet.dart:65`).
 
+### `resizeToAvoidBottomInset: false` makes the keyboard *your* problem
+
+The full-bleed story screens turn the Scaffold's resize off on purpose —
+letting it resize reframes the photo, so the composer would no longer preview
+the story the way the viewer plays it back. The cost is that **nothing** moves
+when the IME opens: every bottom-anchored `Positioned` stays exactly where it
+was, behind the keyboard. The composer shipped with the caption field pinned
+at `bottom: 96`, so typing a caption was typing blind.
+
+- Fix: each piece of bottom chrome adds the keyboard inset to its own offset
+  the same way it already adds the safe-area inset —
+  `bottom: 96 + bottomInset + keyboardInset`, with
+  `keyboardInset = MediaQuery.viewInsetsOf(context).bottom`. `paddingOf`'s
+  bottom already drops to 0 while the IME is up, so the two never double up.
+  See `story_compose_page.dart` and `story_viewer_page.dart`.
+- Don't reach for `AnimatedPositioned` here — `viewInsets` is already animated
+  frame by frame by the platform, and a second curve on top of it lags.
+- In a widget test, `tester.view.viewInsets` is in **physical** pixels, so a
+  300dp keyboard is `FakeViewPadding(bottom: 300 * devicePixelRatio)`.
+
 ### `Transform.translate` silently swallows taps past its own box
 
 `RenderTransform.hitTest` inverse-transforms the tap against the child's
@@ -94,6 +114,56 @@ phone becomes at Android's larger **Display size** settings. The feed's
   `FittedBox(fit: BoxFit.scaleDown)` (see `ShimmerProfileView`).
 - `test/shared/widgets/shimmer_skeletons_test.dart` pumps every skeleton at
   320×640 and fails on any overflow — add a new skeleton there.
+
+### An emoji `Text` is not the same size as an `Icon`, or as another emoji
+
+A control that swaps its glyph between `Icon(size: N)` and
+`Text(emoji, fontSize: N)` resizes whenever the glyph changes, and the emoji
+are not even consistent with each other: `❤️` is U+2764 + a variation
+selector, a **text**-presentation glyph with a narrow advance, while `😆`
+and `😮` are wide pictographic ones. The like pill shipped this way and
+visibly grew and shrank depending on which reaction was active — and because
+the swap sat inside an `AnimatedSwitcher`, whose default layout is a `Stack`
+sized to the largest child, it also jumped mid-transition.
+
+- Put the glyph in a fixed square: `ReactionGlyphSlot`
+  (`features/feed/presentation/widgets/reaction_glyph.dart`) is
+  `SizedBox.square` + `FittedBox(fit: BoxFit.scaleDown)`. `scaleDown`, not
+  `contain` — it pulls an oversized glyph back in without blowing the small
+  ones up to fill the box.
+- Give the emoji `height: 1`, or the font's own line spacing pads the slot.
+- A bare `SizedBox` is not enough on its own: the child gets loose
+  constraints and a too-wide emoji is clipped rather than fitted.
+- The same applies to a row of emoji tiles (the reaction picker) — without a
+  slot the tiles come out different widths.
+- `test/features/feed/reaction_glyph_test.dart` measures every reaction and
+  fails if any renders at a different size.
+
+### A fixed-width `CustomPaint` in a chat bubble overflows at 320pt
+
+An incoming bubble is given `MediaQuery.width * 0.78 - 36` (the avatar
+column), then spends 30 of that on its own padding — **183pt of content on a
+320pt phone**. The voice note's 110pt waveform plus its button, gaps and
+length label came to 189pt, so the row was overflowing there *before*
+anything was added to it; adding the unheard dot (ADR-037) made it 19pt
+worse and loud enough to notice.
+
+- The waveform is the one thing in that row that can give ground, so it is
+  the one `Flexible`. Loose fit means `CustomPaint(size: Size(110, 26))`
+  still draws at 110 wherever there is room — `constraints.constrain` only
+  bites when the free space is smaller — and `_WaveformPainter` already
+  resamples the server's values to however many bars fit, so a narrower bar
+  is fewer bars rather than a clipped one.
+- Once the width is no longer the constant, **the scrub fraction cannot use
+  the constant either**: `onTapDown` reads the painted width off the render
+  box (via a `Builder`'s context) instead of `_waveWidth`, or a tap on a
+  narrow bubble seeks short.
+- Do not reach for `LayoutBuilder` here. A voice note sent as a reply is
+  wrapped in `IntrinsicWidth` by `_MessageRow`, and `LayoutBuilder` throws
+  when a parent asks it for an intrinsic dimension. `Flexible` answers that
+  question fine.
+- `test/features/chat/voice_note_bubble_test.dart` pumps the bubble at 320pt
+  and inside an `IntrinsicWidth` for exactly these two.
 
 ---
 
@@ -171,6 +241,26 @@ twice. Fixed with a Cubit-private in-flight set.
 - **Check every new mutating button for this shape.** Any tappable action that
   hits the network and isn't disabled during flight needs a guard.
 
+### `maxScrollExtent` on a `ListView.builder` is an estimate, so one `animateTo` lands mid-list
+
+A builder-backed list only lays out what fits, and extrapolates the rest.
+`position.maxScrollExtent` is therefore a guess drawn from the rows built so
+far — and it **grows as the scroll itself builds more of them**. A single
+`animateTo(maxScrollExtent)` runs at a target that is still moving and stops
+partway. With rows as uneven as a chat transcript (a one-word reply, a photo,
+an invite card) "partway" is the middle of the history.
+
+- This is what opening a conversation did: it landed mid-transcript instead
+  of on the last message.
+- Fix: `jumpTo(extent)`, `await WidgetsBinding.instance.endOfFrame`, re-read
+  the extent, and jump again until it stops growing — bounded, and it settles
+  in two or three frames. See `_pinToBottom` in `chat_page.dart`.
+- An `animateTo` is still right for a *new* message arriving at a list that
+  is already at the bottom: one more row does not move the estimate.
+- `reverse: true` avoids the whole problem and is what a chat list built from
+  scratch should do — it was not worth re-deriving run grouping, pagination
+  and the quote-jump walk for.
+
 ### A field left out of `props` makes a Cubit silently drop the emit
 
 `Cubit.emit` skips a state that `==` the current one, and with `Equatable`
@@ -187,6 +277,28 @@ could not make `deleteMessage` see its own message.
 - In a test, the cubit's `stream` delivers asynchronously: assert on
   `state` right after an `await`ed call, or `await
   Future<void>.delayed(Duration.zero)` before reading what a listener saw.
+
+### A pushed detail screen leaves the row behind it showing stale counts
+
+Nothing re-fetches a list when a route pushed over it pops. React or comment
+on a post's own screen and the card you tapped keeps the counts it had at tap
+time — for as long as that screen stays alive, which with a singleton
+`FeedCubit` and a `StatefulShellRoute` is the rest of the process.
+
+- The fix in place is ADR-032: the detail screen pops with the entity it
+  holds (`PopScope<T>` + `canPop: false`, so the back *gesture* carries it
+  too), and the caller applies it — `FeedCubit.replacePost`,
+  `<X>Cubit.applyUpdated`. **Any new list → detail → back path needs both
+  halves**; each one on its own is silent.
+- An applier must swap in place and no-op on an id it doesn't hold, or it
+  will resurrect a row that a delete/hide/mute just removed.
+- `PostEntity.repostedByMe` never travels between screens — re-derive it from
+  the receiving cubit's own `_myRepostIds`. It exists on no wire response, so
+  the incoming copy's value is only as good as whatever that screen happened
+  to recover.
+- Known gap: opening the embedded original inside a repost
+  (`RepostedPostPreview`) still leaves that embed stale — the list's row is
+  the repost, and what changed is the `originalPost` nested in it.
 
 ### Long-lived singleton Cubits go stale
 
@@ -234,6 +346,27 @@ through path_provider on first build, which has no implementation under
 
 - Stub the channel in `setUp` (see `photo_viewer_test.dart`); the photos
   never load in a test either way, so a fake path is enough.
+
+### A re-signed attachment link reaches nothing on its own
+
+`yello-chat` presigns every attachment URL for an hour and re-signs it on
+every read, so a stale link 403s and has to be swapped for a fresh one
+(`GET /ws/attachments/{id}`, `ChatCubit.refreshAttachment`). Two separate
+equality traps sit between that call and a picture on the screen, and both
+have to be cleared or the refresh is a no-op:
+
+1. `AttachmentEntity.props` leave `url` out on purpose — the history poll
+   re-signs every link, and counting that as a change would make the whole
+   transcript look new every few seconds. The cost is that a message holding
+   the re-signed attachment is `==` the old one, so the `ChatState` is too,
+   and **`emit` drops equal states**. `ChatState.attachmentRevision` is
+   bumped alongside `messages` so that one emit lands.
+2. `CachedNetworkImageProvider` compares equal on `cacheKey ?? url`, so once
+   a `cacheKey` is set the URL is not part of its identity at all. `Image`
+   sees the same provider, never re-resolves, and a thumbnail that 403'd sits
+   in its error state forever. The widget needs a `key: ValueKey(url)` to be
+   rebuilt from scratch — the `cacheKey` still keeps the file cached by
+   attachment id, which is the point of having it.
 
 ### `flutter analyze` is a floor, not a ceiling
 

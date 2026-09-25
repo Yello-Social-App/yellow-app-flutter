@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -161,7 +162,7 @@ class BottomNavBar extends StatelessWidget {
                         SizedBox(
                           width: slotWidth,
                           child: _NavItem(
-                            icon: Icons.grid_view_rounded,
+                            icon: CupertinoIcons.square_grid_2x2,
                             label: 'Feed',
                             active: currentIndex == 0,
                             onTap: () => onTabSelected(0),
@@ -170,7 +171,7 @@ class BottomNavBar extends StatelessWidget {
                         SizedBox(
                           width: slotWidth,
                           child: _NavItem(
-                            icon: Icons.widgets_outlined,
+                            icon: CupertinoIcons.squares_below_rectangle,
                             label: 'Explore',
                             active: currentIndex == 5,
                             onTap: () => onTabSelected(5),
@@ -197,7 +198,7 @@ class BottomNavBar extends StatelessWidget {
                                     width: 45,
                                     height: 45,
                                     child: Icon(
-                                      Icons.add,
+                                      CupertinoIcons.add,
                                       color: _onYelGlyph,
                                       size: 22,
                                     ),
@@ -212,7 +213,7 @@ class BottomNavBar extends StatelessWidget {
                           child: BlocBuilder<MessagesCubit, MessagesState>(
                             bloc: sl<MessagesCubit>(),
                             builder: (context, state) => _NavItem(
-                              icon: Icons.chat_bubble_outline,
+                              icon: CupertinoIcons.bubble_left,
                               label: 'Inbox',
                               active: currentIndex == 2,
                               dot: state.unreadTotal > 0,
