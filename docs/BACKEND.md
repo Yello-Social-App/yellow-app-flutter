@@ -86,7 +86,13 @@ Grouped as declared in `VersionedEndpoints`:
 - **Comments** — `/posts/{postId}/comments`, `/comments/{id}`
 - **Feed** — `/feed` (cursor-paginated)
 - **Reactions** — `/reactions/{targetType}/{targetId}`,
-  `/reactions/{targetType}/{targetId}/summary`
+  `/reactions/{targetType}/{targetId}/summary`. The `POST` is a **toggle keyed
+  on the type you send**, and there is no `DELETE`: a type the viewer does not
+  currently have is a *switch*, the type they do have is a *removal*. So an
+  un-react has to echo `viewerReaction` — see ADR-031. `ReactionType` is a
+  closed enum: `LIKE|LOVE|HAHA|WOW|SAD|ANGRY` (re-verified 2026-09-25). Note
+  the client draws `LOVE` as 🖕, not ❤️ — a display swap only (ADR-031); on
+  the wire and in every count it is still `LOVE`.
 - **Friends** — `/friends`, `/friends/{userId}`, `/friends/blocked`,
   `/friends/requests`, `/friends/requests/{userId}`(`/accept`,`/decline`),
   `/users/{userId}/block`
@@ -185,6 +191,17 @@ Routes, as declared in `ChatRoutes`:
   `GET /ws/attachments/{id}` for a fresh presigned URL. URLs live an hour
   and are **re-signed on every read** — cache images by attachment id, not
   URL (`_AttachmentThumb` does).
+- **Voice notes** — `POST /ws/conversations/{id}/attachments/voice`
+  (multipart, one `file`; M4A/MP4, WebM or Ogg, ≤ 5 minutes and ≤ 10 MiB),
+  then the same `attachmentIds` send as any attachment. Its own route, not
+  the general one: the server transcodes the upload to **mono AAC ~48 kbps
+  in M4A** (`audio/mp4`), throws the original away, and measures
+  `voice.durationMs` and `voice.waveform` (≤ 64 integers, 0–100) **from the
+  audio itself** — a recording posted to `…/attachments` comes back as a
+  plain `FILE` with no `voice` block and nothing to draw. `503 UNAVAILABLE`
+  means the deployment has no bucket or no ffmpeg: hide the mic. Playback is
+  the presigned `url` given straight to the player, no auth header, Range
+  supported. Verified against the live service's reference on 2026-09-25.
 - **Groups** (400 on a DM) — `PATCH /ws/conversations/{id}` (`title`),
   `PUT/DELETE …/photo`, `POST …/members`, `DELETE/PATCH …/members/{userId}`
   (`role: ADMIN | MEMBER`), `POST …/leave`. Roles: any member adds people,
@@ -199,7 +216,11 @@ Routes, as declared in `ChatRoutes`:
   `…/decline`. Only the invitee answers; a second answer is 409.
 
 Limits: message text ≤ 4 000 chars (`CHAT_MESSAGE_MAX_LENGTH`), ≤ 10
-attachments per message, ≤ 64-char `clientId` (the idempotency key).
+attachments per message, ≤ 64-char `clientId` (the idempotency key). A voice
+note is ≤ 5 minutes (`VOICE_MAX_DURATION_MS`, fixed) and goes **alone** in
+its message. Deleting the message deletes the audio from storage with it, so
+a note still playing out of a bubble that becomes a tombstone is playing a
+link that has gone (`ChatCubit._applyDeleted` stops it).
 
 **WebSocket** — `wss://…/ws`, frames `{ event, data }` ≤ 64 KiB, wired
 by `ChatSocket` (`chat/data/datasources/chat_socket.dart`). Handshake,
@@ -274,13 +295,96 @@ safety net while the socket is up and drops to 5 s when it is not.
   push runs no Dart for it, so the affected screen catches up on its next
   load.
 
+### Direct reply needs two payload changes (2026-09-23)
+
+The app can now send a reply typed straight into the notification — the
+Reply action, `chat_reply_action.dart` + `PushNotificationService`, ADR-025.
+An action button only exists on an alert *Dart* drew, though, and Android
+runs no Dart for a push carrying its own `notification` block (see
+`docs/GOTCHAS.md`). So today the Reply button appears only while the app is
+foregrounded, and closing that gap is entirely on `yello-notify`:
+
+| Platform | What the service must send | Why |
+|---|---|---|
+| Android | `CHAT_MESSAGE` **data-only** — no `notification` block, `title` and `body` repeated as `data` keys, `android.priority: "high"` | the only state in which the app is woken to draw the alert itself |
+| iOS | keep the notification block, and set `apns.payload.aps.category` to `yello_chat_reply` | iOS won't show a data-only push at all; the category is what grows the reply field |
+
+Nothing else changes: the deep-link keys, the `chat:<conversationId>` tag and
+`CHAT_MESSAGE_DELETED` stay exactly as they are, and the app already reads
+its copy from `data` when the notification block is absent, so both payload
+shapes work today. Verified on-device: **not yet** — no emulator in this
+sandbox.
+
+An iOS reply to an alert *the system* drew may additionally need a
+Notification Service Extension; unverified, and irrelevant until the
+category is being sent.
+
+## Stories
+
+**Stories now have a real backend.** `/v1/stories` landed on 2026-09-24 and
+replaced the client-side seed this file used to list as a permanent gap.
+Routes live in `VersionedEndpoints`; the client is
+`feed/data/datasources/story_remote_datasource.dart`.
+
+| # | Method | Path | Success |
+|---|---|---|---|
+| 1 | POST | `/v1/stories` (JSON **or** multipart) | `201 Story` — 10/min, 100/day |
+| 2 | GET | `/v1/stories/feed?page=&size=` | `200 Page<StoryFeedGroup>` |
+| 3 | GET | `/v1/stories/me` | `200 Story[]` (bare array, ≤ 100) |
+| 4 | GET | `/v1/users/{id}/stories` | `200 Story[]` (bare array) |
+| 5 | GET | `/v1/stories/{id}` | `200 Story` |
+| 6 | POST | `/v1/stories/{id}/view` | `204` — 120/min |
+| 7 | GET | `/v1/stories/{id}/viewers?page=&size=` | `200 Page<StoryViewer>` |
+| 8 | GET | `/v1/stories/archive?page=&size=&from=&to=&type=` | `200 Page<Story>` |
+| 9 | DELETE | `/v1/stories/{id}` | `204` |
+| 10 | POST | `/v1/stories/{id}/replies` | `202 {storyId, recipientId, clientId}` — 30/min |
+
+Things that bite:
+
+- **The multipart field is `image`, singular and unbracketed** — the exact
+  opposite of `POST /posts`, which needs `images[]`. One file only.
+- **`background` is a key, not a colour.** `cover-0` … `cover-7`; the server
+  never stores CSS. The gradients live in
+  `feed/presentation/widgets/story_background.dart`, so restyling covers is
+  a client release, not a data migration.
+- **Image URLs are signed for 15 minutes**, served from R2's S3 API host
+  (`<account>.r2.cloudflarestorage.com`), *not* the public media domain.
+  They need no auth header. Past `image.urlExpiresAt` the only way to get a
+  working URL is re-fetching the story. Cache by
+  `presignedObjectKey(url)` — see ADR-015.
+- **Your own stories are not in `/stories/feed`.** The rail is
+  `/stories/me` + `/stories/feed`, fetched together
+  (`StoryRepositoryImpl.getRail`).
+- **`viewCount` outlives the viewer list.** Names are deleted 48 h after
+  posting while the count is kept, so an empty `viewers` page on an older
+  archived story is correct, not an error.
+- **A `404` means five different things on purpose** — missing, expired, not
+  visible, blocked either way, suspended. Don't try to tell them apart.
+- **Error codes** are `RESOURCE_NOT_FOUND` / `RATE_LIMIT_EXCEEDED` /
+  `VALIDATION_FAILED` / `INVALID_IMAGE`, plus the new
+  `CANNOT_REPLY_TO_OWN_STORY`. An earlier draft of the contract used
+  different names for the first three; branch on the ones above.
+
+**Replies cross services.** `POST /v1/stories/{id}/replies` is answered by
+yello-api with a `202` and nothing else — the DM is delivered by yello-chat
+a moment later as an ordinary `message.new` frame carrying a new
+`Message.storyReply` field (`{storyId, storyAuthorId, storyType,
+storyExpiresAt}`). Match it back to the optimistic bubble by `clientId`;
+reusing the same `clientId` on a retry can never duplicate the message.
+Chat stores only that reference, never the story's content, so the bubble's
+preview re-fetches the story (`StoryPreviewCubit` caches per id).
+
+Not built server-side: highlights, story reactions, video stories,
+close-friends lists, an archive on/off setting, and any live
+`STORY_POSTED` push. The rail is re-read on refresh, not pushed.
+
 ## Deliberate gaps — do not "fix" these client-side
 
 | Feature | Status | Where |
 |---|---|---|
-| **Stories** | No `/stories` resource exists. Permanent client-side seed, in-memory only; "seen" resets each app session. | `feed/data/datasources/story_local_datasource.dart` |
 | **Saved posts / bookmarks** | No endpoint. Persisted on-device via `shared_preferences`; not synced across devices. | `feed/data/datasources/bookmarks_local_datasource.dart` |
 | **Chat** | *Does* have a backend (`yello-chat`, `/ws`, with a socket upgrade on the same path for live delivery). | `chat/data/datasources/chat_remote_datasource.dart` |
+| **App updates / version check** | Still no version resource on any of the three services. The app does not ask one: since it is sideloaded rather than installed from a store, the Updates group reads a `latest.json` published beside each release's APK (`AppConfig.updateManifestUrl`, ADR-029). Don't route that through `ApiClient` — it is off-host, and `AuthInterceptor` would attach the session token to it. | `settings/data/datasources/app_update_remote_datasource.dart` |
 
 ## Known backend limitations (not solvable in this repo)
 

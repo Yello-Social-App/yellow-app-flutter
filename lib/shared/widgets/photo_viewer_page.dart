@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -15,10 +16,21 @@ import 'app_icon_button.dart';
 /// nothing links to it from outside the app.
 @immutable
 class PhotoViewerArgs {
-  const PhotoViewerArgs({required this.imageUrls, this.initialIndex = 0});
+  const PhotoViewerArgs({required this.imageUrls, this.initialIndex = 0, this.cacheKeys = const []});
 
   final List<String> imageUrls;
   final int initialIndex;
+
+  /// One stable cache key per URL, or empty to let the image cache key on
+  /// the URL itself — which is what a post's photos do, their URLs being
+  /// permanent.
+  ///
+  /// A chat attachment's URL is presigned and re-signed on every history
+  /// fetch, so the same picture arrives under a different URL every few
+  /// seconds. Those pass the attachment id here — the key the transcript's
+  /// own thumbnails are already stored under — so expanding one is a cache
+  /// hit rather than a second download of a file that is already on disk.
+  final List<String> cacheKeys;
 }
 
 /// Opens the full-screen viewer on [initialIndex] of [imageUrls].
@@ -28,18 +40,31 @@ class PhotoViewerArgs {
 /// [initialIndex] is re-mapped onto what survived, so tapping the third
 /// photo still opens the third *photo*, not the third slot. With nothing
 /// left to show this is a no-op rather than an empty viewer.
-void openPhotoViewer(BuildContext context, {required List<String> imageUrls, int initialIndex = 0}) {
+void openPhotoViewer(
+  BuildContext context, {
+  required List<String> imageUrls,
+  int initialIndex = 0,
+  List<String> cacheKeys = const [],
+}) {
   final kept = <String>[];
+  final keptKeys = <String>[];
   var mapped = 0;
   for (var i = 0; i < imageUrls.length; i++) {
     if (imageUrls[i].isEmpty) continue;
     if (i < initialIndex) mapped++;
     kept.add(imageUrls[i]);
+    if (i < cacheKeys.length) keptKeys.add(cacheKeys[i]);
   }
   if (kept.isEmpty) return;
   context.pushNamed(
     RouteNames.photoViewer,
-    extra: PhotoViewerArgs(imageUrls: kept, initialIndex: mapped.clamp(0, kept.length - 1)),
+    extra: PhotoViewerArgs(
+      imageUrls: kept,
+      initialIndex: mapped.clamp(0, kept.length - 1),
+      // Anything short of one key per surviving photo would pair keys with
+      // the wrong pictures, so a partial list is dropped entirely.
+      cacheKeys: keptKeys.length == kept.length ? keptKeys : const [],
+    ),
   );
 }
 
@@ -52,10 +77,14 @@ void openPhotoViewer(BuildContext context, {required List<String> imageUrls, int
 /// route, which is a hard framework crash. The route fades instead (see
 /// `AppRouter`).
 class PhotoViewerPage extends StatefulWidget {
-  const PhotoViewerPage({super.key, required this.imageUrls, this.initialIndex = 0});
+  const PhotoViewerPage({super.key, required this.imageUrls, this.initialIndex = 0, this.cacheKeys = const []});
 
   final List<String> imageUrls;
   final int initialIndex;
+
+  /// See [PhotoViewerArgs.cacheKeys]; ignored unless there is exactly one
+  /// per URL.
+  final List<String> cacheKeys;
 
   @override
   State<PhotoViewerPage> createState() => _PhotoViewerPageState();
@@ -117,6 +146,7 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                       itemBuilder: (context, i) => _ZoomablePhoto(
                         key: ValueKey('$i:${urls[i]}'),
                         imageUrl: urls[i],
+                        cacheKey: widget.cacheKeys.length == urls.length ? widget.cacheKeys[i] : null,
                         isCurrent: i == _index,
                         onZoomChanged: (zoomed) => _onZoomChanged(i, zoomed),
                         onTapOutOfZoom: _close,
@@ -130,7 +160,7 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                     child: Row(
                       children: [
                         AppIconButton(
-                          icon: const Icon(Icons.close_rounded),
+                          icon: const Icon(CupertinoIcons.xmark),
                           onPressed: _close,
                           backgroundColor: Colors.black.withValues(alpha: 0.45),
                           borderColor: Colors.white.withValues(alpha: 0.28),
@@ -157,9 +187,13 @@ class _ZoomablePhoto extends StatefulWidget {
     required this.isCurrent,
     required this.onZoomChanged,
     required this.onTapOutOfZoom,
+    this.cacheKey,
   });
 
   final String imageUrl;
+
+  /// See [PhotoViewerArgs.cacheKeys].
+  final String? cacheKey;
 
   /// False for the neighbouring pages the [PageView] keeps alive — they drop
   /// any zoom, so a photo always comes back into view fit to the screen.
@@ -289,6 +323,7 @@ class _ZoomablePhotoState extends State<_ZoomablePhoto> with SingleTickerProvide
         child: Center(
           child: CachedNetworkImage(
             imageUrl: widget.imageUrl,
+            cacheKey: widget.cacheKey,
             fit: BoxFit.contain,
             // No `memCacheWidth` here, unlike the feed card: the whole point
             // of this screen is the full-resolution photo, and a
@@ -347,7 +382,7 @@ class _PhotoError extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.broken_image_outlined, color: fg, size: 30),
+          Icon(CupertinoIcons.exclamationmark_triangle, color: fg, size: 30),
           const SizedBox(height: 8),
           Text('That photo could not be loaded', style: AppTextStyles.bodySm.copyWith(color: fg)),
         ],
@@ -370,12 +405,12 @@ class _UnavailableView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.image_not_supported_outlined, color: fg, size: 30),
+            Icon(CupertinoIcons.xmark_rectangle, color: fg, size: 30),
             const SizedBox(height: 8),
             Text('This photo is no longer available', style: AppTextStyles.bodySm.copyWith(color: fg)),
             const SizedBox(height: 16),
             AppIconButton(
-              icon: const Icon(Icons.close_rounded),
+              icon: const Icon(CupertinoIcons.xmark),
               onPressed: onClose,
               backgroundColor: Colors.black.withValues(alpha: 0.45),
               borderColor: Colors.white.withValues(alpha: 0.28),

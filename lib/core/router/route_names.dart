@@ -22,6 +22,7 @@ abstract final class RouteNames {
   static const String groupInfo = 'group-info';
   static const String storyViewer = 'story-viewer';
   static const String storyCompose = 'story-compose';
+  static const String storyArchive = 'story-archive';
   static const String createPost = 'create-post';
   static const String search = 'search';
 
@@ -39,6 +40,15 @@ abstract final class RouteNames {
   static const String privacySafety = 'privacy-safety';
 
   static const String sendFeedback = 'send-feedback';
+
+  /// Account menu → Theme: the light/dark choice, which used to be a toggle
+  /// in the menu itself.
+  static const String theme = 'theme';
+
+  /// Account menu → App version: the installed build and the device facts a
+  /// support reply asks for. Shows no update check — the API has no version
+  /// resource, see `docs/BACKEND.md`.
+  static const String appVersion = 'app-version';
 
   // Communities. The `{slug}` path parameter is a community *slug*, never its
   // uuid — that is what every `/communities/...` API route takes.

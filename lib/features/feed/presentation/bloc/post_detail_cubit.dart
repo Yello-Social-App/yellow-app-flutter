@@ -444,7 +444,10 @@ class PostDetailCubit extends Cubit<PostDetailState> {
     final post = state.post;
     if (post == null || _postReactionPending) return;
     _postReactionPending = true;
-    emit(state.copyWith(post: _predictReaction(post, ReactionType.like)));
+    // The viewer's *current* type, so a plain tap takes an existing reaction
+    // of any type back instead of switching it to LIKE — see
+    // `FeedRepositoryImpl.toggleLike` for the wire-level reason.
+    emit(state.copyWith(post: _predictReaction(post, post.viewerReactionType ?? ReactionType.like)));
     try {
       final result = await _likePost(post);
       if (isClosed) return;

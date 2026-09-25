@@ -16,8 +16,167 @@ file only when it genuinely helps.
 
 ## [Unreleased]
 
+---
+
+## [0.5.0] — 2026-09-25
+
 ### Added
 
+- **Two more themes to pick from.** Account → Theme now lists four: the
+  original Classic pair and a new **Quiet rails** pair, drawn from Yello's
+  design system — near-black layers split by hairlines in dark, white cards
+  on a soft grey canvas in light, and one saturated yellow doing the
+  accenting in both. Each row shows a small preview of the palette it
+  switches to, and your pick is remembered between launches. Devices
+  upgrading keep the theme they were already on.
+
+- **Voice messages in chat.** With the message box empty, the send button
+  becomes a microphone: tap it and the recorder opens over the conversation
+  already recording, with a ring that moves as you speak and a clock running
+  up to the five-minute limit. Stop to hear it back before you send it, or
+  send straight from recording in one tap. Discard throws it away.
+  Recordings arrive as a bubble with a play button, the shape of the sound,
+  and how long it runs — tap anywhere along the bar to skip to that point.
+  A voice message you haven't listened to yet stands out: yellow play
+  button, yellow sound wave, and a dot after the length, the same yellow
+  Messages uses for an unread chat. It goes quiet the moment you start
+  playing it, and stays that way on this phone. One plays at a time, and
+  unsending a voice message stops it playing for anyone listening. Yello asks for the microphone the first time you open
+  the recorder, not before.
+
+- **Tap a photo in a chat to open it full screen.** Pinch or double-tap to
+  zoom in on it, and when a message carries several photos, swipe between
+  them without going back to the conversation. Tap anywhere, or the X, to
+  return. The same viewer photos on Home already opened into.
+
+- Drag a story downwards to close it. The frame follows your finger and
+  springs back if you let go early; pull it far enough, or flick it down,
+  and the story closes the same way the X does. Playback holds while you
+  drag. If the reply keyboard is up, the first swipe down just puts the
+  keyboard away so a half-written reply survives.
+
+### Changed
+
+- **Every icon in the app is now an iOS-style icon.** Same meanings, same
+  places — a lighter, rounder set throughout. The one exception is the Apple
+  mark on the sign-in button, which stays as it is.
+
+- The story viewer's progress line and author row sit higher on the screen,
+  closer to the status bar, leaving more of the photo uncovered.
+
+- The like button no longer changes size depending on which reaction is on
+  it. Every reaction — and the heart you get from a plain tap — now sits in
+  the same fixed space, so the button, the row it is in, and the six tiles in
+  the reaction picker all keep one shape. Same on community threads and on
+  comments.
+
+- **Hold the like button and the reactions now appear right above it**,
+  floating against the button, instead of sliding up from the bottom of the
+  screen. They drop below the button when it is too near the top, and stay
+  on screen when it is near an edge. Tap one to react, tap anywhere else to
+  back out. Community threads get the same picker — they had their own,
+  slightly different one before.
+
+- ❤️ is now 🖕. It is the same reaction underneath, just drawn differently
+  here — anyone on another app still sees a heart.
+
+### Fixed
+
+- **Photos and voice messages in an old conversation load again.** A chat
+  file's link is only good for an hour, and while Yello did ask for a fresh
+  one when it went stale, the new link never reached the screen — so a photo
+  in a conversation you had not opened in a while stayed a grey tile, and its
+  voice messages refused to play, for as long as the app stayed open.
+
+- **Writing a caption on a photo story is no longer hidden by the keyboard.**
+  The caption field, the cover picker and the Share button now lift with the
+  keyboard instead of staying pinned to the bottom of the screen behind it,
+  so you can see what you are typing and post without dismissing the keyboard
+  first.
+
+- **Opening a conversation now starts at the newest message.** It used to
+  land somewhere in the middle of the history, so the first thing you did in
+  a chat was scroll down to find where you were.
+
+- **Counts on a card now update when you come back from opening it.**
+  Reacting to a post or a community thread on its own screen, or leaving a
+  comment there, used to leave the card you tapped showing the numbers it had
+  before — on Home, on a community's Latest posts, on a profile, and on
+  Shared posts. Coming back now carries the change onto that card. Deleting a
+  comment takes the count back down the same way.
+
+- Tapping the like button on a post you had reacted to with 😆, 😮, 😢 or
+  😠 now **takes that reaction back**. It used to quietly change it to a
+  heart instead, so the only way to un-react was to long-press and find the
+  tile that was already highlighted. Same fix on comments and replies.
+
+---
+
+## [0.4.0] — 2026-09-24
+
+### Added
+
+- **Stories are real now.** The ring rail at the top of Home shows your
+  friends' actual stories instead of a fixed demo set — yellow ring for
+  something you have not seen, plain once you have, and the order the server
+  puts them in. Tap one and it plays from the first slide you have not seen,
+  then carries on into the next person's.
+- **Post your own story.** "Add to your story" takes a photo from the camera
+  or your gallery, or a few words on one of eight colour covers, with a
+  caption of up to 140 characters and a choice between friends and public.
+  It expires by itself after 24 hours. Photos are shrunk on the way out, so
+  posting one is quick even over a bad connection. A photo is shown whole,
+  sized to the width of the screen — nothing gets cropped off the top or the
+  sides, whatever shape you shot it in, and the composer frames it exactly
+  as it will play back.
+- **See who watched.** Your own slides show a "Seen by" button that opens
+  the list of names, and a delete button that removes the story for everyone
+  at once. Names are only kept for 48 hours after posting; the count stays
+  forever, and the sheet says so instead of looking broken.
+- **Reply to a story.** Typing in the box at the bottom of someone's story —
+  or tapping the heart — sends them a direct message, and it shows up in the
+  conversation like any other. The story you replied to appears above your
+  words in the chat, and reads "Story unavailable" once it has expired.
+- **Story archive.** Account menu → Story archive keeps every story you have
+  ever posted, grouped by day, long after it has expired. Only you can see
+  it. Filter it by photos, text, or a range of dates, and delete anything
+  you would rather not keep.
+
+### Changed
+
+- Your story typing now pauses the slide it is on, so a story never
+  disappears mid-sentence, and holding a finger on the screen pauses it too.
+
+---
+
+## [0.3.0] — 2026-09-23
+
+### Added
+
+- **Yello updates itself now.** Settings → App version has an Updates card:
+  it tells you whether a newer build has been published, downloads it, and
+  hands it straight to Android's installer — so a new version no longer has
+  to reach you as a file somebody sends you. The first time, Android asks
+  you to allow Yello to install apps; after that it is one tap. Nothing is
+  checked in the background and nothing downloads on its own: the card only
+  moves when you tap it. Android only — an iPhone can only be updated by
+  the App Store, so the card is not there.
+- **Your name follows you down your own profile.** Scrolling your profile
+  now slides an app bar in over the top: your photo and name arrive from the
+  left as the big header name goes out under them, and the menu and search
+  buttons stay exactly where they were. The bar floats above the posts on a
+  soft shadow rather than a drawn line. Scroll back up and it hands the name
+  back to the header.
+- **Reply to a message from the notification itself.** Chat notifications
+  are now drawn as conversations — sender on top, the message below, and a
+  *Reply* field — so you can answer from the notification shade without
+  opening Yello. Sending clears the notification. If it doesn't go through
+  you get a new one saying so, with your text in it, so nothing is lost and
+  you can try again or tap into the chat. Today this works while Yello is
+  open; a notification that arrives with the app closed still has no Reply
+  button, because the phone draws that one straight from the push and never
+  gives the app a say — closing that gap needs a change on the notification
+  service (see `docs/BACKEND.md`).
 - **Hide a post, report it, or mute whoever wrote it.** The "···" menu on
   someone else's post now ends with three new choices. *Hide this post*
   takes it out of your feed for good, on every device you sign in on.
@@ -78,9 +237,39 @@ file only when it genuinely helps.
   assistant starts from the same facts and the same read order.
 - `tool/codemap.sh`, which regenerates `docs/CODEMAP.md` from the source tree
   (`--check` fails when the committed map is stale).
+- **A Theme screen, instead of a switch buried in a menu.** The account menu's
+  *Theme* item now opens a screen of its own, where Light and Dark are laid
+  out side by side with the one you are on ticked. The menu row tells you
+  which is active without opening it.
+- **App version, so you can say which build you are on.** A new screen under
+  the account menu shows the version and build number of the Yello installed
+  on this phone, along with the package, your Android/iOS version and your
+  device. *Copy* puts the lot on your clipboard in one line, ready to paste
+  into a bug report. It does not check for a newer version — updates come
+  from the store, and Yello has nothing to ask about them.
 
 ### Changed
 
+- **The account menu is shorter, and every row now opens a screen.** *Your
+  circle*, *Shared posts* and *Privacy & safety* have been taken out of the
+  menu behind the ☰ button on your profile, and *Theme* and *App version*
+  added in their place. Your circle is still one tap away from the
+  connections row on your profile header, and your shared posts are still
+  the *Shared* tab on your own profile.
+
+- **All / Shared / Saved is one switcher now, not three loose pills.** The
+  three filters on your profile share a single segmented control — the same
+  one the Communities and Showcase sort rows use — so it is clearer that
+  exactly one of them is ever on.
+- **Personal details on your profile is a plain list, not something you open.**
+  Every row — your name, username, join date and email — is on screen from
+  the moment the profile loads. Your bio no longer repeats there, since it
+  already reads under your name, and whether your account is active now sits
+  on the same line as your connections count.
+- **Your profile's name, stats and buttons sit on a card again.** The block
+  below the cover photo is once more a rounded, bordered panel, with your
+  profile picture straddling its top edge — half on the cover, half on the
+  card — the way it looks on someone else's profile.
 - **Muted accounts disappear from your feed straight away** rather than on
   the next refresh — the posts already on screen go with them.
 - **The app is lighter.** Borders are softer hairlines rather than drawn grey

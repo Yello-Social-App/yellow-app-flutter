@@ -9,17 +9,14 @@ import '../../../../core/network/network_info.dart';
 import '../../domain/entities/comment_entity.dart';
 import '../../domain/entities/post_entity.dart';
 import '../../domain/entities/reaction_breakdown.dart';
-import '../../domain/entities/story_entity.dart';
 import '../../domain/repositories/feed_repository.dart';
 import '../datasources/bookmarks_local_datasource.dart';
 import '../datasources/feed_remote_datasource.dart';
-import '../datasources/story_local_datasource.dart';
 
 class FeedRepositoryImpl implements FeedRepository {
-  FeedRepositoryImpl(this._remote, this._stories, this._bookmarks, this._networkInfo);
+  FeedRepositoryImpl(this._remote, this._bookmarks, this._networkInfo);
 
   final FeedRemoteDataSource _remote;
-  final StoryLocalDataSource _stories;
   final BookmarksLocalDataSource _bookmarks;
   final NetworkInfo _networkInfo;
 
@@ -44,12 +41,6 @@ class FeedRepositoryImpl implements FeedRepository {
   });
 
   @override
-  Future<Either<Failure, List<StoryEntity>>> getStories() => _run(_stories.getStories);
-
-  @override
-  Future<Either<Failure, void>> markStorySeen(String userId) => _run(() => _stories.markSeen(userId));
-
-  @override
   Future<Either<Failure, PostEntity>> getPost(String postId) => _run(() async {
     final post = await _remote.getPost(postId);
     return _withSaved(post);
@@ -67,7 +58,14 @@ class FeedRepositoryImpl implements FeedRepository {
 
   @override
   Future<Either<Failure, PostEntity>> toggleLike(PostEntity post) => _run(() async {
-    final summary = await _remote.react(post.id);
+    // The reaction endpoint is a single POST toggle keyed on the type sent:
+    // the same type as the viewer's current one removes it, a different one
+    // *switches* to it. So an un-react has to echo whatever the viewer
+    // already reacted with — hardcoding `LIKE` here turned a plain tap on a
+    // post the viewer had reacted to with 😆/😮/… into "change it to
+    // LIKE" instead of "take my reaction back".
+    final type = post.viewerReactionType ?? ReactionType.like;
+    final summary = await _remote.react(post.id, type: type.wireValue);
     return post.copyWith(reactionCounts: summary.counts, viewerReaction: summary.viewerReaction);
   });
 

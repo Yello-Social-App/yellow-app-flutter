@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -23,19 +24,20 @@ class YelloApp extends StatelessWidget {
       value: sl<ThemeCubit>(),
       child: Builder(
         builder: (context) {
-          final themeMode = context.watch<ThemeCubit>().state;
+          final theme = context.watch<ThemeCubit>().state;
           return MaterialApp.router(
             title: AppConfig.appDisplayName,
             debugShowCheckedModeBanner: false,
-            theme: AppTheme.light,
-            darkTheme: AppTheme.dark,
-            themeMode: themeMode,
+            // Both are rebuilt when the flavor changes; `themeMode` then
+            // picks which of the pair is live, exactly as before.
+            theme: AppTheme.light(theme.flavor),
+            darkTheme: AppTheme.dark(theme.flavor),
+            themeMode: theme.mode,
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             // Applied once, here, rather than per-screen — see
             // ResponsiveContent's doc comment and _clampTextScale's.
-            builder: (context, child) =>
-                _clampTextScale(context, ResponsiveContent(child: child!)),
+            builder: (context, child) => _clampTextScale(context, ResponsiveContent(child: child!)),
             routerConfig: sl<AppRouter>().router,
           );
         },
@@ -56,11 +58,12 @@ class SecurityBlockedApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
+      // The classic light set unconditionally: this screen replaces the app
+      // before DI runs, so there is no persisted flavor to read.
+      theme: AppTheme.light(AppThemeFlavor.classic),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      builder: (context, child) =>
-          _clampTextScale(context, ResponsiveContent(child: child!)),
+      builder: (context, child) => _clampTextScale(context, ResponsiveContent(child: child!)),
       home: Builder(
         builder: (context) {
           final colors = AppColors.of(context);
@@ -73,7 +76,7 @@ class SecurityBlockedApp extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.gpp_bad_outlined, size: 40, color: colors.red),
+                    Icon(CupertinoIcons.exclamationmark_shield, size: 40, color: colors.red),
                     const SizedBox(height: 16),
                     Text(
                       l10n.securityBlockedTitle,
@@ -114,9 +117,7 @@ class SecurityBlockedApp extends StatelessWidget {
 /// deliberate accessibility trade-off, not an oversight — flagged as such
 /// rather than silently applied.
 Widget _clampTextScale(BuildContext context, Widget child) {
-  final clamped = MediaQuery.textScalerOf(
-    context,
-  ).clamp(minScaleFactor: 0.85, maxScaleFactor: 1.3);
+  final clamped = MediaQuery.textScalerOf(context).clamp(minScaleFactor: 0.85, maxScaleFactor: 1.3);
   return MediaQuery(
     data: MediaQuery.of(context).copyWith(textScaler: clamped),
     child: child,

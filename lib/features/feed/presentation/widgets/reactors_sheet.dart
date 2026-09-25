@@ -16,7 +16,7 @@ import '../bloc/reactors_cubit.dart';
 /// `showReactionBreakdownSheet`. [type] null means "everyone regardless of
 /// reaction type"; non-null filters to just that type, matching the row the
 /// viewer tapped. Unlike the fixed-height sheets elsewhere in this app
-/// (`reaction_breakdown_sheet.dart`, `reaction_picker_sheet.dart`), this one
+/// (`reaction_breakdown_sheet.dart`, `reaction_picker.dart`), this one
 /// is a `DraggableScrollableSheet` since the list itself is genuinely
 /// paginated/unbounded rather than a fixed handful of rows.
 Future<void> showReactorsSheet(

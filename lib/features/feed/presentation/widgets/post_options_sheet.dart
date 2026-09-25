@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -61,7 +62,7 @@ Future<void> showPostOptionsSheet(
             decoration: BoxDecoration(color: Colors.grey[400], borderRadius: BorderRadius.circular(999)),
           ),
           _MenuTile(
-            icon: Icons.link,
+            icon: CupertinoIcons.link,
             label: 'Copy share link',
             onTap: () {
               Navigator.of(sheetContext).pop();
@@ -69,7 +70,7 @@ Future<void> showPostOptionsSheet(
             },
           ),
           _MenuTile(
-            icon: Icons.emoji_emotions_outlined,
+            icon: CupertinoIcons.smiley,
             label: 'View reactions',
             onTap: () {
               Navigator.of(sheetContext).pop();
@@ -78,7 +79,7 @@ Future<void> showPostOptionsSheet(
           ),
           if (isOwnPost)
             _MenuTile(
-              icon: Icons.edit_outlined,
+              icon: CupertinoIcons.pencil,
               label: 'Edit post',
               onTap: () {
                 Navigator.of(sheetContext).pop();
@@ -87,7 +88,7 @@ Future<void> showPostOptionsSheet(
             ),
           if (isOwnPost)
             _MenuTile(
-              icon: Icons.delete_outline,
+              icon: CupertinoIcons.delete,
               label: 'Delete post',
               destructive: true,
               onTap: () {
@@ -98,7 +99,7 @@ Future<void> showPostOptionsSheet(
           if (!isOwnPost) ...[
             Divider(height: 1, thickness: 1, color: colors.line),
             _MenuTile(
-              icon: Icons.visibility_off_outlined,
+              icon: CupertinoIcons.eye_slash,
               label: 'Hide this post',
               onTap: () {
                 Navigator.of(sheetContext).pop();
@@ -106,7 +107,7 @@ Future<void> showPostOptionsSheet(
               },
             ),
             _MenuTile(
-              icon: Icons.flag_outlined,
+              icon: CupertinoIcons.flag,
               label: 'Report post',
               onTap: () {
                 Navigator.of(sheetContext).pop();
@@ -114,7 +115,7 @@ Future<void> showPostOptionsSheet(
               },
             ),
             _MenuTile(
-              icon: Icons.volume_off_outlined,
+              icon: CupertinoIcons.speaker_slash,
               label: 'Mute ${authorUsername.withAtSign}',
               onTap: () {
                 Navigator.of(sheetContext).pop();
@@ -140,7 +141,7 @@ Future<bool> confirmMuteAuthor(BuildContext context, String authorUsername) {
         "and you can undo this in Settings → Privacy & safety.",
     confirmLabel: 'Mute',
     cancelLabel: 'Cancel',
-    icon: Icons.volume_off_outlined,
+    icon: CupertinoIcons.speaker_slash,
   );
 }
 

@@ -65,6 +65,42 @@ class ReactionEntity extends Equatable {
   List<Object?> get props => [emoji, count, userIds, reactedByMe];
 }
 
+/// The story a message is a reply to (`Message.storyReply`), null on every
+/// other message.
+///
+/// Chat stores a **reference only** — never the story's text or its image —
+/// so rendering the preview means fetching the story itself from yello-api
+/// (`GET /v1/stories/{id}`). [canStillLoad] is the rule for when that is
+/// worth trying: past [storyExpiresAt] only the story's own author can
+/// still read it, from their archive.
+class StoryReplyEntity extends Equatable {
+  const StoryReplyEntity({
+    required this.storyId,
+    required this.storyAuthorId,
+    required this.storyIsImage,
+    required this.storyExpiresAt,
+  });
+
+  final String storyId;
+  final String storyAuthorId;
+
+  /// `storyType` on the wire — `IMAGE` or `TEXT`. Kept as a bool because
+  /// chat only ever asks "is there a thumbnail to draw?".
+  final bool storyIsImage;
+  final DateTime? storyExpiresAt;
+
+  bool get hasExpired => storyExpiresAt != null && DateTime.now().isAfter(storyExpiresAt!);
+
+  /// Whether fetching the story for a preview can succeed. [viewerId] is
+  /// the signed-in user: an expired story still resolves for its author.
+  /// Everything else renders a "Story unavailable" placeholder without a
+  /// request.
+  bool canStillLoad(String? viewerId) => !hasExpired || (viewerId != null && viewerId == storyAuthorId);
+
+  @override
+  List<Object?> get props => [storyId, storyAuthorId, storyIsImage, storyExpiresAt];
+}
+
 /// A message as `yello-chat` models it.
 ///
 /// [clientId] is the idempotency key *this* client generates before sending:
@@ -90,6 +126,7 @@ class MessageEntity extends Equatable {
     this.attachments = const [],
     this.reactions = const [],
     this.groupInvite,
+    this.storyReply,
     this.editedAt,
     this.deletedAt,
   });
@@ -117,6 +154,11 @@ class MessageEntity extends Equatable {
   /// Set on an invite card; the message then has no text of its own.
   final GroupInviteCardEntity? groupInvite;
 
+  /// Set when this DM was sent from the story viewer. The bubble keeps its
+  /// ordinary text and gains a "Replied to your story" preview above it —
+  /// see [StoryReplyEntity].
+  final StoryReplyEntity? storyReply;
+
   /// Set once the sender has edited the text — show an "edited" label.
   final DateTime? editedAt;
 
@@ -127,6 +169,7 @@ class MessageEntity extends Equatable {
   bool get isDeleted => deletedAt != null;
   bool get isEdited => editedAt != null;
   bool get isInviteCard => groupInvite != null;
+  bool get isStoryReply => storyReply != null;
   bool get hasAttachments => attachments.isNotEmpty;
   bool get hasText => body.isNotEmpty;
 
@@ -181,6 +224,9 @@ class MessageEntity extends Equatable {
         attachments: const [],
         reactions: const [],
         groupInvite: groupInvite,
+        // The server's tombstone drops `storyReply` along with the text —
+        // mirror that, or a deleted reply keeps trying to draw a preview.
+        storyReply: null,
         editedAt: editedAt,
         deletedAt: at,
       );
@@ -194,6 +240,7 @@ class MessageEntity extends Equatable {
     List<AttachmentEntity>? attachments,
     List<ReactionEntity>? reactions,
     GroupInviteCardEntity? groupInvite,
+    StoryReplyEntity? storyReply,
     DateTime? editedAt,
   }) {
     return MessageEntity(
@@ -209,6 +256,7 @@ class MessageEntity extends Equatable {
       attachments: attachments ?? this.attachments,
       reactions: reactions ?? this.reactions,
       groupInvite: groupInvite ?? this.groupInvite,
+      storyReply: storyReply ?? this.storyReply,
       editedAt: editedAt ?? this.editedAt,
       deletedAt: deletedAt,
     );
@@ -227,6 +275,7 @@ class MessageEntity extends Equatable {
         attachments,
         reactions,
         groupInvite,
+        storyReply,
         editedAt,
         deletedAt,
       ];

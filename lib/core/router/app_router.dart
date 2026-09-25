@@ -15,6 +15,7 @@ import '../../features/communities/presentation/pages/create_community_post_page
 import '../../features/feed/presentation/pages/create_post_page.dart';
 import '../../features/feed/presentation/pages/feed_page.dart';
 import '../../features/feed/presentation/pages/post_detail_page.dart';
+import '../../features/feed/presentation/pages/story_archive_page.dart';
 import '../../features/feed/presentation/pages/story_compose_page.dart';
 import '../../features/feed/presentation/pages/story_viewer_page.dart';
 import '../../features/friends/presentation/pages/friends_page.dart';
@@ -26,6 +27,8 @@ import '../../features/profile/presentation/pages/shared_posts_page.dart';
 import '../../features/safety/presentation/pages/privacy_safety_page.dart';
 import '../../features/safety/presentation/pages/send_feedback_page.dart';
 import '../../features/search/presentation/pages/search_page.dart';
+import '../../features/settings/presentation/pages/app_version_page.dart';
+import '../../features/settings/presentation/pages/theme_page.dart';
 import '../../features/shell/presentation/pages/main_shell_page.dart';
 import '../../features/shell/presentation/pages/splash_page.dart';
 import '../../features/showcase/domain/entities/project_entity.dart';
@@ -164,17 +167,28 @@ class AppRouter {
               builder: (context, state) =>
                   GroupInfoPage(conversationId: state.pathParameters['conversationId']!),
             ),
+            // Keyed by author id rather than by the rail's index: a ring
+            // that expired between the rail rendering and the tap would
+            // otherwise open somebody else's story. `?only=true` plays just
+            // that author's ring (`GET /users/{id}/stories`) instead of
+            // continuing through the whole rail.
             _overlayRoute(
-              path: '/story/:userIndex',
+              path: '/story/:authorId',
               name: RouteNames.storyViewer,
               builder: (context, state) => StoryViewerPage(
-                userIndex: int.tryParse(state.pathParameters['userIndex'] ?? '') ?? 0,
+                authorId: state.pathParameters['authorId']!,
+                onlyThisAuthor: state.uri.queryParameters['only'] == 'true',
               ),
             ),
             _overlayRoute(
               path: '/story-compose',
               name: RouteNames.storyCompose,
               builder: (context, state) => const StoryComposePage(),
+            ),
+            _overlayRoute(
+              path: '/story-archive',
+              name: RouteNames.storyArchive,
+              builder: (context, state) => const StoryArchivePage(),
             ),
             _overlayRoute(
               path: '/create',
@@ -206,6 +220,16 @@ class AppRouter {
               name: RouteNames.sendFeedback,
               builder: (context, state) => const SendFeedbackPage(),
             ),
+            _overlayRoute(
+              path: '/theme',
+              name: RouteNames.theme,
+              builder: (context, state) => const ThemePage(),
+            ),
+            _overlayRoute(
+              path: '/app-version',
+              name: RouteNames.appVersion,
+              builder: (context, state) => const AppVersionPage(),
+            ),
             // The photo viewer gets its own transition rather than
             // `_overlayRoute`'s slide-up: it is a lightbox over whatever is
             // behind it, so it fades in over a still screen (non-opaque, so
@@ -219,7 +243,11 @@ class AppRouter {
                   key: state.pageKey,
                   opaque: false,
                   child: args is PhotoViewerArgs
-                      ? PhotoViewerPage(imageUrls: args.imageUrls, initialIndex: args.initialIndex)
+                      ? PhotoViewerPage(
+                          imageUrls: args.imageUrls,
+                          initialIndex: args.initialIndex,
+                          cacheKeys: args.cacheKeys,
+                        )
                       : const PhotoViewerPage(imageUrls: []),
                   transitionsBuilder: (context, animation, secondary, child) => FadeTransition(
                     opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),

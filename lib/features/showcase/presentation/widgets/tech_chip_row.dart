@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -83,7 +84,7 @@ class TechChipRow extends StatelessWidget {
           child: Semantics(
             label: 'More filters',
             child: AppIconButton(
-              icon: const Icon(Icons.tune_rounded),
+              icon: const Icon(CupertinoIcons.slider_horizontal_3),
               size: 36,
               onPressed: onOpenSheet,
               backgroundColor: sheetActive ? colors.yelb : null,

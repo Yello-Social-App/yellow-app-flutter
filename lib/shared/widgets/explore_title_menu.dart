@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -114,7 +115,7 @@ class ExploreTitleMenu extends StatelessWidget {
                 YelloWordmark(fontSize: fontSize, text: current.title),
                 const SizedBox(width: 2),
                 Icon(
-                  Icons.keyboard_arrow_down_rounded,
+                  CupertinoIcons.chevron_down,
                   size: fontSize * 0.8,
                   color: colors.ink2,
                 ),
@@ -154,7 +155,7 @@ class _MenuRow extends StatelessWidget {
         const SizedBox(width: 20),
         // Reserved even when unticked so both rows line up at the same width.
         Icon(
-          Icons.check_rounded,
+          CupertinoIcons.checkmark,
           size: 18,
           color: selected ? colors.yeld : Colors.transparent,
         ),

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -230,7 +231,7 @@ class _RequestRow extends StatelessWidget {
                   child: SizedBox(
                     width: 34,
                     height: 34,
-                    child: Icon(Icons.close, size: 15, color: colors.ink2),
+                    child: Icon(CupertinoIcons.xmark, size: 15, color: colors.ink2),
                   ),
                 ),
               ),

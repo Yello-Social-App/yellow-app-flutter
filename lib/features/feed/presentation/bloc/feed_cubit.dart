@@ -12,9 +12,9 @@ import '../../domain/entities/story_entity.dart';
 import '../../domain/usecases/delete_post_usecase.dart';
 import '../../domain/usecases/get_feed_usecase.dart';
 import '../../domain/usecases/get_share_link_usecase.dart';
-import '../../domain/usecases/get_stories_usecase.dart';
 import '../../domain/usecases/like_post_usecase.dart';
 import '../../domain/usecases/react_usecases.dart';
+import '../../domain/usecases/story_usecases.dart';
 import '../../domain/usecases/update_post_usecase.dart';
 
 enum FeedStatus { initial, loading, loaded, error }
@@ -23,7 +23,7 @@ class FeedState extends Equatable {
   const FeedState({
     this.status = FeedStatus.initial,
     this.posts = const [],
-    this.stories = const [],
+    this.rail = StoryRailEntity.empty,
     this.hasMore = false,
     this.nextCursor,
     this.isLoadingMore = false,
@@ -33,7 +33,10 @@ class FeedState extends Equatable {
 
   final FeedStatus status;
   final List<PostEntity> posts;
-  final List<StoryEntity> stories;
+  /// The stories rail: your own ring plus everyone else's. Owned here
+  /// rather than by a cubit of its own so the Home tab still loads in one
+  /// pass — see `StoryRepository.getRail`.
+  final StoryRailEntity rail;
   final bool hasMore;
   final String? nextCursor;
   final bool isLoadingMore;
@@ -50,7 +53,7 @@ class FeedState extends Equatable {
   FeedState copyWith({
     FeedStatus? status,
     List<PostEntity>? posts,
-    List<StoryEntity>? stories,
+    StoryRailEntity? rail,
     bool? hasMore,
     Object? nextCursor = _unset,
     bool? isLoadingMore,
@@ -60,7 +63,7 @@ class FeedState extends Equatable {
     return FeedState(
       status: status ?? this.status,
       posts: posts ?? this.posts,
-      stories: stories ?? this.stories,
+      rail: rail ?? this.rail,
       hasMore: hasMore ?? this.hasMore,
       nextCursor: identical(nextCursor, _unset) ? this.nextCursor : nextCursor as String?,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
@@ -70,7 +73,7 @@ class FeedState extends Equatable {
   }
 
   @override
-  List<Object?> get props => [status, posts, stories, hasMore, isLoadingMore, errorMessage, me];
+  List<Object?> get props => [status, posts, rail, hasMore, isLoadingMore, errorMessage, me];
 }
 
 const Object _unset = Object();
@@ -81,7 +84,7 @@ const Object _unset = Object();
 class FeedCubit extends Cubit<FeedState> {
   FeedCubit({
     required GetFeedUseCase getFeed,
-    required GetStoriesUseCase getStories,
+    required GetStoryRailUseCase getStoryRail,
     required LikePostUseCase likePost,
     required ReactToPostUseCase reactToPost,
     required RepostUseCase repost,
@@ -95,7 +98,7 @@ class FeedCubit extends Cubit<FeedState> {
     required HidePostUseCase hidePost,
     required MuteUserUseCase muteUser,
   }) : _getFeed = getFeed,
-       _getStories = getStories,
+       _getStoryRail = getStoryRail,
        _likePost = likePost,
        _reactToPost = reactToPost,
        _repost = repost,
@@ -111,7 +114,7 @@ class FeedCubit extends Cubit<FeedState> {
        super(const FeedState());
 
   final GetFeedUseCase _getFeed;
-  final GetStoriesUseCase _getStories;
+  final GetStoryRailUseCase _getStoryRail;
   final LikePostUseCase _likePost;
   final ReactToPostUseCase _reactToPost;
   final RepostUseCase _repost;
@@ -135,7 +138,7 @@ class FeedCubit extends Cubit<FeedState> {
 
     Failure? failure;
     List<PostEntity> posts = state.posts;
-    List<StoryEntity> stories = state.stories;
+    StoryRailEntity rail = state.rail;
     bool hasMore = state.hasMore;
     String? nextCursor = state.nextCursor;
     UserEntity? me = state.me;
@@ -145,7 +148,10 @@ class FeedCubit extends Cubit<FeedState> {
       hasMore = page.hasMore;
       nextCursor = page.nextCursor;
     });
-    (await _getStories(const NoParams())).fold((l) => failure ??= l, (r) => stories = r);
+    // Best-effort, like the `GetMeUseCase` call below: a story-rail
+    // failure hides the rail for this pass but must not take the whole
+    // feed down with it — posts are what the Home tab is for.
+    (await _getStoryRail(const NoParams())).fold((_) {}, (r) => rail = r);
     // Best-effort, like `PostDetailCubit.load()`'s own `GetMeUseCase` call:
     // this app has no app-wide current-user cache, so the header/composer
     // avatar just keeps showing whatever it last had (or nothing) if this
@@ -162,7 +168,7 @@ class FeedCubit extends Cubit<FeedState> {
       state.copyWith(
         status: FeedStatus.loaded,
         posts: _withMyReposts(posts),
-        stories: stories,
+        rail: rail,
         hasMore: hasMore,
         nextCursor: nextCursor,
         me: me,
@@ -214,17 +220,39 @@ class FeedCubit extends Cubit<FeedState> {
   /// a full refetch.
   void prependPost(PostEntity post) => emit(state.copyWith(posts: [post, ...state.posts]));
 
-  /// Replaces a single post in place (e.g. after editing it elsewhere).
-  void replacePost(PostEntity post) => _replace(post.id, (_) => post);
+  /// Replaces a single post in place — after editing it elsewhere, or after
+  /// its own detail screen hands back what a reaction/comment made of it
+  /// (see ADR-032). No-ops on a post this feed doesn't list.
+  ///
+  /// [PostEntity.repostedByMe] is re-derived from [_myRepostIds] rather than
+  /// taken from [post]: that flag is on no wire response, so every copy of a
+  /// post arriving from elsewhere carries whatever *that* screen managed to
+  /// recover. This feed's own map is what [toggleRepost] reads to cancel, so
+  /// trusting someone else's copy is how the pill ends up saying "Reposted"
+  /// with nothing here able to undo it — or "Repost" on something already
+  /// reposted, one tap away from a duplicate.
+  void replacePost(PostEntity post) =>
+      _replace(post.id, (_) => post.copyWith(repostedByMe: _myRepostIds.containsKey(post.id)));
 
   /// Drops a post from the feed (e.g. after deleting it elsewhere).
   void removePost(String id) => emit(state.copyWith(posts: state.posts.where((p) => p.id != id).toList()));
 
-  /// Re-fetches just the stories rail — cheap (device-local), used after
-  /// returning from the story viewer so seen/unseen rings stay in sync.
+  /// Re-fetches just the stories rail, used after returning from the story
+  /// viewer or the composer so seen/unseen rings and "Your story" stay in
+  /// sync without reloading the whole feed.
   Future<void> reloadStories() async {
-    final result = await _getStories(const NoParams());
-    result.fold((_) {}, (stories) => emit(state.copyWith(stories: stories)));
+    final result = await _getStoryRail(const NoParams());
+    if (isClosed) return;
+    result.fold((_) {}, (rail) => emit(state.copyWith(rail: rail)));
+  }
+
+  /// Drops a just-posted story straight into "Your story" — the create
+  /// response is the whole `Story`, so the rail needs no refetch to show
+  /// it. The full reload still happens on the next refresh.
+  void prependMyStory(StoryEntity story) {
+    final mine = state.rail.mine;
+    final stories = mine == null ? [story] : [...mine.stories, story];
+    emit(state.copyWith(rail: StoryRailEntity(mine: StoryRingEntity.mine(stories), rings: state.rail.rings)));
   }
 
   void _replace(String id, PostEntity Function(PostEntity) update) {
@@ -258,7 +286,10 @@ class FeedCubit extends Cubit<FeedState> {
   /// [post] unchanged instead of leaving an unconfirmed guess on screen.
   Future<void> toggleLike(PostEntity post) async {
     if (!_pendingReactions.add(post.id)) return;
-    _replace(post.id, (current) => _predictReaction(current, ReactionType.like));
+    // Echoing the viewer's *current* type is what makes a plain tap remove
+    // an existing reaction of any type rather than switch it to LIKE — see
+    // `FeedRepositoryImpl.toggleLike`, which sends the same type on the wire.
+    _replace(post.id, (current) => _predictReaction(current, current.viewerReactionType ?? ReactionType.like));
     try {
       final result = await _likePost(post);
       result.fold((_) => _replace(post.id, (_) => post), (updated) => _replace(post.id, (_) => updated));

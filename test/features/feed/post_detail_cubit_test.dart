@@ -162,6 +162,28 @@ void main() {
   );
 
   blocTest<PostDetailCubit, PostDetailState>(
+    'toggleLike on a post the viewer reacted to with a non-LIKE type predicts '
+    'a removal, not a switch to LIKE — see `FeedRepositoryImpl.toggleLike`',
+    build: buildCubit,
+    seed: () => PostDetailState(
+      status: PostDetailStatus.loaded,
+      post: buildPost(id: 'p1').copyWith(reactionCounts: const {'WOW': 1}, viewerReaction: 'WOW'),
+    ),
+    act: (cubit) {
+      // Failing on purpose: the optimistic emit is what's under test, and a
+      // rollback to the 😮 it started from proves it wasn't a switch to LIKE.
+      when(() => likePost(any())).thenAnswer((_) async => const Left(ServerFailure()));
+      return cubit.toggleLike();
+    },
+    expect: () => [
+      predicate<PostDetailState>((s) => s.post?.viewerReactionType == null && s.post?.reactionTotal == 0),
+      predicate<PostDetailState>(
+        (s) => s.post?.viewerReactionType == ReactionType.wow && s.post?.reactionTotal == 1,
+      ),
+    ],
+  );
+
+  blocTest<PostDetailCubit, PostDetailState>(
     'toggleLike ignores a second tap while the first is still in flight — '
     'regression for the double-count bug (post detail showing one more '
     'like than the feed for the very same post, because one real tap on '

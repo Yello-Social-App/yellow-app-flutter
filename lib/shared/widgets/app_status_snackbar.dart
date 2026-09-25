@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -81,7 +82,11 @@ class _StatusCard extends StatelessWidget {
                     width: 34,
                     height: 34,
                     decoration: BoxDecoration(color: shade, shape: BoxShape.circle),
-                    child: Icon(isSuccess ? Icons.check_rounded : Icons.close_rounded, size: 18, color: Colors.white),
+                    child: Icon(
+                      isSuccess ? CupertinoIcons.checkmark : CupertinoIcons.xmark,
+                      size: 18,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -96,7 +101,7 @@ class _StatusCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   AppIconButton(
-                    icon: const Icon(Icons.close_rounded),
+                    icon: const Icon(CupertinoIcons.xmark),
                     onPressed: onDismiss,
                     size: 26,
                     backgroundColor: shade,

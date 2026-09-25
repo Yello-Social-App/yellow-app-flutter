@@ -32,10 +32,12 @@ import '../../features/communities/presentation/bloc/community_post_cubit.dart';
 import '../../features/communities/presentation/bloc/create_community_post_cubit.dart';
 import '../../features/feed/data/datasources/bookmarks_local_datasource.dart';
 import '../../features/feed/data/datasources/feed_remote_datasource.dart';
-import '../../features/feed/data/datasources/story_local_datasource.dart';
+import '../../features/feed/data/datasources/story_remote_datasource.dart';
 import '../../features/feed/data/repositories/feed_repository_impl.dart';
+import '../../features/feed/data/repositories/story_repository_impl.dart';
 import '../../features/feed/domain/entities/post_entity.dart';
 import '../../features/feed/domain/repositories/feed_repository.dart';
+import '../../features/feed/domain/repositories/story_repository.dart';
 import '../../features/feed/domain/usecases/add_comment_usecase.dart';
 import '../../features/feed/domain/usecases/create_post_usecase.dart';
 import '../../features/feed/domain/usecases/delete_comment_usecase.dart';
@@ -47,16 +49,19 @@ import '../../features/feed/domain/usecases/get_post_detail_usecase.dart';
 import '../../features/feed/domain/usecases/get_post_usecase.dart';
 import '../../features/feed/domain/usecases/get_saved_post_ids_usecase.dart';
 import '../../features/feed/domain/usecases/get_share_link_usecase.dart';
-import '../../features/feed/domain/usecases/get_stories_usecase.dart';
 import '../../features/feed/domain/usecases/like_post_usecase.dart';
-import '../../features/feed/domain/usecases/mark_story_seen_usecase.dart';
+import '../../features/feed/domain/usecases/story_usecases.dart';
 import '../../features/feed/domain/usecases/react_usecases.dart';
 import '../../features/feed/domain/usecases/update_post_usecase.dart';
 import '../../features/feed/presentation/bloc/create_post_cubit.dart';
 import '../../features/feed/presentation/bloc/feed_cubit.dart';
 import '../../features/feed/presentation/bloc/post_detail_cubit.dart';
 import '../../features/feed/presentation/bloc/reactors_cubit.dart';
+import '../../features/feed/presentation/bloc/story_archive_cubit.dart';
+import '../../features/feed/presentation/bloc/story_compose_cubit.dart';
 import '../../features/feed/presentation/bloc/story_cubit.dart';
+import '../../features/feed/presentation/bloc/story_preview_cubit.dart';
+import '../../features/feed/presentation/bloc/story_viewers_cubit.dart';
 import '../../features/friends/data/datasources/friends_remote_datasource.dart';
 import '../../features/friends/data/repositories/friends_repository_impl.dart';
 import '../../features/friends/domain/repositories/friends_repository.dart';
@@ -87,6 +92,20 @@ import '../../features/search/data/repositories/search_repository_impl.dart';
 import '../../features/search/domain/repositories/search_repository.dart';
 import '../../features/search/domain/usecases/search_users_usecase.dart';
 import '../../features/search/presentation/bloc/search_cubit.dart';
+import '../../features/settings/data/datasources/apk_installer.dart';
+import '../../features/settings/data/datasources/app_info_local_datasource.dart';
+import '../../features/settings/data/datasources/app_update_remote_datasource.dart';
+import '../../features/settings/data/repositories/app_info_repository_impl.dart';
+import '../../features/settings/data/repositories/app_update_repository_impl.dart';
+import '../../features/settings/domain/repositories/app_info_repository.dart';
+import '../../features/settings/domain/repositories/app_update_repository.dart';
+import '../../features/settings/domain/usecases/check_for_update_usecase.dart';
+import '../../features/settings/domain/usecases/download_update_usecase.dart';
+import '../../features/settings/domain/usecases/get_app_build_info_usecase.dart';
+import '../../features/settings/domain/usecases/install_update_usecase.dart';
+import '../../features/settings/domain/usecases/open_install_settings_usecase.dart';
+import '../../features/settings/presentation/bloc/app_update_cubit.dart';
+import '../../features/settings/presentation/bloc/app_version_cubit.dart';
 import '../../features/showcase/data/datasources/showcase_remote_datasource.dart';
 import '../../features/showcase/data/repositories/showcase_repository_impl.dart';
 import '../../features/showcase/domain/entities/project_entity.dart';
@@ -95,6 +114,8 @@ import '../../features/showcase/domain/usecases/showcase_usecases.dart';
 import '../../features/showcase/presentation/bloc/project_detail_cubit.dart';
 import '../../features/showcase/presentation/bloc/publish_project_cubit.dart';
 import '../../features/showcase/presentation/bloc/showcase_cubit.dart';
+import '../audio/voice_note_player.dart';
+import '../audio/voice_note_plays_store.dart';
 import '../network/api_client.dart';
 import '../network/network_info.dart';
 import '../network/token_refresh_service.dart';
@@ -135,6 +156,7 @@ Future<void> configureDependencies() async {
   _registerSearch();
   _registerCommunities();
   _registerShowcase();
+  _registerSettings();
 }
 
 void _registerCore() {
@@ -354,6 +376,7 @@ void _registerChat() {
   sl.registerLazySingleton(() => DeleteMessageUseCase(sl()));
   sl.registerLazySingleton(() => ReactToMessageUseCase(sl()));
   sl.registerLazySingleton(() => UploadAttachmentUseCase(sl()));
+  sl.registerLazySingleton(() => UploadVoiceAttachmentUseCase(sl()));
   sl.registerLazySingleton(() => RefreshAttachmentUseCase(sl()));
   sl.registerLazySingleton(() => MarkReadUseCase(sl()));
   sl.registerLazySingleton(() => StartDirectConversationUseCase(sl()));
@@ -374,6 +397,18 @@ void _registerChat() {
   sl.registerLazySingleton(() => AcceptGroupInviteUseCase(sl()));
   sl.registerLazySingleton(() => DeclineGroupInviteUseCase(sl()));
 
+  // One platform audio player for the whole app, which is what makes "only
+  // one voice note plays at a time" true rather than a rule each bubble has
+  // to remember. Lazy: nothing is constructed until a note is played, so a
+  // session that never touches one never opens an audio session.
+  sl.registerLazySingleton(VoiceNotePlayer.new);
+
+  // Which notes this device has already listened to. Restored on the
+  // first bubble that asks for it rather than at startup: until the read
+  // lands every note reads as heard, so the transcript never flashes the
+  // unheard accent over notes the user played days ago.
+  sl.registerLazySingleton(() => VoiceNotePlaysStore()..restore());
+
   // Long-lived: the Inbox list (and unread counts) survives tab switches.
   sl.registerLazySingleton(() => MessagesCubit(sl()));
 
@@ -388,6 +423,7 @@ void _registerChat() {
       reactToMessage: sl(),
       uploadAttachment: sl(),
       refreshAttachment: sl(),
+      voicePlayer: sl(),
       acceptInvite: sl(),
       declineInvite: sl(),
       markRead: sl(),
@@ -455,15 +491,24 @@ void _registerSafety() {
 void _registerFeed() {
   // Live backend (posts/comments/reactions/reposts/feed).
   sl.registerLazySingleton<FeedRemoteDataSource>(() => FeedRemoteDataSourceImpl(sl()));
-  // No backend endpoint exists for either of these (see each class's doc).
-  sl.registerLazySingleton<StoryLocalDataSource>(() => StoryLocalDataSourceImpl());
+  // Live backend too, but its own resource and its own contract.
+  sl.registerLazySingleton<StoryRemoteDataSource>(() => StoryRemoteDataSourceImpl(sl()));
+  // No backend endpoint exists for bookmarks (see the class's own doc).
   sl.registerLazySingleton<BookmarksLocalDataSource>(() => BookmarksLocalDataSourceImpl());
 
-  sl.registerLazySingleton<FeedRepository>(() => FeedRepositoryImpl(sl(), sl(), sl(), sl()));
+  sl.registerLazySingleton<FeedRepository>(() => FeedRepositoryImpl(sl(), sl(), sl()));
+  sl.registerLazySingleton<StoryRepository>(() => StoryRepositoryImpl(sl(), sl()));
 
   sl.registerLazySingleton(() => GetFeedUseCase(sl()));
-  sl.registerLazySingleton(() => GetStoriesUseCase(sl()));
-  sl.registerLazySingleton(() => MarkStorySeenUseCase(sl()));
+  sl.registerLazySingleton(() => GetStoryRailUseCase(sl()));
+  sl.registerLazySingleton(() => GetUserStoriesUseCase(sl()));
+  sl.registerLazySingleton(() => GetStoryUseCase(sl()));
+  sl.registerLazySingleton(() => CreateStoryUseCase(sl()));
+  sl.registerLazySingleton(() => MarkStoryViewedUseCase(sl()));
+  sl.registerLazySingleton(() => GetStoryViewersUseCase(sl()));
+  sl.registerLazySingleton(() => GetStoryArchiveUseCase(sl()));
+  sl.registerLazySingleton(() => DeleteStoryUseCase(sl()));
+  sl.registerLazySingleton(() => ReplyToStoryUseCase(sl()));
   sl.registerLazySingleton(() => LikePostUseCase(sl()));
   sl.registerLazySingleton(() => ReactToPostUseCase(sl()));
   sl.registerLazySingleton(() => ReactToCommentUseCase(sl()));
@@ -491,7 +536,7 @@ void _registerFeed() {
   sl.registerLazySingleton(
     () => FeedCubit(
       getFeed: sl(),
-      getStories: sl(),
+      getStoryRail: sl(),
       likePost: sl(),
       reactToPost: sl(),
       repost: sl(),
@@ -534,7 +579,23 @@ void _registerFeed() {
   sl.registerFactoryParam<ReactorsCubit, ({String targetType, String targetId}), ReactionType?>(
     (ids, type) => ReactorsCubit(targetType: ids.targetType, targetId: ids.targetId, type: type, getReactors: sl()),
   );
-  sl.registerFactory(() => StoryCubit(sl(), sl()));
+  // One viewer session per push, disposed with the page.
+  sl.registerFactory(
+    () => StoryCubit(
+      getRail: sl(),
+      getUserStories: sl(),
+      getStory: sl(),
+      markViewed: sl(),
+      deleteStory: sl(),
+      replyToStory: sl(),
+    ),
+  );
+  // Singleton: it is a shared, id-keyed story cache for chat's reply
+  // bubbles, so it has to outlive any one bubble or conversation.
+  sl.registerLazySingleton(() => StoryPreviewCubit(sl()));
+  sl.registerFactory(() => StoryComposeCubit(sl()));
+  sl.registerFactory(() => StoryViewersCubit(sl()));
+  sl.registerFactory(() => StoryArchiveCubit(sl(), sl()));
   sl.registerFactory(() => CreatePostCubit(sl()));
 }
 
@@ -623,5 +684,37 @@ void _registerShowcase() {
   sl.registerFactoryParam<ProjectDetailCubit, String, ProjectEntity?>(
     (projectId, seed) =>
         ProjectDetailCubit(projectId: projectId, seed: seed, getProject: sl(), recordView: sl(), toggleLike: sl()),
+  );
+}
+
+void _registerSettings() {
+  // Which build is installed is read off the device. Whether a newer one
+  // exists is read from the release channel's manifest — still not from the
+  // API, which has no version resource (`docs/BACKEND.md`, ADR-029).
+  sl.registerLazySingleton<AppInfoLocalDataSource>(() => AppInfoLocalDataSourceImpl());
+  sl.registerLazySingleton<AppInfoRepository>(() => AppInfoRepositoryImpl(sl()));
+
+  // Its own bare Dio, deliberately not `ApiClient`'s: the manifest and the
+  // APK are fetched off-host, and `AuthInterceptor` would attach the
+  // session token to both.
+  sl.registerLazySingleton<AppUpdateRemoteDataSource>(() => AppUpdateRemoteDataSourceImpl());
+  sl.registerLazySingleton<ApkInstaller>(() => ApkInstallerImpl());
+  sl.registerLazySingleton<AppUpdateRepository>(() => AppUpdateRepositoryImpl(sl(), sl(), sl(), sl()));
+
+  sl.registerLazySingleton(() => GetAppBuildInfoUseCase(sl()));
+  sl.registerLazySingleton(() => CheckForUpdateUseCase(sl()));
+  sl.registerLazySingleton(() => DownloadUpdateUseCase(sl()));
+  sl.registerLazySingleton(() => InstallUpdateUseCase(sl()));
+  sl.registerLazySingleton(() => OpenInstallSettingsUseCase(sl()));
+
+  // Factory: one read per visit. The build cannot change while the process
+  // is alive, so there is nothing for a singleton to save.
+  sl.registerFactory(() => AppVersionCubit(getBuildInfo: sl()));
+
+  // Singleton, unlike the one above: a 60 MB download has to survive the
+  // user leaving the App version screen, and a factory here would close the
+  // cubit mid-transfer. Provided with `BlocProvider.value` for that reason.
+  sl.registerLazySingleton(
+    () => AppUpdateCubit(checkForUpdate: sl(), downloadUpdate: sl(), installUpdate: sl(), openInstallSettings: sl()),
   );
 }

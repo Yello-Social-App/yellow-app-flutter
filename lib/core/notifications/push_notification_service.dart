@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:ui';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -11,6 +13,7 @@ import '../../features/notification/domain/usecases/notification_usecases.dart';
 import '../constants/app_constants.dart';
 import '../security/secure_storage_service.dart';
 import '../utils/logger.dart';
+import 'chat_reply_action.dart';
 
 /// Channel every push is shown under on Android. `yello_default` is the id
 /// `yello-notify`'s own guide names, and it must match
@@ -21,10 +24,8 @@ import '../utils/logger.dart';
 const _androidChannel = AndroidNotificationChannel(
   'yello_default',
   'Yello notifications',
-  description:
-      'Chat messages, reactions, friend requests, and other Yello activity.',
-  importance: Importance
-      .high, // required for a heads-up pop, not just a silent tray entry
+  description: 'Chat messages, reactions, friend requests, and other Yello activity.',
+  importance: Importance.high, // required for a heads-up pop, not just a silent tray entry
 );
 
 /// Where a tapped push should take the user, worked out from its `data`
@@ -99,8 +100,9 @@ class ReportsDestination extends PushDestination {
 /// `LogoutUseCase` already reads [AppConstants.secureKeyPushToken] back to
 /// unregister it on sign-out) in sync with the current FCM token, shows the
 /// notification manually while the app is foregrounded — FCM only auto-pops
-/// a system notification when the app is backgrounded or killed — and
-/// takes an alert down again when its chat message is unsent.
+/// a system notification when the app is backgrounded or killed — takes an
+/// alert down again when its chat message is unsent, and answers the Reply
+/// action on a chat alert without the app coming forward (ADR-025).
 abstract interface class PushNotificationService {
   Future<void> init();
 
@@ -166,37 +168,57 @@ class PushNotificationServiceImpl implements PushNotificationService {
     _notificationTaps.add(null);
   }
 
-  void _handleLocalTap(NotificationResponse response) {
-    final payload = response.payload;
-    if (payload == null || payload.isEmpty) return;
-    try {
-      final data = jsonDecode(payload);
-      if (data is Map<String, dynamic>) _handleTap(data);
-    } on FormatException {
-      appLogger.w('Ignoring invalid notification navigation payload.');
+  /// A response to an alert this isolate drew: the Reply action answers the
+  /// conversation in place, anything else is an ordinary tap.
+  Future<void> _handleLocalResponse(NotificationResponse response) async {
+    final data = decodeNotificationPayload(response.payload);
+    if (data == null) return;
+    if (response.actionId != chatReplyActionId) {
+      _handleTap(data);
+      return;
     }
+    // Reached on iOS, where the delegate answers in this isolate. On
+    // Android an action tap *never* arrives here — see [_replyPortName] —
+    // so the refresh is left to the port rather than done inline.
+    await replyFromNotification(_local, data: data, text: response.input ?? '');
   }
 
   @override
   Stream<void> get updates => _updates.stream;
-  final FlutterLocalNotificationsPlugin _local =
-      FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _local = FlutterLocalNotificationsPlugin();
 
   static String get _platform => Platform.isIOS ? 'ios' : 'android';
 
   @override
   Future<void> init() async {
+    // Republished on every init: a mapping can outlive the process that
+    // made it, and `registerPortWithName` refuses to overwrite one.
+    IsolateNameServer.removePortNameMapping(_replyPortName);
+    // An open ReceivePort is held by the VM's own port map, so a local is
+    // enough to keep it alive for the process.
+    final replyPort = ReceivePort();
+    IsolateNameServer.registerPortWithName(replyPort.sendPort, _replyPortName);
+    // A reply sent from the notification bypassed ChatCubit's own send path,
+    // so nothing on screen knows about it: the open transcript and the
+    // inbox counts refresh off this.
+    replyPort.listen((_) => _updates.add(null));
+
     await _local
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >()
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(_androidChannel);
     await _local.initialize(
-      settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-        iOS: DarwinInitializationSettings(),
+      settings: InitializationSettings(
+        android: const AndroidInitializationSettings('@mipmap/ic_launcher'),
+        // The reply category has to exist before any alert names it, and
+        // registering it here is also what lets an iOS-drawn push carry the
+        // reply field — provided the APNs payload sets `aps.category` to
+        // [chatReplyCategoryId]. See docs/BACKEND.md.
+        iOS: DarwinInitializationSettings(notificationCategories: [chatReplyCategory]),
       ),
-      onDidReceiveNotificationResponse: _handleLocalTap,
+      onDidReceiveNotificationResponse: _handleLocalResponse,
+      // Fires in the plugin's own engine when the reply was typed while
+      // this isolate was gone — see [notificationReplyBackgroundHandler].
+      onDidReceiveBackgroundNotificationResponse: notificationReplyBackgroundHandler,
     );
 
     FirebaseMessaging.onMessageOpenedApp.listen((message) => _handleTap(message.data));
@@ -205,14 +227,12 @@ class PushNotificationServiceImpl implements PushNotificationService {
     if (initialMessage != null) _handleTap(initialMessage.data);
     final localLaunch = await _local.getNotificationAppLaunchDetails();
     if (localLaunch?.didNotificationLaunchApp == true && localLaunch?.notificationResponse != null) {
-      _handleLocalTap(localLaunch!.notificationResponse!);
+      await _handleLocalResponse(localLaunch!.notificationResponse!);
     }
 
     final settings = await FirebaseMessaging.instance.requestPermission();
     if (settings.authorizationStatus == AuthorizationStatus.denied) {
-      appLogger.w(
-        'PushNotificationService: permission denied — push disabled for this session.',
-      );
+      appLogger.w('PushNotificationService: permission denied — push disabled for this session.');
       return;
     }
 
@@ -243,13 +263,9 @@ class PushNotificationServiceImpl implements PushNotificationService {
       return; // already registered — avoid a PUT on every cold start
     }
 
-    final result = await _registerDevice(
-      RegisterDeviceParams(token: token, platform: _platform),
-    );
+    final result = await _registerDevice(RegisterDeviceParams(token: token, platform: _platform));
     result.fold(
-      (failure) => appLogger.w(
-        'PushNotificationService: registerDevice failed — ${failure.message}',
-      ),
+      (failure) => appLogger.w('PushNotificationService: registerDevice failed — ${failure.message}'),
       (_) => _secureStorage.write(AppConstants.secureKeyPushToken, token),
     );
   }
@@ -266,9 +282,6 @@ class PushNotificationServiceImpl implements PushNotificationService {
       if (userId is String && userId.isNotEmpty) _friendshipChanges.add(userId);
       return;
     }
-    final notification = message.notification;
-    if (notification == null) return; // data-only payload — nothing to pop here
-
     // The grouping key: a newer push for the same key *replaces* the older
     // one on Android (tag) and threads under it on iOS. For a chat push it
     // is rebuilt from `data` — the same derivation the unsend handler uses
@@ -276,33 +289,30 @@ class PushNotificationServiceImpl implements PushNotificationService {
     // the server put on the Android block (per post, per comment, per
     // sender).
     final conversationTag = chatNotificationTag(data);
-    final tag = conversationTag ?? message.notification?.android?.tag;
+    final notification = message.notification;
+    // A chat push may also arrive *data-only*, so that the app draws it
+    // itself and can hang the Reply action off it (the reason the copy is
+    // repeated in `data` at all — see docs/BACKEND.md). Anything else
+    // data-only has nothing to pop.
+    if (notification == null && conversationTag == null) return;
+    final title = notification?.title ?? _copy(data, 'title');
+    final body = notification?.body ?? _copy(data, 'body');
+    if (title == null && body == null) return;
+
+    final tag = conversationTag ?? notification?.android?.tag;
     if (conversationTag != null && data['messageId'] is String) {
       _shownChatMessages[conversationTag] = data['messageId'] as String;
     }
 
     await _local.show(
-      // Stable per key so a re-show under the same tag replaces, not stacks.
-      id: tag?.hashCode ?? notification.hashCode,
-      title: notification.title,
-      body: notification.body,
-      payload: jsonEncode(data),
-      notificationDetails: NotificationDetails(
-        android: AndroidNotificationDetails(
-          _androidChannel.id,
-          _androidChannel.name,
-          channelDescription: _androidChannel.description,
-          importance: Importance.high,
-          priority: Priority.high,
-          tag: tag,
-        ),
-        iOS: DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-          threadIdentifier: tag,
-        ),
-      ),
+      // Stable per key so a re-show under the same tag replaces, not
+      // stacks; an untagged push falls back to its own identity so two of
+      // them don't collapse into one.
+      id: tag?.hashCode ?? identityHashCode(notification),
+      title: title,
+      body: body,
+      payload: jsonEncode(chatAlertPayload(data, title: title, body: body)),
+      notificationDetails: chatAlertDetails(tag: tag, replyable: conversationTag != null, title: title, body: body),
     );
   }
 
@@ -334,6 +344,161 @@ String? chatNotificationTag(Map<String, dynamic> data) {
   return 'chat:$conversationId';
 }
 
+/// Name the running app publishes a port under, so a reply sent from the
+/// notification's own isolate can tell it to refresh.
+///
+/// That indirection is not optional: the plugin's `ActionBroadcastReceiver`
+/// routes **every** action tap to the background callback dispatcher — even
+/// while the app is in the foreground — and only a tap on the notification
+/// *body* reaches `onDidReceiveNotificationResponse`. So on Android a reply
+/// is always handled in a separate engine, where `_updates` does not exist.
+/// `IsolateNameServer` is process-wide, which is what lets the two engines
+/// find each other; lookup simply returns null when no app is running.
+const String _replyPortName = 'yello.chat.reply';
+
+/// One line of notification copy out of a `data` map, read defensively —
+/// FCM only allows string values, but a payload is still outside data this
+/// app controls, and a cast would throw rather than degrade.
+String? _copy(Map<String, dynamic> data, String key) {
+  final value = data[key];
+  return value is String && value.isNotEmpty ? value : null;
+}
+
+/// What an alert this app drew carries in its payload: the push's own
+/// `data`, plus the copy that was actually drawn. The copy is there so a
+/// reply handled in a *different* isolate can rewrite the alert without
+/// re-fetching anything — it only ever has the payload to work from.
+Map<String, dynamic> chatAlertPayload(Map<String, dynamic> data, {String? title, String? body}) => {
+  ...data,
+  'title': ?title,
+  'body': ?body,
+};
+
+/// How every chat/social alert this app draws is configured. [replyable]
+/// adds the direct-reply affordance, which only a chat push has — nothing
+/// else names a conversation to answer into.
+///
+/// A replyable alert is built as a **conversation**: `MessagingStyle` plus
+/// `CATEGORY_MESSAGE` is what makes Android render it as a chat rather than
+/// a one-line tray entry — sender across the top, the message below it, the
+/// Reply field expanded rather than folded behind a chevron, and later
+/// messages under the same tag threaded into one card instead of replacing
+/// it. Everything else keeps the plain text form; there is no conversation
+/// to style.
+///
+/// How much of that a given phone honours is still the phone's call — One
+/// UI's *Notification pop-up style: Brief* collapses every heads-up to a
+/// pill no matter what the app asks for. The style decides what the shade
+/// and the expanded card look like, not whether the pop-up starts expanded.
+NotificationDetails chatAlertDetails({required String? tag, required bool replyable, String? title, String? body}) =>
+    NotificationDetails(
+      android: AndroidNotificationDetails(
+        _androidChannel.id,
+        _androidChannel.name,
+        channelDescription: _androidChannel.description,
+        importance: Importance.high,
+        priority: Priority.high,
+        tag: tag,
+        category: replyable ? AndroidNotificationCategory.message : null,
+        styleInformation: replyable ? _chatStyle(title: title, body: body) : null,
+        actions: replyable ? const [chatReplyAction] : null,
+      ),
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+        threadIdentifier: tag,
+        categoryIdentifier: replyable ? chatReplyCategoryId : null,
+      ),
+    );
+
+/// `MessagingStyle` for one chat push. [title] is the sender as
+/// `yello-notify` framed it and [body] the message, which is the shape a
+/// chat alert's copy arrives in; `conversationTitle` is deliberately left
+/// null, because setting it makes Android treat the thread as a group and
+/// prefix every line with a sender name — and the payload says nothing
+/// about whether this conversation is a group.
+///
+/// The [Person] passed first is *the viewer* — who a message the user sends
+/// is attributed to — not the sender, which is why the incoming line
+/// carries its own.
+MessagingStyleInformation? _chatStyle({String? title, String? body}) {
+  if (body == null) return null;
+  return MessagingStyleInformation(
+    const Person(name: 'You', key: 'me'),
+    messages: [Message(body, DateTime.now(), Person(name: title, key: title))],
+  );
+}
+
+/// The `data` map an alert was drawn from, or null when the payload is
+/// missing or isn't one this app wrote.
+Map<String, dynamic>? decodeNotificationPayload(String? payload) {
+  if (payload == null || payload.isEmpty) return null;
+  try {
+    final decoded = jsonDecode(payload);
+    if (decoded is Map<String, dynamic>) return decoded;
+  } on FormatException {
+    appLogger.w('Ignoring invalid notification navigation payload.');
+  }
+  return null;
+}
+
+/// Sends a reply typed into the shade. Returns whether the server took it.
+///
+/// Answering a message ends the notification: [chatReplyAction] already took
+/// the alert down when Send was tapped, so a successful reply leaves nothing
+/// behind. Only a failure needs an alert, and it gets a fresh one carrying
+/// the text that didn't go out — otherwise the reply would disappear with
+/// the notification and the user would have no way to know, or to get the
+/// words back.
+///
+/// Shared by both isolates: the service handles the reply while the app is
+/// alive, [notificationReplyBackgroundHandler] when it isn't, so the
+/// behaviour is the same either way.
+Future<bool> replyFromNotification(
+  FlutterLocalNotificationsPlugin local, {
+  required Map<String, dynamic> data,
+  required String text,
+}) async {
+  final reply = text.trim();
+  if (reply.isEmpty) return false;
+
+  if (await sendChatReply(data: data, text: reply)) {
+    IsolateNameServer.lookupPortByName(_replyPortName)?.send(null);
+    return true;
+  }
+
+  final tag = chatNotificationTag(data);
+  if (tag == null) return false;
+  final body = 'Not sent: "$reply" — tap to open the chat.';
+  await local.show(
+    // The id the original alert was drawn under, so a retry that fails
+    // again replaces this instead of stacking another copy.
+    id: tag.hashCode,
+    title: _copy(data, 'title'),
+    body: body,
+    payload: jsonEncode(chatAlertPayload(data, body: body)),
+    // Audible on purpose: the message did not go out, and a silent alert
+    // reads as "sent" to anyone who isn't watching the shade.
+    notificationDetails: chatAlertDetails(tag: tag, replyable: true, title: _copy(data, 'title'), body: body),
+  );
+  return false;
+}
+
+/// Answers a Reply action typed while this app had no running isolate of
+/// its own. Top-level and `vm:entry-point` because the plugin runs it in a
+/// fresh engine, which starts with none of `bootstrap()`'s state — hence
+/// the plugin instance built here and the registrant call, without which
+/// secure storage has no platform channel to read the token through.
+@pragma('vm:entry-point')
+Future<void> notificationReplyBackgroundHandler(NotificationResponse response) async {
+  if (response.actionId != chatReplyActionId) return;
+  DartPluginRegistrant.ensureInitialized();
+  final data = decodeNotificationPayload(response.payload);
+  if (data == null) return;
+  await replyFromNotification(FlutterLocalNotificationsPlugin(), data: data, text: response.input ?? '');
+}
+
 /// Takes down whatever is showing under [tag]. On Android that is by
 /// (id, tag): an OS-drawn FCM alert sits at id `0`, one shown by
 /// `_onForegroundMessage` at the tag's hash — both are tried, plus anything
@@ -356,18 +521,43 @@ Future<void> cancelChatNotification(FlutterLocalNotificationsPlugin local, Strin
 /// Top-level per the plugin's requirement — it must be callable in its own
 /// background isolate, so this can never be a class method. That isolate
 /// starts with none of `bootstrap()`'s state, hence the fresh
-/// `Firebase.initializeApp()`. The OS has already drawn any *visible* push
-/// from its payload by the time this fires; the one thing that needs Dart
-/// here is the silent `CHAT_MESSAGE_DELETED` push, which carries no
-/// notification block and exists only so the app can take the earlier
-/// alert down (Android delivers it at high priority even in the background;
-/// iOS may delay or drop it).
+/// `Firebase.initializeApp()`.
+///
+/// Only a **data-only** push reaches this handler: Android hands a push
+/// that carries its own `notification` block straight to the system tray
+/// and runs no Dart at all (see docs/GOTCHAS.md). Two kinds arrive here:
+///
+/// - the silent `CHAT_MESSAGE_DELETED`, which exists only so the app can
+///   take the earlier alert down (iOS may delay or drop it);
+/// - a data-only `CHAT_MESSAGE`, which the app has to draw itself — and
+///   drawing it here is the *only* way a backgrounded chat alert can carry
+///   the Reply action, since the OS-drawn one has no actions on it.
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
   final data = message.data;
-  if (data['type'] != NotificationTypes.chatMessageDeleted) return;
   final tag = chatNotificationTag(data);
   if (tag == null) return;
-  await cancelChatNotification(FlutterLocalNotificationsPlugin(), tag);
+  final local = FlutterLocalNotificationsPlugin();
+
+  if (data['type'] == NotificationTypes.chatMessageDeleted) {
+    await cancelChatNotification(local, tag);
+    return;
+  }
+
+  // iOS *can* run this handler for a push that also carries a notification
+  // block (`content-available` alongside `alert`); drawing then would
+  // double the alert.
+  if (message.notification != null) return;
+  final title = _copy(data, 'title');
+  final body = _copy(data, 'body');
+  if (title == null && body == null) return;
+  DartPluginRegistrant.ensureInitialized();
+  await local.show(
+    id: tag.hashCode,
+    title: title,
+    body: body,
+    payload: jsonEncode(chatAlertPayload(data, title: title, body: body)),
+    notificationDetails: chatAlertDetails(tag: tag, replyable: true, title: title, body: body),
+  );
 }

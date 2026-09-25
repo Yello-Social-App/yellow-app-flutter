@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -22,6 +23,7 @@ import '../../../../shared/widgets/error_view.dart';
 import '../../../../shared/widgets/shimmer_loading.dart';
 import '../../../../shared/widgets/yello_wordmark.dart';
 import '../../domain/entities/post_entity.dart';
+import '../../domain/entities/story_entity.dart';
 import '../bloc/feed_cubit.dart';
 import '../widgets/create_post_prompt.dart';
 import '../widgets/post_card.dart';
@@ -76,6 +78,14 @@ class _FeedViewState extends State<_FeedView> {
     }
   }
 
+  /// Opens the composer and, on a successful post, drops the created story
+  /// straight into "Your story" — `POST /stories` answers with the whole
+  /// `Story`, so no follow-up `GET /stories/me` is needed.
+  Future<void> _openComposer(BuildContext context, FeedCubit cubit) async {
+    final story = await context.pushNamed<Object?>(RouteNames.storyCompose);
+    if (story is StoryEntity) cubit.prependMyStory(story);
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
@@ -89,7 +99,7 @@ class _FeedViewState extends State<_FeedView> {
           buildWhen: (previous, current) =>
               previous.status != current.status ||
               previous.posts != current.posts ||
-              previous.stories != current.stories ||
+              previous.rail != current.rail ||
               previous.errorMessage != current.errorMessage ||
               previous.me != current.me,
           builder: (context, state) {
@@ -146,10 +156,16 @@ class _FeedViewState extends State<_FeedView> {
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         sliver: SliverToBoxAdapter(
                           child: StoriesRail(
-                            stories: state.stories,
-                            onAddStory: () => context.pushNamed(RouteNames.storyCompose),
-                            onOpenStory: (i) => context
-                                .pushNamed<void>(RouteNames.storyViewer, pathParameters: {'userIndex': '$i'})
+                            rail: state.rail,
+                            myAvatarUrl: state.me?.avatarUrl,
+                            myInitials: (state.me?.fullName ?? state.me?.username ?? 'You').initials,
+                            onAddStory: () => _openComposer(context, cubit),
+                            // Keyed by author id, not by rail index: the
+                            // rail this tap came from may be seconds old,
+                            // and an index would play the wrong ring if one
+                            // expired in between.
+                            onOpenRing: (authorId) => context
+                                .pushNamed<void>(RouteNames.storyViewer, pathParameters: {'authorId': authorId})
                                 .then((_) => cubit.reloadStories()),
                           ),
                         ),
@@ -212,7 +228,7 @@ class _FeedPostCard extends StatelessWidget {
         if (post == null) return const SizedBox.shrink();
         return PostCard(
           post: post,
-          onOpen: () => context.pushNamed(RouteNames.postDetail, pathParameters: {'postId': post.id}),
+          onOpen: () => _openPost(context, cubit, post.id),
           onLike: () => cubit.toggleLike(post),
           onReact: (type) => cubit.react(post, type),
           onSave: () => cubit.toggleSave(post.id),
@@ -226,6 +242,16 @@ class _FeedPostCard extends StatelessWidget {
       },
     );
   }
+}
+
+/// Opens the post's own screen and applies whatever it pops back onto this
+/// row — a reaction or a comment made in there changes counts the card here
+/// shows, and nothing re-fetches the feed on the way back (see ADR-032). The
+/// detail screen hands back null when it has nothing to hand back, and
+/// `replacePost` no-ops on a post this feed no longer lists.
+Future<void> _openPost(BuildContext context, FeedCubit cubit, String postId) async {
+  final updated = await context.pushNamed<PostEntity>(RouteNames.postDetail, pathParameters: {'postId': postId});
+  if (updated != null) cubit.replacePost(updated);
 }
 
 PostEntity? _findPost(List<PostEntity> posts, String id) {
@@ -391,7 +417,7 @@ class _FeedAppBar extends StatelessWidget {
         // the bar's active-tab indicator simply never lands on it any more.
         const _SignalsAction(),
         const SizedBox(width: 8),
-        AppIconButton(icon: const Icon(Icons.search), onPressed: () => context.pushNamed(RouteNames.search)),
+        AppIconButton(icon: const Icon(CupertinoIcons.search), onPressed: () => context.pushNamed(RouteNames.search)),
         const SizedBox(width: 8),
         // Circle (friends) button — the brand-mark icon, not a user photo
         // (contrast `BottomNavBar`'s Profile-tab avatar, a different

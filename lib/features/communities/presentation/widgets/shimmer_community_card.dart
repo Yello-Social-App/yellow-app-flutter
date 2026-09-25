@@ -64,7 +64,11 @@ class ShimmerCommunityCard extends StatelessWidget {
                           ),
                         ),
                         SizedBox(width: 8),
-                        ShimmerBox(width: 62, height: 32, borderRadius: AppRadii.pill),
+                        ShimmerBox(
+                          width: 62,
+                          height: 32,
+                          borderRadius: AppRadii.pill,
+                        ),
                       ],
                     ),
                   ],
@@ -77,7 +81,10 @@ class ShimmerCommunityCard extends StatelessWidget {
             top: 40,
             child: Container(
               padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(shape: BoxShape.circle, color: colors.surf),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: colors.surf,
+              ),
               child: const ShimmerBox(width: 50, height: 50, borderRadius: 25),
             ),
           ),

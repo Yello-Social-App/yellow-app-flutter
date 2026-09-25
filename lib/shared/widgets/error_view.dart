@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -23,34 +24,43 @@ class ErrorView extends StatelessWidget {
         border: Border.all(color: colors.line, width: 1.5),
         borderRadius: BorderRadius.circular(AppRadii.xl),
       ),
-      child: Column(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: colors.surf2,
-              border: Border.all(color: colors.line, width: 1.5),
+      child: SizedBox(
+        width: double.infinity,
+        height: 135,
+        child: Column(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: colors.surf2,
+                border: Border.all(color: colors.line, width: 1.5),
+              ),
+              child: Icon(CupertinoIcons.exclamationmark_circle, size: 18, color: colors.ink2),
             ),
-            child: Icon(Icons.error_outline, size: 18, color: colors.ink2),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'SOMETHING WENT WRONG',
-            style: AppTextStyles.eyebrow.copyWith(color: colors.ink2),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
-          ),
-          if (onRetry != null) ...[
-            const SizedBox(height: 16),
-            AppButton(label: 'Retry', variant: AppButtonVariant.outline, onPressed: onRetry, dense: true),
+            const SizedBox(height: 12),
+            Text(
+              'SOMETHING WENT WRONG',
+              style: AppTextStyles.eyebrow.copyWith(color: colors.ink2),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
+            ),
+            if (onRetry != null) ...[
+              const SizedBox(height: 16),
+              AppButton(
+                label: 'Retry',
+                variant: AppButtonVariant.outline,
+                onPressed: onRetry,
+                dense: true,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -70,7 +80,11 @@ class EmptyStateCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 28),
       decoration: BoxDecoration(
-        border: Border.all(color: colors.line, width: 1.5, style: BorderStyle.solid),
+        border: Border.all(
+          color: colors.line,
+          width: 1.5,
+          style: BorderStyle.solid,
+        ),
         borderRadius: BorderRadius.circular(AppRadii.xl),
       ),
       child: Column(
@@ -85,7 +99,10 @@ class EmptyStateCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Text(title, style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
+          Text(
+            title,
+            style: AppTextStyles.eyebrow.copyWith(color: colors.ink2),
+          ),
           const SizedBox(height: 7),
           Text(
             hint,

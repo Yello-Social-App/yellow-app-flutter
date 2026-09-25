@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -71,7 +72,7 @@ class _ProjectDetailView extends StatelessWidget {
                     child: Row(
                       children: [
                         AppIconButton(
-                          icon: const Icon(Icons.arrow_back),
+                          icon: const Icon(CupertinoIcons.back),
                           onPressed: () => context.pop(cubit.state.project),
                         ),
                         const SizedBox(width: 12),
@@ -197,7 +198,7 @@ class _Body extends StatelessWidget {
                     variant: project.isLiked ? AppButtonVariant.subtle : AppButtonVariant.primary,
                     dense: true,
                     icon: Icon(
-                      project.isLiked ? Icons.favorite : Icons.favorite_border,
+                      project.isLiked ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
                       size: 14,
                       color: project.isLiked ? colors.red : colors.onYel,
                     ),
@@ -244,9 +245,9 @@ class _Body extends StatelessWidget {
           // change than the feature warrants. Same affordance the feed already
           // uses for a post's share link.
           if (project.hasRepo)
-            _LinkRow(label: 'REPOSITORY', url: project.repoUrl!, icon: Icons.code),
+            _LinkRow(label: 'REPOSITORY', url: project.repoUrl!, icon: CupertinoIcons.chevron_left_slash_chevron_right),
           if (project.hasLive)
-            _LinkRow(label: 'LIVE', url: project.liveUrl!, icon: Icons.open_in_new),
+            _LinkRow(label: 'LIVE', url: project.liveUrl!, icon: CupertinoIcons.arrow_up_right_square),
         ],
         const SizedBox(height: 18),
         Text('BY', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
@@ -293,7 +294,7 @@ class _Body extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Icon(Icons.chevron_right, color: colors.ink3, size: 20),
+                  Icon(CupertinoIcons.chevron_right, color: colors.ink3, size: 20),
                 ],
               ),
             ),
@@ -346,7 +347,7 @@ class _LinkRow extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(Icons.copy_rounded, size: 15, color: colors.ink3),
+              Icon(CupertinoIcons.doc_on_doc, size: 15, color: colors.ink3),
             ],
           ),
         ),

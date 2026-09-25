@@ -8,7 +8,8 @@ import 'package:yello_social_app/core/error/failures.dart';
 import 'package:yello_social_app/core/usecase/usecase.dart';
 import 'package:yello_social_app/features/feed/domain/repositories/feed_repository.dart';
 import 'package:yello_social_app/features/feed/domain/usecases/get_feed_usecase.dart';
-import 'package:yello_social_app/features/feed/domain/usecases/get_stories_usecase.dart';
+import 'package:yello_social_app/features/feed/domain/entities/story_entity.dart';
+import 'package:yello_social_app/features/feed/domain/usecases/story_usecases.dart';
 import 'package:yello_social_app/features/feed/domain/entities/post_entity.dart';
 import 'package:yello_social_app/features/feed/domain/usecases/delete_post_usecase.dart';
 import 'package:yello_social_app/features/feed/domain/usecases/get_share_link_usecase.dart';
@@ -24,7 +25,7 @@ import '../../helpers/mock_data.dart';
 
 class _MockGetFeed extends Mock implements GetFeedUseCase {}
 
-class _MockGetStories extends Mock implements GetStoriesUseCase {}
+class _MockGetStoryRail extends Mock implements GetStoryRailUseCase {}
 
 class _MockLikePost extends Mock implements LikePostUseCase {}
 
@@ -52,7 +53,7 @@ class _MockMuteUser extends Mock implements MuteUserUseCase {}
 
 void main() {
   late _MockGetFeed getFeed;
-  late _MockGetStories getStories;
+  late _MockGetStoryRail getStoryRail;
   late _MockLikePost likePost;
   late _MockReactToPost reactToPost;
   late _MockRepost repost;
@@ -80,7 +81,7 @@ void main() {
 
   setUp(() {
     getFeed = _MockGetFeed();
-    getStories = _MockGetStories();
+    getStoryRail = _MockGetStoryRail();
     likePost = _MockLikePost();
     reactToPost = _MockReactToPost();
     repost = _MockRepost();
@@ -93,7 +94,7 @@ void main() {
     getShareLink = _MockGetShareLink();
     hidePost = _MockHidePost();
     muteUser = _MockMuteUser();
-    when(() => getStories(const NoParams())).thenAnswer((_) async => const Right([]));
+    when(() => getStoryRail(const NoParams())).thenAnswer((_) async => const Right(StoryRailEntity.empty));
     when(() => getMe(const NoParams())).thenAnswer((_) async => Right(buildUser()));
     // Default: the signed-in user has no posts/reposts of their own — most
     // tests don't care about repost-recovery, so this keeps `refresh()`'s
@@ -103,7 +104,7 @@ void main() {
 
   FeedCubit buildCubit() => FeedCubit(
     getFeed: getFeed,
-    getStories: getStories,
+    getStoryRail: getStoryRail,
     likePost: likePost,
     reactToPost: reactToPost,
     repost: repost,
@@ -222,6 +223,33 @@ void main() {
     expect: () => [
       predicate<FeedState>((s) => s.posts.single.likedByMe), // the optimistic flip
       predicate<FeedState>((s) => !s.posts.single.likedByMe && s.posts.single.likeCount == 0), // rolled back
+    ],
+  );
+
+  blocTest<FeedCubit, FeedState>(
+    'toggleLike on a post the viewer reacted to with a non-LIKE type predicts '
+    'a removal, not a switch to LIKE — a plain tap takes the reaction back '
+    'whatever type it was (see `FeedRepositoryImpl.toggleLike`)',
+    build: buildCubit,
+    seed: () => FeedState(
+      status: FeedStatus.loaded,
+      posts: [
+        buildPost(id: 'p1').copyWith(reactionCounts: const {'HAHA': 1}, viewerReaction: 'HAHA'),
+      ],
+    ),
+    act: (cubit) {
+      // Failing on purpose: the optimistic emit is what's under test, and a
+      // rollback to the 😆 it started from proves it wasn't a switch to LIKE.
+      when(() => likePost(any())).thenAnswer((_) async => const Left(ServerFailure()));
+      return cubit.toggleLike(
+        buildPost(id: 'p1').copyWith(reactionCounts: const {'HAHA': 1}, viewerReaction: 'HAHA'),
+      );
+    },
+    expect: () => [
+      predicate<FeedState>((s) => s.posts.single.viewerReactionType == null && s.posts.single.reactionTotal == 0),
+      predicate<FeedState>(
+        (s) => s.posts.single.viewerReactionType == ReactionType.haha && s.posts.single.reactionTotal == 1,
+      ),
     ],
   );
 
@@ -587,6 +615,73 @@ void main() {
         // fetch on; this keeps what is already on screen honest meanwhile.
         expect(cubit.state.posts.map((p) => p.id), ['p2']);
         verify(() => muteUser(const MuteParams('u2'))).called(1);
+      },
+    );
+  });
+
+  // What the post's own screen hands back on the way out — see ADR-032.
+  // Nothing re-fetches the feed when a detail screen pops, so this is the
+  // only thing that keeps the card's counts honest.
+  group('replacePost', () {
+    blocTest<FeedCubit, FeedState>(
+      'swaps the post the viewer came back from, leaving its neighbours alone',
+      build: buildCubit,
+      seed: () => FeedState(
+        status: FeedStatus.loaded,
+        posts: [
+          buildPost(id: 'p1', likeCount: 1).copyWith(commentCount: 2),
+          buildPost(id: 'p2', likeCount: 5),
+        ],
+      ),
+      act: (cubit) => cubit.replacePost(buildPost(id: 'p1', likeCount: 2, viewerReaction: 'LIKE').copyWith(
+        commentCount: 3,
+      )),
+      verify: (cubit) {
+        final first = cubit.state.posts.first;
+        expect(first.commentCount, 3);
+        expect(first.reactionTotal, 2);
+        expect(first.viewerReactionType, ReactionType.like);
+        expect(cubit.state.posts.last.reactionTotal, 5);
+      },
+    );
+
+    blocTest<FeedCubit, FeedState>(
+      'ignores a post the feed no longer lists',
+      build: buildCubit,
+      seed: () => FeedState(status: FeedStatus.loaded, posts: [buildPost(id: 'p1')]),
+      act: (cubit) => cubit.replacePost(buildPost(id: 'gone', likeCount: 9)),
+      verify: (cubit) => expect(cubit.state.posts.single.id, 'p1'),
+    );
+
+    blocTest<FeedCubit, FeedState>(
+      'keeps the repost flag this cubit knows about, not the one on the incoming copy',
+      build: () {
+        // The viewer has a repost of `p1` on record, so this feed knows how
+        // to cancel it — `_myRepostIds`, recovered by `refresh()`.
+        when(() => getFeed(any())).thenAnswer(
+          (_) async => Right(FeedPage(posts: [buildPost(id: 'p1')], hasMore: false, nextCursor: null)),
+        );
+        when(() => getUserPosts(any())).thenAnswer(
+          (_) async => Right(
+            UserPostsPage(
+              posts: [buildPost(id: 'r1', originalPost: buildPost(id: 'p1'))],
+              hasMore: false,
+            ),
+          ),
+        );
+        return buildCubit();
+      },
+      act: (cubit) async {
+        await cubit.refresh();
+        // A post that has been round the houses: `repostedByMe` is on no wire
+        // response, so a copy from another screen carries whatever that
+        // screen managed to recover — here, nothing.
+        cubit.replacePost(buildPost(id: 'p1', likeCount: 3));
+      },
+      verify: (cubit) {
+        // Still "Reposted", because this cubit is the one that has to undo it.
+        expect(cubit.state.posts.single.repostedByMe, isTrue);
+        expect(cubit.state.posts.single.reactionTotal, 3);
       },
     );
   });

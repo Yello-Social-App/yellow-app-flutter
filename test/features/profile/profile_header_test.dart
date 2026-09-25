@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yello_social_app/features/auth/domain/entities/user_entity.dart';
@@ -5,10 +6,10 @@ import 'package:yello_social_app/features/friends/domain/entities/friendship_ent
 import 'package:yello_social_app/features/profile/presentation/widgets/profile_header.dart';
 import 'package:yello_social_app/shared/widgets/app_avatar.dart';
 
-/// The profile header overlaps its avatar, camera badge and compose bubble
-/// into the cover, and every one of them is tappable. `Transform.translate`
-/// can't carry taps past its own box (`docs/GOTCHAS.md`) — these tests pin
-/// the `Stack`/`Positioned` layout that can, plus the narrow-width fit, since
+/// The profile header overlaps its avatar and camera badge into the cover,
+/// and both have to stay tappable there. `Transform.translate` can't carry
+/// taps past its own box (`docs/GOTCHAS.md`) — these tests pin the
+/// `Stack`/`Positioned` layout that can, plus the narrow-width fit, since
 /// neither is something `flutter analyze` can see.
 void main() {
   UserEntity user({int friendsCount = 0, int postsCount = 0, String? bio}) => UserEntity(
@@ -31,7 +32,6 @@ void main() {
     UserEntity? withUser,
     List<FriendshipEntity> connections = const [],
     VoidCallback? onEditAvatar,
-    VoidCallback? onCompose,
     VoidCallback? onOpenConnections,
     Size size = const Size(320, 1000),
   }) async {
@@ -47,13 +47,11 @@ void main() {
               user: withUser ?? user(),
               connections: connections,
               isUploadingImage: false,
-              detailsExpanded: false,
-              onToggleDetails: () {},
               onEditAvatar: onEditAvatar ?? () {},
               onEditCover: () {},
               onEditProfile: () {},
               onAddStory: () {},
-              onCompose: onCompose ?? () {},
+              onCompose: () {},
               onOpenConnections: onOpenConnections ?? () {},
             ),
           ),
@@ -62,15 +60,15 @@ void main() {
     );
   }
 
-  testWidgets('lays out without overflow on a narrow phone, counts compacted', (tester) async {
+  testWidgets('lays out without overflow on a narrow phone', (tester) async {
     await pumpHeader(
       tester,
       withUser: user(friendsCount: 4800, postsCount: 3000, bio: 'Building small things on purpose.'),
     );
 
     expect(tester.takeException(), isNull);
-    expect(find.text('4.8K CONNECTIONS  ·  3K POSTS'), findsOneWidget);
-    expect(find.text('Joined March 2026'), findsOneWidget);
+    expect(find.text('Amara Chen'), findsOneWidget);
+    // Joined date and the e-mail read in the details card below, not here.
     expect(find.text('Building small things on purpose.'), findsOneWidget);
   });
 
@@ -78,16 +76,8 @@ void main() {
     var tapped = false;
     await pumpHeader(tester, onEditAvatar: () => tapped = true);
 
-    await tester.tap(find.byIcon(Icons.photo_camera_rounded));
+    await tester.tap(find.byIcon(CupertinoIcons.camera_fill));
     expect(tapped, isTrue, reason: 'the avatar overlaps the cover — the overlap must stay hit-testable');
-  });
-
-  testWidgets('the compose bubble takes a tap while sitting over the cover', (tester) async {
-    var tapped = false;
-    await pumpHeader(tester, onCompose: () => tapped = true);
-
-    await tester.tap(find.text('share something…'));
-    expect(tapped, isTrue);
   });
 
   // Circle is shell branch 1 and has no bottom-nav button; this row is its
@@ -99,6 +89,14 @@ void main() {
     expect(find.text('Find your circle'), findsOneWidget);
     await tester.tap(find.text('Find your circle'));
     expect(tapped, isTrue);
+  });
+
+  // Moved out of the details card when that card stopped being an expander.
+  testWidgets('account status renders beside the connections row', (tester) async {
+    await pumpHeader(tester, withUser: user(friendsCount: 12));
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Account active'), findsOneWidget);
   });
 
   testWidgets('the face-pile shows at most three friends beside the real count', (tester) async {

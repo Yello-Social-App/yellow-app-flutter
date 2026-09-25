@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -97,9 +98,9 @@ class _LoginViewState extends State<_LoginView> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const AuthHero(
-                  icon: Icons.mark_email_read_outlined,
-                  badgeA: Icons.mail_outline,
-                  badgeB: Icons.eco_outlined,
+                  icon: CupertinoIcons.envelope_open,
+                  badgeA: CupertinoIcons.mail,
+                  badgeB: CupertinoIcons.sparkles,
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
@@ -127,7 +128,7 @@ class _LoginViewState extends State<_LoginView> {
                         keyboardType: TextInputType.emailAddress,
                         autofillHints: const [AutofillHints.email],
                         textInputAction: TextInputAction.next,
-                        leadingIcon: Icons.mail_outline,
+                        leadingIcon: CupertinoIcons.mail,
                         onChanged: (_) => setState(() {}),
                       ),
                       const SizedBox(height: 14),
@@ -138,7 +139,7 @@ class _LoginViewState extends State<_LoginView> {
                         autofillHints: const [AutofillHints.password],
                         textInputAction: TextInputAction.done,
                         onSubmitted: (_) => _submit(context),
-                        leadingIcon: Icons.lock_outline,
+                        leadingIcon: CupertinoIcons.lock,
                         onChanged: (_) => setState(() {}),
                         trailing: GestureDetector(
                           onTap: () => setState(
@@ -146,8 +147,8 @@ class _LoginViewState extends State<_LoginView> {
                           ),
                           child: Icon(
                             _obscurePassword
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
+                                ? CupertinoIcons.eye_slash
+                                : CupertinoIcons.eye,
                             size: 19,
                             color: colors.ink3,
                           ),
@@ -371,14 +372,14 @@ class _LoginViewState extends State<_LoginView> {
                         label: 'Verification code',
                         controller: codeController,
                         keyboardType: TextInputType.number,
-                        leadingIcon: Icons.password_outlined,
+                        leadingIcon: CupertinoIcons.lock_shield,
                       ),
                       const SizedBox(height: 12),
                       AuthFormField(
                         label: 'New password',
                         controller: newPasswordController,
                         obscureText: true,
-                        leadingIcon: Icons.lock_outline,
+                        leadingIcon: CupertinoIcons.lock,
                       ),
                       const SizedBox(height: 16),
                       AppButton(
@@ -428,7 +429,7 @@ class _LoginViewState extends State<_LoginView> {
                       label: 'Email',
                       controller: emailController,
                       keyboardType: TextInputType.emailAddress,
-                      leadingIcon: Icons.mail_outline,
+                      leadingIcon: CupertinoIcons.mail,
                     ),
                     const SizedBox(height: 16),
                     AppButton(

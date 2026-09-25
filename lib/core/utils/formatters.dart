@@ -21,12 +21,12 @@ abstract final class Formatters {
   static String relativeShort(DateTime from, {DateTime? now}) {
     final n = now ?? DateTime.now();
     final diff = n.difference(from);
-    if (diff.inMinutes < 1) return 'NOW';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}M';
+    if (diff.inMinutes < 1) return 'Now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}Min';
     if (diff.inHours < 24) return '${diff.inHours}H';
     if (diff.inDays == 1) return 'YDAY';
     if (diff.inDays < 7) {
-      const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       return days[from.weekday - 1];
     }
     return '${from.month}/${from.day}';

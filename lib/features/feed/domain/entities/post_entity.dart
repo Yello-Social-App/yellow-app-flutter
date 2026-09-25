@@ -24,9 +24,16 @@ enum ReactionType {
     ReactionType.angry => 'ANGRY',
   };
 
+  /// The glyph this app draws for each type. A *display* choice, not a wire
+  /// one: `LOVE` deliberately renders as 🖕 rather than ❤️ (asked for
+  /// 2026-09-25, see ADR-031) — the backend enum is closed at six values, so
+  /// a 🖕 tile has to borrow one of them, and `LOVE` is the one this app's
+  /// quick-tap heart does *not* already stand for. It still travels as
+  /// `LOVE` on the wire and counts as `LOVE` in the breakdown, so a client
+  /// that hasn't made the same swap shows those reactions as ❤️.
   String get emoji => switch (this) {
     ReactionType.like => '👍',
-    ReactionType.love => '❤️',
+    ReactionType.love => '🖕',
     ReactionType.haha => '😆',
     ReactionType.wow => '😮',
     ReactionType.sad => '😢',

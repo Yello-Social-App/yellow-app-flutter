@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -56,7 +57,7 @@ class FilterDropdownPill extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 2),
-              Icon(Icons.keyboard_arrow_down, size: 16, color: foreground),
+              Icon(CupertinoIcons.chevron_down, size: 16, color: foreground),
             ],
           ),
         ),

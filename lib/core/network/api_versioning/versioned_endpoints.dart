@@ -65,6 +65,57 @@ abstract final class VersionedEndpoints {
   // Feed (cursor-paginated)
   static String feed() => _r.resolve('/feed', ApiVersion.v1);
 
+  // ---------------------------------------------------------------------
+  // Stories. Added 2026-09-24 from the backend's own Stories reference;
+  // like the feedback/reports block above, this has **not** yet been
+  // re-checked against the served OpenAPI document — re-verify on the next
+  // `/docs` pass. Everything here is page-number-paginated (`page`/`size`),
+  // never cursor-paged, except the two plain-array reads (`/stories/me`
+  // and `/users/{id}/stories`), which take no paging at all.
+  // ---------------------------------------------------------------------
+
+  /// `POST` one story — JSON for a `TEXT` story, `multipart/form-data`
+  /// (field `image`, singular and unbracketed, unlike `/posts`' `images[]`)
+  /// for an `IMAGE` one. Capped at 10/min and 100/day per user.
+  static String stories() => _r.resolve('/stories', ApiVersion.v1);
+
+  /// `GET /stories/feed?page=&size=` — friends' active stories grouped by
+  /// author (`Page<StoryFeedGroup>`). Your own stories are **not** in it;
+  /// [storiesMe] is the first ring.
+  static String storyFeed() => _r.resolve('/stories/feed', ApiVersion.v1);
+
+  /// `GET /stories/me` — your own active stories, oldest first. A bare
+  /// array (≤ 100), not a page, and the only read where `viewCount` is set.
+  static String storiesMe() => _r.resolve('/stories/me', ApiVersion.v1);
+
+  /// `GET /stories/archive?page=&size=&from=&to=&type=` — your own stories
+  /// including expired ones, newest first. Owner-only by definition.
+  static String storyArchive() => _r.resolve('/stories/archive', ApiVersion.v1);
+
+  /// `GET /users/{id}/stories` — one user's active stories you may see, a
+  /// bare array. Friends get `FRIENDS`+`PUBLIC`, anyone else `PUBLIC` only.
+  static String userStories(String userId) => _r.resolve('/users/$userId/stories', ApiVersion.v1);
+
+  /// `GET` one story (deep link, or to re-sign an expired image URL),
+  /// `DELETE` one you own. A story that expired answers `404` for everyone
+  /// but its owner, who keeps reading it from the archive.
+  static String story(String storyId) => _r.resolve('/stories/$storyId', ApiVersion.v1);
+
+  /// `POST` — marks the story seen by you. `204`, idempotent, and a no-op
+  /// on your own story. 120/min per user.
+  static String storyView(String storyId) => _r.resolve('/stories/$storyId/view', ApiVersion.v1);
+
+  /// `GET /stories/{id}/viewers?page=&size=` — owner only; anyone else gets
+  /// `404` (not `403`, so the story's existence is never confirmed). The
+  /// list is dropped 48 h after posting while `viewCount` survives.
+  static String storyViewers(String storyId) => _r.resolve('/stories/$storyId/viewers', ApiVersion.v1);
+
+  /// `POST /stories/{id}/replies` — `202 Accepted`. yello-api checks the
+  /// story and the friendship, then yello-chat delivers it as an ordinary
+  /// DM carrying `Message.storyReply`; the message itself arrives over the
+  /// chat socket a moment later, not in this response. 30/min per user.
+  static String storyReplies(String storyId) => _r.resolve('/stories/$storyId/replies', ApiVersion.v1);
+
   // Friends
   static String friends() => _r.resolve('/friends', ApiVersion.v1);
   static String friendRequests() => _r.resolve('/friends/requests', ApiVersion.v1);

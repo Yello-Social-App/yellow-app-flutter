@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -19,6 +20,7 @@ import '../../../../shared/widgets/error_view.dart';
 import '../../../../shared/widgets/app_warning_dialog.dart';
 import '../../../../shared/widgets/image_placeholder.dart';
 import '../../../chat/domain/usecases/chat_usecases.dart';
+import '../../../feed/domain/entities/post_entity.dart';
 import '../../../feed/presentation/widgets/post_card.dart';
 import '../bloc/public_profile_cubit.dart';
 import '../widgets/shimmer_profile_view.dart';
@@ -95,7 +97,7 @@ class _PublicProfileViewState extends State<_PublicProfileView> {
             child: SafeArea(
               bottom: false,
               child: AppIconButton(
-                icon: const Icon(Icons.arrow_back),
+                icon: const Icon(CupertinoIcons.back),
                 size: 38,
                 onPressed: () => Navigator.of(context).maybePop(),
                 backgroundColor: Colors.black.withValues(alpha: 0.35),
@@ -335,7 +337,7 @@ class _BodyState extends State<_Body> {
                                                     'You will no longer see each other’s profile or posts.',
                                                 confirmLabel: 'Block',
                                                 cancelLabel: 'Cancel',
-                                                icon: Icons.block,
+                                                icon: CupertinoIcons.nosign,
                                               );
                                           if (!confirmed || !context.mounted) {
                                             return;
@@ -459,10 +461,7 @@ class _BodyState extends State<_Body> {
                 for (final post in visiblePosts)
                   PostCard(
                     post: post,
-                    onOpen: () => context.pushNamed(
-                      RouteNames.postDetail,
-                      pathParameters: {'postId': post.id},
-                    ),
+                    onOpen: () => _openPost(context, cubit, post.id),
                     onLike: () => cubit.toggleLike(post),
                     onReact: (type) => cubit.react(post, type),
                     onSave: () => cubit.toggleSave(post.id),
@@ -592,7 +591,7 @@ class _FriendAction extends StatelessWidget {
                 child: SizedBox(
                   width: 34,
                   height: 34,
-                  child: Icon(Icons.close, size: 15, color: colors.ink2),
+                  child: Icon(CupertinoIcons.xmark, size: 15, color: colors.ink2),
                 ),
               ),
             ),
@@ -678,4 +677,12 @@ class _StatTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Opens the post's own screen and applies whatever it pops back onto this
+/// row — a reaction or a comment made in there changes counts the card here
+/// shows, and nothing re-fetches this list on the way back. See ADR-032.
+Future<void> _openPost(BuildContext context, PublicProfileCubit cubit, String postId) async {
+  final updated = await context.pushNamed<PostEntity>(RouteNames.postDetail, pathParameters: {'postId': postId});
+  if (updated != null) cubit.applyUpdated(updated);
 }

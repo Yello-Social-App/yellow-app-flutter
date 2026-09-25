@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -112,7 +113,7 @@ class _GroupInfoView extends StatelessWidget {
           ? 'The longest-standing admin takes over as owner. You will need an invite to come back.'
           : 'You will need an invite to come back.',
       confirmLabel: 'Leave',
-      icon: Icons.logout,
+      icon: CupertinoIcons.square_arrow_right,
     );
     if (confirmed && context.mounted) unawaited(cubit.leave());
   }
@@ -155,7 +156,7 @@ class _GroupInfoView extends StatelessWidget {
                   Row(
                     children: [
                       AppIconButton(
-                        icon: const Icon(Icons.arrow_back),
+                        icon: const Icon(CupertinoIcons.back),
                         onPressed: () => Navigator.of(context).maybePop(),
                       ),
                       const SizedBox(width: 12),
@@ -181,7 +182,7 @@ class _GroupInfoView extends StatelessWidget {
                         Expanded(
                           child: AppButton(
                             label: 'Add people',
-                            icon: const Icon(Icons.person_add_alt_1_outlined, size: 18),
+                            icon: const Icon(CupertinoIcons.person_add, size: 18),
                             dense: true,
                             fullWidth: true,
                             onPressed: state.isSaving || conversation.participants.length >= groupMaxMembers
@@ -193,7 +194,7 @@ class _GroupInfoView extends StatelessWidget {
                         Expanded(
                           child: AppButton(
                             label: 'Send invite',
-                            icon: const Icon(Icons.mail_outline, size: 18),
+                            icon: const Icon(CupertinoIcons.mail, size: 18),
                             dense: true,
                             fullWidth: true,
                             variant: AppButtonVariant.outline,
@@ -217,7 +218,7 @@ class _GroupInfoView extends StatelessWidget {
                     const SizedBox(height: 24),
                     AppButton(
                       label: 'Leave group',
-                      icon: const Icon(Icons.logout, size: 18),
+                      icon: const Icon(CupertinoIcons.square_arrow_right, size: 18),
                       variant: AppButtonVariant.danger,
                       fullWidth: true,
                       onPressed: state.isSaving ? null : () => _leave(context),
@@ -277,7 +278,7 @@ class _IdentityCard extends StatelessWidget {
                   right: -4,
                   bottom: -4,
                   child: AppIconButton(
-                    icon: const Icon(Icons.photo_camera_outlined, size: 16),
+                    icon: const Icon(CupertinoIcons.camera, size: 16),
                     size: 32,
                     filled: true,
                     borderColor: colors.ink,
@@ -302,7 +303,7 @@ class _IdentityCard extends StatelessWidget {
               if (canManage) ...[
                 const SizedBox(width: 6),
                 AppIconButton(
-                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  icon: const Icon(CupertinoIcons.pencil, size: 16),
                   size: 32,
                   onPressed: busy ? null : onRename,
                 ),
@@ -440,7 +441,7 @@ class _MemberRow extends StatelessWidget {
           else if (actions.isNotEmpty)
             PopupMenuButton<_MemberAction>(
               enabled: !disabled,
-              icon: Icon(Icons.more_vert, color: colors.ink2),
+              icon: Icon(CupertinoIcons.ellipsis_vertical, color: colors.ink2),
               onSelected: (action) => switch (action) {
                 _MemberAction.promote => cubit.setRole(member.userId, ParticipantRole.admin),
                 _MemberAction.demote => cubit.setRole(member.userId, ParticipantRole.member),
@@ -588,9 +589,9 @@ class _PhotoSheet extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              row(Icons.photo_library_outlined, 'Choose from library', _PhotoChoice.gallery),
-              row(Icons.photo_camera_outlined, 'Take a photo', _PhotoChoice.camera),
-              if (hasPhoto) row(Icons.delete_outline, 'Remove photo', _PhotoChoice.remove, destructive: true),
+              row(CupertinoIcons.photo_on_rectangle, 'Choose from library', _PhotoChoice.gallery),
+              row(CupertinoIcons.camera, 'Take a photo', _PhotoChoice.camera),
+              if (hasPhoto) row(CupertinoIcons.delete, 'Remove photo', _PhotoChoice.remove, destructive: true),
             ],
           ),
         ),
@@ -723,7 +724,7 @@ class _FriendPickRow extends StatelessWidget {
               ),
             ),
             Icon(
-              selected ? Icons.check_circle : Icons.radio_button_unchecked,
+              selected ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.circle,
               color: selected ? colors.ink : colors.ink3,
             ),
           ],

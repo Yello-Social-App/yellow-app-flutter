@@ -1,27 +1,77 @@
+import 'dart:io';
+
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image_picker/image_picker.dart';
 
-import '../../../../shared/widgets/image_placeholder.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../core/di/injection.dart';
+import '../../../../shared/widgets/app_status_snackbar.dart';
+import '../../domain/entities/story_entity.dart';
+import '../bloc/story_compose_cubit.dart';
+import '../widgets/story_background.dart';
 
-/// Story-capture screen. There's no camera/media pipeline behind this yet
-/// (see `shared/widgets/image_placeholder.dart`) — this reproduces the
-/// mockup's chrome (tools rail, caption field, audience buttons) around the
-/// placeholder frame so the flow is complete visually even before a real
-/// capture step exists.
-class StoryComposePage extends StatefulWidget {
+/// "Add to your story" — one screen for both kinds of story, because
+/// `POST /stories` is one path with two request bodies: JSON for a `TEXT`
+/// story on a cover, multipart for an `IMAGE` one with an optional caption.
+///
+/// Pops with the created [StoryEntity] so the caller can drop it straight
+/// into "Your story"; the spec is explicit that no follow-up
+/// `GET /stories/me` is needed.
+class StoryComposePage extends StatelessWidget {
   const StoryComposePage({super.key});
 
   @override
-  State<StoryComposePage> createState() => _StoryComposePageState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) => sl<StoryComposeCubit>(),
+      child: const _StoryComposeView(),
+    );
+  }
 }
 
-class _StoryComposePageState extends State<StoryComposePage> {
-  final _captionController = TextEditingController();
-  static const _tools = [Icons.title, Icons.emoji_emotions_outlined, Icons.edit_outlined, Icons.circle_outlined];
+class _StoryComposeView extends StatefulWidget {
+  const _StoryComposeView();
+
+  @override
+  State<_StoryComposeView> createState() => _StoryComposeViewState();
+}
+
+class _StoryComposeViewState extends State<_StoryComposeView> {
+  final _textController = TextEditingController();
+  final _picker = ImagePicker();
 
   @override
   void dispose() {
-    _captionController.dispose();
+    _textController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pick(ImageSource source) async {
+    // Downscaled in the picker rather than shipped raw: the backend refuses
+    // anything over 16 MP outright (`400 INVALID_IMAGE`) and re-encodes the
+    // rest to fit 1080x1920 anyway, so sending a 12 MP original just makes
+    // the upload slower for the user.
+    final picked = await _picker.pickImage(
+      source: source,
+      imageQuality: 88,
+      maxWidth: AppConstants.storyImageMaxDimension,
+      maxHeight: AppConstants.storyImageMaxDimension,
+    );
+    if (picked == null || !mounted) return;
+    context.read<StoryComposeCubit>().setImage(File(picked.path));
+  }
+
+  Future<void> _post() async {
+    final cubit = context.read<StoryComposeCubit>();
+    final ok = await cubit.post();
+    if (!mounted) return;
+    if (!ok) {
+      AppStatusSnackbar.showError(context, message: cubit.state.errorMessage ?? 'Could not post your story.');
+      return;
+    }
+    Navigator.of(context).pop(cubit.posted);
   }
 
   @override
@@ -33,100 +83,234 @@ class _StoryComposePageState extends State<StoryComposePage> {
     // device rather than whichever one the design was eyeballed against.
     final topInset = MediaQuery.paddingOf(context).top;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
-    return Scaffold(
-      backgroundColor: const Color(0xFF0B0A07),
-      body: Stack(
-        children: [
-          const Positioned.fill(child: ImagePlaceholder(caption: 'drop a photo for your story', dark: true)),
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.6),
-                    Colors.transparent,
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.85),
-                  ],
-                  stops: const [0, 0.30, 0.58, 1],
-                ),
+    // The bottom chrome (caption/cover picker/share) rides above the keyboard
+    // by hand, because `resizeToAvoidBottomInset: false` below leaves the
+    // Stack at full height when the IME opens — without this the caption
+    // field sits behind the keyboard and the user types blind. Same trade as
+    // the viewer: resizing the Scaffold instead would reframe the photo
+    // preview away from how the story actually plays back.
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+
+    return BlocBuilder<StoryComposeCubit, StoryComposeState>(
+      builder: (context, state) {
+        final cubit = context.read<StoryComposeCubit>();
+        return Scaffold(
+          backgroundColor: const Color(0xFF0B0A07),
+          // The bottom chrome rides above the keyboard by hand (see
+          // `keyboardInset` above), so the Scaffold must not also resize.
+          resizeToAvoidBottomInset: false,
+          body: Stack(
+            children: [
+              Positioned.fill(
+                child: state.isPhoto
+                    // `contain`, matching `_StoryFrame` in the viewer — the
+                    // composer has to frame the shot exactly as it will play
+                    // back, or the user picks a photo against a preview that
+                    // crops differently from the posted story.
+                    ? Image.file(state.image!, fit: BoxFit.contain)
+                    : DecoratedBox(decoration: BoxDecoration(gradient: storyBackgroundGradient(state.background))),
               ),
-            ),
-          ),
-          Positioned(
-            top: 50 + topInset,
-            left: 14,
-            right: 14,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _RoundButton(icon: Icons.close, onTap: () => Navigator.of(context).maybePop()),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+              Positioned.fill(
+                child: DecoratedBox(
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
-                    color: Colors.black.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: const Text(
-                    'STORY · 24H',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.5,
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.55),
+                        Colors.transparent,
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.85),
+                      ],
+                      stops: const [0, 0.28, 0.55, 1],
                     ),
                   ),
                 ),
-                const SizedBox(width: 38),
-              ],
-            ),
-          ),
-          Positioned(
-            top: 104 + topInset,
-            right: 14,
-            child: Column(
-              children: [
-                for (final tool in _tools)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 9),
-                    child: _RoundButton(icon: tool),
-                  ),
-              ],
-            ),
-          ),
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 104 + bottomInset,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 17),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1.5),
-                color: Colors.black.withValues(alpha: 0.42),
-                borderRadius: BorderRadius.circular(999),
               ),
-              child: TextField(
-                controller: _captionController,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-                decoration: InputDecoration(
-                  hintText: 'Add a caption',
-                  hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.55)),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
+
+              // The text itself, centred on a cover story the way it will
+              // play back. On a photo it is a caption, so it stays small and
+              // sits with the rest of the bottom chrome.
+              if (!state.isPhoto)
+                Positioned(
+                  left: 22,
+                  right: 22,
+                  top: 150 + topInset,
+                  bottom: 220 + bottomInset + keyboardInset,
+                  child: Center(
+                    child: TextField(
+                      controller: _textController,
+                      onChanged: cubit.setText,
+                      maxLines: null,
+                      maxLength: AppConstants.storyMaxChars,
+                      textAlign: TextAlign.center,
+                      cursorColor: storyBackgroundForeground(state.background),
+                      style: TextStyle(
+                        color: storyBackgroundForeground(state.background),
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.8,
+                        height: 1.12,
+                      ),
+                      decoration: InputDecoration(
+                        counterText: '',
+                        border: InputBorder.none,
+                        hintText: 'Say something',
+                        hintStyle: TextStyle(
+                          color: storyBackgroundForeground(state.background).withValues(alpha: 0.45),
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+              Positioned(
+                top: 50 + topInset,
+                left: 14,
+                right: 14,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _RoundButton(icon: CupertinoIcons.xmark, onTap: () => Navigator.of(context).maybePop()),
+                    _VisibilityPill(
+                      visibility: state.visibility,
+                      onTap: () => cubit.setVisibility(
+                        state.visibility == StoryVisibility.public
+                            ? StoryVisibility.friends
+                            : StoryVisibility.public,
+                      ),
+                    ),
+                    _RoundButton(
+                      icon: state.isPhoto ? CupertinoIcons.textformat : CupertinoIcons.photo_on_rectangle,
+                      onTap: state.isPhoto ? cubit.clearImage : () => _pick(ImageSource.gallery),
+                    ),
+                  ],
                 ),
               ),
+
+              Positioned(
+                top: 104 + topInset,
+                right: 14,
+                child: Column(
+                  children: [
+                    _RoundButton(icon: CupertinoIcons.camera, onTap: () => _pick(ImageSource.camera)),
+                    const SizedBox(height: 9),
+                    _RoundButton(icon: CupertinoIcons.photo, onTap: () => _pick(ImageSource.gallery)),
+                  ],
+                ),
+              ),
+
+              // Cover picker — text stories only; the server ignores
+              // `background` entirely on an image story.
+              if (!state.isPhoto)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 96 + bottomInset + keyboardInset,
+                  child: SizedBox(
+                    height: 48,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      itemCount: StoryBackground.all.length,
+                      itemBuilder: (context, index) {
+                        final cover = StoryBackground.all[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 9),
+                          child: StoryCoverSwatch(
+                            background: cover,
+                            selected: cover == state.background,
+                            onTap: () => cubit.setBackground(cover),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+
+              if (state.isPhoto)
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 96 + bottomInset + keyboardInset,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 17),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1.5),
+                      color: Colors.black.withValues(alpha: 0.42),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: TextField(
+                      controller: _textController,
+                      onChanged: cubit.setText,
+                      maxLength: AppConstants.storyMaxChars,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      decoration: InputDecoration(
+                        counterText: '',
+                        hintText: 'Add a caption',
+                        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.55)),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                ),
+
+              Positioned(
+                left: 14,
+                right: 14,
+                bottom: 30 + bottomInset + keyboardInset,
+                child: _PostButton(
+                  enabled: state.canPost,
+                  busy: state.isPosting,
+                  label: state.visibility == StoryVisibility.public ? 'Share publicly' : 'Share with friends',
+                  onTap: _post,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _VisibilityPill extends StatelessWidget {
+  const _VisibilityPill({required this.visibility, required this.onTap});
+
+  final StoryVisibility visibility;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isPublic = visibility == StoryVisibility.public;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+          color: Colors.black.withValues(alpha: 0.4),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(isPublic ? CupertinoIcons.globe : CupertinoIcons.person_2, size: 13, color: Colors.white),
+            const SizedBox(width: 7),
+            Text(
+              '${visibility.label.toUpperCase()} · 24H',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.5,
+              ),
             ),
-          ),
-          Positioned(
-            left: 14,
-            right: 14,
-            bottom: 30 + bottomInset,
-            child: _PillButton(label: 'Share story', filled: true, onTap: () => Navigator.of(context).maybePop()),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -134,6 +318,7 @@ class _StoryComposePageState extends State<StoryComposePage> {
 
 class _RoundButton extends StatelessWidget {
   const _RoundButton({required this.icon, this.onTap});
+
   final IconData icon;
   final VoidCallback? onTap;
 
@@ -151,34 +336,39 @@ class _RoundButton extends StatelessWidget {
   }
 }
 
-class _PillButton extends StatelessWidget {
-  const _PillButton({required this.label, required this.filled, required this.onTap});
+class _PostButton extends StatelessWidget {
+  const _PostButton({required this.enabled, required this.busy, required this.label, required this.onTap});
+
+  final bool enabled;
+  final bool busy;
   final String label;
-  final bool filled;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    const ink = Color(0xFF14120C);
     return Material(
-      color: filled ? const Color(0xFFF4C542) : Colors.black.withValues(alpha: 0.4),
+      color: enabled ? const Color(0xFFF4C542) : const Color(0xFF6B6558),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(999),
-        side: BorderSide(color: filled ? const Color(0xFF14120C) : Colors.white.withValues(alpha: 0.4), width: 1.5),
+        side: const BorderSide(color: ink, width: 1.5),
       ),
       child: InkWell(
-        onTap: onTap,
+        onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(999),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 15),
           child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                color: filled ? const Color(0xFF14120C) : Colors.white,
-                fontWeight: filled ? FontWeight.w800 : FontWeight.w700,
-                fontSize: 12,
-              ),
-            ),
+            child: busy
+                ? const SizedBox(
+                    width: 17,
+                    height: 17,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: ink),
+                  )
+                : Text(
+                    label,
+                    style: const TextStyle(color: ink, fontWeight: FontWeight.w800, fontSize: 12),
+                  ),
           ),
         ),
       ),

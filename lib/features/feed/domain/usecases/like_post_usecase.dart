@@ -14,10 +14,12 @@ class PostIdParams extends Equatable {
   List<Object?> get props => [postId];
 }
 
-/// Toggles the current user's `LIKE` reaction via the single POST toggle
-/// endpoint. Takes the whole [PostEntity] (not just its id) so the result
-/// can be returned as that same post merged with the backend's fresh
-/// reaction summary.
+/// The quick-like tap: adds `LIKE`, or removes the viewer's existing
+/// reaction of *any* type, via the single POST toggle endpoint — see
+/// `FeedRepository.toggleLike`. Takes the whole [PostEntity] (not just its
+/// id) both so the result can be returned as that same post merged with the
+/// backend's fresh reaction summary, and because the repository needs
+/// `viewerReaction` to know which type to echo back for an un-react.
 class LikePostUseCase implements UseCase<PostEntity, PostEntity> {
   LikePostUseCase(this._repository);
 

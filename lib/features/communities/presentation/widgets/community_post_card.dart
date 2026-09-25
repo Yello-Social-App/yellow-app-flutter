@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -7,6 +8,8 @@ import '../../../../core/utils/formatters.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
 import '../../../feed/domain/entities/post_entity.dart' show ReactionType;
+import '../../../feed/presentation/widgets/reaction_glyph.dart';
+import '../../../feed/presentation/widgets/reaction_picker.dart';
 import '../../domain/entities/community_post_entity.dart';
 import 'vote_arrow_icon.dart';
 
@@ -144,7 +147,7 @@ class CommunityPostCard extends StatelessWidget {
                         ),
                         const Spacer(),
                         _MetaPill(
-                          icon: Icons.mode_comment_outlined,
+                          icon: CupertinoIcons.bubble_left,
                           label: Formatters.compactCount(post.commentCount),
                         ),
                         const SizedBox(width: 6),
@@ -302,9 +305,9 @@ class _MetaPill extends StatelessWidget {
   }
 }
 
-/// Tap to LIKE, long-press for the full six-type picker — the same gesture
-/// split the feed's post card uses, so the reaction affordance is consistent
-/// across both kinds of post.
+/// Tap to react (or un-react), long-press for the floating six-type picker —
+/// the same gesture split, and now the same picker, the feed's post card
+/// uses, so the reaction affordance is consistent across both kinds of post.
 class _ReactionPill extends StatelessWidget {
   const _ReactionPill({
     required this.total,
@@ -338,11 +341,18 @@ class _ReactionPill extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Text(
-              viewerReaction?.emoji ?? ReactionType.like.emoji,
-              style: TextStyle(
-                fontSize: 12,
-                color: reacted ? null : colors.ink3,
+            // Fixed-size slot: emoji advance widths differ per glyph, so
+            // laying this out at its natural size resized the pill whenever
+            // the active reaction changed. See [ReactionGlyphSlot].
+            ReactionGlyphSlot(
+              size: 14,
+              child: Text(
+                viewerReaction?.emoji ?? ReactionType.like.emoji,
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1,
+                  color: reacted ? null : colors.ink3,
+                ),
               ),
             ),
             if (total > 0) ...[
@@ -360,50 +370,12 @@ class _ReactionPill extends StatelessWidget {
     );
   }
 
-  void _showPicker(BuildContext context) {
-    final colors = AppColors.of(context);
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: colors.surf,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.xxl)),
-      ),
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              for (final type in ReactionType.values)
-                GestureDetector(
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    onReact(type);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: viewerReaction == type
-                          ? colors.yelb
-                          : colors.surf2,
-                      border: Border.all(
-                        color: viewerReaction == type
-                            ? colors.yel
-                            : colors.line,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Text(
-                      type.emoji,
-                      style: const TextStyle(fontSize: 22),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
+  /// The same floating rail the feed's post card and comment rows use — it
+  /// anchors to this pill, so a long press here behaves identically to one
+  /// on a feed post. Previously a bottom sheet of its own, a near-copy of
+  /// the one the feed had.
+  Future<void> _showPicker(BuildContext pillContext) async {
+    final picked = await showReactionPicker(pillContext, current: viewerReaction);
+    if (picked != null) onReact(picked);
   }
 }

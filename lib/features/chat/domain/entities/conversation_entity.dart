@@ -20,7 +20,7 @@ enum ConversationType {
 /// text from "no text" — [attachment] is the honest default for the latter.
 /// When this client applies a full [MessageEntity] itself
 /// (`MessagesCubit.applyIncomingMessage`) it knows better and says so.
-enum LastMessageKind { text, attachment, invite, deleted }
+enum LastMessageKind { text, attachment, voice, invite, deleted }
 
 /// The trimmed message `yello-chat` embeds in a conversation summary — just
 /// enough to render an inbox row without fetching history.
@@ -46,7 +46,9 @@ class LastMessageEntity extends Equatable {
                 ? LastMessageKind.invite
                 : message.hasText
                     ? LastMessageKind.text
-                    : LastMessageKind.attachment,
+                    : message.attachments.any((a) => a.isVoice)
+                        ? LastMessageKind.voice
+                        : LastMessageKind.attachment,
       );
 
   final String id;
@@ -60,6 +62,9 @@ class LastMessageEntity extends Equatable {
     if (kind == LastMessageKind.deleted) return 'Message deleted';
     if (kind == LastMessageKind.invite) return 'Sent a group invite';
     if (body.isNotEmpty) return body;
+    // Same words the push notification uses for one, so the row and the
+    // alert that announced it do not describe the same message differently.
+    if (kind == LastMessageKind.voice) return 'Sent a voice message';
     return 'Sent an attachment';
   }
 

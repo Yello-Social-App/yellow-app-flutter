@@ -3,12 +3,15 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/audio/voice_note_player.dart';
+import '../../../../core/audio/voice_note_plays_store.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/notifications/push_notification_service.dart';
@@ -24,6 +27,7 @@ import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/app_warning_dialog.dart';
 import '../../../../shared/widgets/error_view.dart';
+import '../../../../shared/widgets/photo_viewer_page.dart';
 import '../../domain/entities/attachment_entity.dart';
 import '../../domain/entities/conversation_entity.dart';
 import '../../domain/entities/group_invite_entity.dart';
@@ -31,6 +35,9 @@ import '../../domain/entities/message_entity.dart';
 import '../../domain/entities/participant_entity.dart';
 import '../bloc/chat_cubit.dart';
 import '../bloc/messages_cubit.dart';
+import '../widgets/story_reply_preview.dart';
+import '../widgets/voice_note_bubble.dart';
+import '../widgets/voice_recorder_sheet.dart';
 
 /// The quick-react palette on a long-pressed bubble. Any single emoji is
 /// accepted by the server; these six are what one tap offers.
@@ -209,7 +216,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
           title: 'Unsend this message?',
           message: 'It will be removed for everyone in the conversation.',
           confirmLabel: 'Unsend',
-          icon: Icons.delete_outline,
+          icon: CupertinoIcons.delete,
         );
         if (confirmed && mounted) unawaited(cubit.deleteMessage(message));
     }
@@ -263,6 +270,116 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
       });
     } finally {
       _isJumping = false;
+    }
+  }
+
+  /// Opens the recorder, and sends whatever comes back from it.
+  ///
+  /// The sheet returns an attachment that is already uploaded and pending on
+  /// the server, so all that is left here is the message that points at it —
+  /// which goes out through the ordinary optimistic-bubble path.
+  Future<void> _recordVoice() async {
+    final cubit = context.read<ChatCubit>();
+    final voice = await showVoiceRecorder(
+      context,
+      conversationId: widget.conversationId,
+      conversationName: _conversation(cubit.state)?.firstName ?? 'this chat',
+    );
+    if (voice == null || !mounted) return;
+    await cubit.sendVoiceNote(voice);
+  }
+
+  /// Plays (or pauses) a voice note, re-signing its link first if the hour
+  /// it was good for has run out.
+  Future<void> _playVoice(AttachmentEntity attachment) async {
+    final player = sl<VoiceNotePlayer>();
+    // Pausing the note that is already loaded needs no link at all — and
+    // asking for one would put a network round trip in front of a pause.
+    if (!player.playback.value.isFor(attachment.id)) {
+      final url = await context.read<ChatCubit>().playableVoiceUrl(attachment);
+      if (!mounted) return;
+      if (url == null) {
+        AppStatusSnackbar.showError(context, message: "That voice message isn't available.");
+        return;
+      }
+      final ok = await player.toggle(noteId: attachment.id, url: url);
+      if (!ok) {
+        if (mounted) {
+          AppStatusSnackbar.showError(context, message: "Couldn't play that voice message.");
+        }
+        return;
+      }
+      // Heard as soon as it starts, not when it ends: a note the user
+      // listened to half of is not new any more, and waiting for the end
+      // would leave one they scrubbed through still wearing the accent.
+      // Not awaited — the waveform drops out of the accent on the notifier,
+      // and the prefs write is only what makes that survive a restart.
+      unawaited(sl<VoiceNotePlaysStore>().markHeard(attachment.id));
+      return;
+    }
+    await player.toggle(noteId: attachment.id, url: attachment.url ?? '');
+  }
+
+  /// Expands a message's pictures full screen, on the one that was tapped.
+  ///
+  /// Handled here rather than in the bubble for the same reason as
+  /// [_playVoice]: a presigned link that has aged out has to be re-signed
+  /// first, or the viewer opens on a 403. The attachment ids ride along as
+  /// cache keys so the viewer reads the files the thumbnails already
+  /// downloaded instead of fetching them again under their new URLs.
+  Future<void> _openImages(List<AttachmentEntity> images, int index) async {
+    final urls = await context.read<ChatCubit>().viewableImageUrls(images);
+    if (!mounted) return;
+    openPhotoViewer(context, imageUrls: urls, initialIndex: index, cacheKeys: [for (final image in images) image.id]);
+  }
+
+  /// Whether the transcript has already been pinned to its newest message
+  /// once. The first pin is the one that has to fight the extent estimate
+  /// (see [_pinToBottom]); every later one is a single new row arriving at
+  /// a list that is already sitting at the bottom.
+  bool _didPinToBottom = false;
+
+  /// Frames [_pinToBottom] will spend chasing a growing extent before it
+  /// gives up. It settles in two or three; this only stops a pathological
+  /// list from looping.
+  static const int _pinMaxFrames = 12;
+
+  /// Pins the list to the newest message.
+  ///
+  /// `ListView.builder` lays out only what fits, so `maxScrollExtent` is an
+  /// **estimate** extrapolated from the rows built so far — and chat rows
+  /// are nothing like uniform (a one-word reply, a photo, an invite card,
+  /// a date divider). A single `animateTo(maxScrollExtent)` therefore runs
+  /// at a target that is still growing underneath it and stops somewhere in
+  /// the middle of the transcript. That is exactly what opening a
+  /// conversation did: it landed mid-history instead of on the last
+  /// message.
+  ///
+  /// So the opening pin jumps rather than animates, then lets the frame
+  /// build the rows that jump exposed, re-reads the extent, and jumps again
+  /// until it stops moving. Once the list is at the bottom, a new message
+  /// only adds one row, and [animate] scrolls it into view the way it
+  /// always did.
+  Future<void> _pinToBottom({required bool animate}) async {
+    if (!_scrollController.hasClients) return;
+    if (animate) {
+      await _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+      return;
+    }
+    var previousExtent = -1.0;
+    for (var frame = 0; frame < _pinMaxFrames; frame++) {
+      if (!_scrollController.hasClients) return;
+      final extent = _scrollController.position.maxScrollExtent;
+      // Settled: this frame built no rows the last jump hadn't accounted for.
+      if (extent <= previousExtent) return;
+      _scrollController.jumpTo(extent);
+      previousExtent = extent;
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
     }
   }
 
@@ -341,13 +458,13 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                   listenWhen: (previous, current) =>
                       previous.messages.lastOrNull?.id != current.messages.lastOrNull?.id,
                   listener: (context, state) {
+                    // First one in is the conversation opening — land on the
+                    // last message with no visible travel. After that a new
+                    // message slides up.
+                    final animate = _didPinToBottom;
+                    _didPinToBottom = true;
                     WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (!_scrollController.hasClients) return;
-                      _scrollController.animateTo(
-                        _scrollController.position.maxScrollExtent,
-                        duration: const Duration(milliseconds: 250),
-                        curve: Curves.easeOut,
-                      );
+                      if (mounted) unawaited(_pinToBottom(animate: animate));
                     });
                   },
                   buildWhen: (previous, current) =>
@@ -407,10 +524,13 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                                 lastInRun: index == messages.length - 1 || !_sameRun(message, messages[index + 1]),
                                 isRead: _isReadByPeers(message, messages, conversation),
                                 busy: state.busyMessageIds.contains(message.id),
+                                viewerId: conversation?.viewerId,
                                 quotedAuthor: reply == null ? null : _authorName(reply.senderId, conversation),
                                 onLongPress: message.canInteract ? () => _showMessageActions(message) : null,
                                 onToggleReaction: (emoji) => context.read<ChatCubit>().toggleReaction(message, emoji),
                                 onAttachmentExpired: context.read<ChatCubit>().refreshAttachment,
+                                onOpenImages: _openImages,
+                                onPlayVoice: _playVoice,
                                 onQuoteTap: reply == null ? null : () => _jumpToMessage(reply.id),
                               );
                             }
@@ -430,6 +550,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                 focusNode: _draftFocus,
                 onSend: _send,
                 onAttach: _pickAttachment,
+                onRecordVoice: _recordVoice,
                 onCancelCompose: _cancelCompose,
                 authorName: (message) => _authorName(message.senderId, _conversation(context.read<ChatCubit>().state)),
               ),
@@ -454,10 +575,10 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
   /// An id with no participant row (a member added since the detail was
   /// fetched) still counts — it renders with a placeholder avatar.
   List<ParticipantEntity> _typists(Set<String> userIds, ConversationEntity? conversation) => [
-        for (final id in userIds)
-          _participant(id, conversation) ??
-              ParticipantEntity(userId: id, role: ParticipantRole.member, joinedAt: DateTime(1970)),
-      ];
+    for (final id in userIds)
+      _participant(id, conversation) ??
+          ParticipantEntity(userId: id, role: ParticipantRole.member, joinedAt: DateTime(1970)),
+  ];
 
   /// How a reply names the message it quotes: the viewer is "You", anyone
   /// else goes by their participant row.
@@ -521,7 +642,7 @@ class _Header extends StatelessWidget {
       child: Row(
         children: [
           AppIconButton(
-            icon: const Icon(Icons.arrow_back),
+            icon: const Icon(CupertinoIcons.back),
             size: 36,
             onPressed: () => Navigator.of(context).maybePop(),
           ),
@@ -577,7 +698,7 @@ class _Header extends StatelessWidget {
             ),
             if (isGroup)
               AppIconButton(
-                icon: const Icon(Icons.info_outline),
+                icon: const Icon(CupertinoIcons.info_circle),
                 size: 36,
                 onPressed: () =>
                     context.pushNamed(RouteNames.groupInfo, pathParameters: {'conversationId': conversation.id}),
@@ -600,6 +721,7 @@ class _Composer extends StatelessWidget {
     required this.focusNode,
     required this.onSend,
     required this.onAttach,
+    required this.onRecordVoice,
     required this.onCancelCompose,
     required this.authorName,
   });
@@ -608,6 +730,7 @@ class _Composer extends StatelessWidget {
   final FocusNode focusNode;
   final VoidCallback onSend;
   final VoidCallback onAttach;
+  final VoidCallback onRecordVoice;
   final void Function(ChatCubit cubit, ChatState state) onCancelCompose;
 
   /// Names the sender of the message being replied to, for the banner.
@@ -636,14 +759,14 @@ class _Composer extends StatelessWidget {
             children: [
               if (editing != null)
                 _ComposeBanner(
-                  icon: Icons.edit_outlined,
+                  icon: CupertinoIcons.pencil,
                   label: 'EDITING',
                   preview: editing.body,
                   onCancel: () => onCancelCompose(cubit, state),
                 )
               else if (replyingTo != null)
                 _ComposeBanner(
-                  icon: Icons.reply,
+                  icon: CupertinoIcons.reply,
                   label: 'REPLYING TO ${replyingTo.fromMe ? 'YOURSELF' : authorName(replyingTo).toUpperCase()}',
                   preview: _previewText(replyingTo),
                   onCancel: () => onCancelCompose(cubit, state),
@@ -657,7 +780,7 @@ class _Composer extends StatelessWidget {
               Row(
                 children: [
                   AppIconButton(
-                    icon: const Icon(Icons.add),
+                    icon: const Icon(CupertinoIcons.add),
                     size: 42,
                     // No files on an edit: the server only changes text.
                     onPressed: editing == null && !state.isUploading ? onAttach : null,
@@ -689,12 +812,40 @@ class _Composer extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  AppIconButton(
-                    icon: Icon(editing != null ? Icons.check : Icons.arrow_upward),
-                    filled: true,
-                    borderColor: colors.ink,
-                    size: 46,
-                    onPressed: state.isUploading ? null : onSend,
+                  // One slot, two jobs: with nothing to send it records,
+                  // with something to send it sends. Keeping it to one
+                  // button is what lets a 320dp composer hold an attach
+                  // control, a five-line field and both of these without
+                  // the field collapsing.
+                  //
+                  // Driven by the controller rather than by cubit state:
+                  // the draft is not in [ChatState] (only the typing
+                  // signal derived from it is), and listening to the
+                  // controller rebuilds this button alone rather than the
+                  // whole composer on every keystroke.
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: controller,
+                    builder: (context, value, _) {
+                      final hasSomethingToSend = value.text.trim().isNotEmpty || state.pendingAttachments.isNotEmpty;
+                      // No voice note on an edit: the server only changes
+                      // text, and there is nothing to attach a recording to.
+                      if (hasSomethingToSend || editing != null) {
+                        return AppIconButton(
+                          icon: Icon(editing != null ? CupertinoIcons.checkmark : CupertinoIcons.arrow_up),
+                          filled: true,
+                          borderColor: colors.ink,
+                          size: 46,
+                          onPressed: state.isUploading ? null : onSend,
+                        );
+                      }
+                      return AppIconButton(
+                        icon: const Icon(CupertinoIcons.mic),
+                        filled: true,
+                        borderColor: colors.ink,
+                        size: 46,
+                        onPressed: state.isUploading ? null : onRecordVoice,
+                      );
+                    },
                   ),
                 ],
               ),
@@ -715,7 +866,16 @@ String _timeLabel(DateTime t) {
 String _previewText(MessageEntity message) {
   if (message.isDeleted) return 'Message deleted';
   if (message.hasText) return message.body;
-  if (message.hasAttachments) return message.attachments.first.isImage ? 'Photo' : message.attachments.first.fileName;
+  if (message.hasAttachments) {
+    final first = message.attachments.first;
+    return switch (first.kind) {
+      AttachmentKind.image => 'Photo',
+      // Never the filename: every voice note on the service is called
+      // `voice-message.m4a`, which tells the reader nothing.
+      AttachmentKind.voice => 'Voice message',
+      AttachmentKind.file => first.fileName,
+    };
+  }
   return '';
 }
 
@@ -760,7 +920,7 @@ class _ComposeBanner extends StatelessWidget {
             ),
             IconButton(
               tooltip: 'Cancel',
-              icon: Icon(Icons.close, size: 18, color: colors.ink2),
+              icon: Icon(CupertinoIcons.xmark, size: 18, color: colors.ink2),
               onPressed: onCancel,
             ),
           ],
@@ -825,7 +985,7 @@ class _PendingAttachmentsStrip extends StatelessWidget {
                       onTap: () => onRemove(attachment.id),
                       child: Padding(
                         padding: const EdgeInsets.all(3),
-                        child: Icon(Icons.close, size: 12, color: colors.bg),
+                        child: Icon(CupertinoIcons.xmark, size: 12, color: colors.bg),
                       ),
                     ),
                   ),
@@ -848,12 +1008,12 @@ class _AttachmentSourceSheet extends StatelessWidget {
     return _SheetCard(
       children: [
         _SheetRow(
-          icon: Icons.photo_library_outlined,
+          icon: CupertinoIcons.photo_on_rectangle,
           label: 'Photo library',
           onTap: () => Navigator.of(context).pop(ImageSource.gallery),
         ),
         _SheetRow(
-          icon: Icons.photo_camera_outlined,
+          icon: CupertinoIcons.camera,
           label: 'Take a photo',
           onTap: () => Navigator.of(context).pop(ImageSource.camera),
         ),
@@ -927,10 +1087,14 @@ class _MessageActionsSheet extends StatelessWidget {
           ),
         ),
         Divider(height: 1, thickness: 1, color: colors.line2),
-        _SheetRow(icon: Icons.reply, label: 'Reply', onTap: () => Navigator.of(context).pop(const _ReplyAction())),
+        _SheetRow(
+          icon: CupertinoIcons.reply,
+          label: 'Reply',
+          onTap: () => Navigator.of(context).pop(const _ReplyAction()),
+        ),
         if (message.hasText)
           _SheetRow(
-            icon: Icons.copy_outlined,
+            icon: CupertinoIcons.doc_on_doc,
             label: 'Copy text',
             onTap: () {
               Clipboard.setData(ClipboardData(text: message.body));
@@ -939,13 +1103,13 @@ class _MessageActionsSheet extends StatelessWidget {
           ),
         if (message.canEdit)
           _SheetRow(
-            icon: Icons.edit_outlined,
+            icon: CupertinoIcons.pencil,
             label: 'Edit',
             onTap: () => Navigator.of(context).pop(const _EditAction()),
           ),
         if (message.canDelete)
           _SheetRow(
-            icon: Icons.delete_outline,
+            icon: CupertinoIcons.delete,
             label: 'Unsend',
             destructive: true,
             onTap: () => Navigator.of(context).pop(const _DeleteAction()),
@@ -1038,9 +1202,12 @@ class _MessageBubble extends StatelessWidget {
     required this.lastInRun,
     required this.isRead,
     required this.busy,
+    required this.viewerId,
     required this.onLongPress,
     required this.onToggleReaction,
     required this.onAttachmentExpired,
+    required this.onOpenImages,
+    required this.onPlayVoice,
     this.quotedAuthor,
     this.onQuoteTap,
   });
@@ -1059,9 +1226,22 @@ class _MessageBubble extends StatelessWidget {
 
   final bool isRead;
   final bool busy;
+
+  /// The signed-in user's id — a story reply's preview needs it to decide
+  /// whether an expired story is still loadable (its author's is).
+  final String? viewerId;
   final VoidCallback? onLongPress;
   final ValueChanged<String> onToggleReaction;
   final ValueChanged<String> onAttachmentExpired;
+
+  /// Opens this bubble's pictures full screen, starting on the one at the
+  /// given index. Handled by the page, like [onPlayVoice], because a stale
+  /// presigned link has to be re-signed before anything can load it.
+  final void Function(List<AttachmentEntity> images, int index) onOpenImages;
+
+  /// Plays this bubble's voice note. Handled by the page rather than here
+  /// because a stale presigned link has to be re-signed first.
+  final ValueChanged<AttachmentEntity> onPlayVoice;
 
   /// Who wrote the quoted message, when there is one.
   final String? quotedAuthor;
@@ -1075,6 +1255,7 @@ class _MessageBubble extends StatelessWidget {
     final mine = message.fromMe;
     final deleted = message.isDeleted;
     final reply = message.replyTo;
+    final storyReply = deleted ? null : message.storyReply;
     // Everything under an incoming bubble is pushed past the avatar column
     // so it lines up with the bubble, not with the avatar.
     final indent = mine ? 0.0 : _senderColumnWidth;
@@ -1082,8 +1263,14 @@ class _MessageBubble extends StatelessWidget {
     final showName = !mine && isGroup && firstInRun;
 
     final images = deleted ? const <AttachmentEntity>[] : message.attachments.where((a) => a.isImage).toList();
-    final files = deleted ? const <AttachmentEntity>[] : message.attachments.where((a) => !a.isImage).toList();
-    final hasBubble = deleted || reply != null || message.hasText || files.isNotEmpty;
+    final voices = deleted ? const <AttachmentEntity>[] : message.attachments.where((a) => a.isVoice).toList();
+    // Whatever is left: a real file, or a VOICE attachment the server sent
+    // without the `voice` block to draw a player from.
+    final files = deleted
+        ? const <AttachmentEntity>[]
+        : message.attachments.where((a) => !a.isImage && !a.isVoice).toList();
+    final hasBubble =
+        deleted || reply != null || storyReply != null || message.hasText || files.isNotEmpty || voices.isNotEmpty;
 
     Widget? bubble;
     if (hasBubble) {
@@ -1098,10 +1285,19 @@ class _MessageBubble extends StatelessWidget {
           crossAxisAlignment: reply != null ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (storyReply != null) ...[
+              StoryReplyPreview(storyReply: storyReply, fromMe: mine, viewerId: viewerId, onYellow: mine),
+              const SizedBox(height: 8),
+            ],
             if (reply != null) ...[
               _ReplyQuote(reply: reply, author: quotedAuthor ?? 'Unknown', onYellow: mine, onTap: onQuoteTap),
               const SizedBox(height: 8),
             ],
+            for (final voice in voices)
+              Padding(
+                padding: EdgeInsets.only(bottom: message.hasText || files.isNotEmpty || voice != voices.last ? 8 : 0),
+                child: VoiceNoteBubble(attachment: voice, onYellow: mine, onPlay: onPlayVoice),
+              ),
             for (final file in files)
               Padding(
                 padding: EdgeInsets.only(bottom: message.hasText || file != files.last ? 6 : 0),
@@ -1165,7 +1361,13 @@ class _MessageBubble extends StatelessWidget {
                         ?bubble,
                         if (images.isNotEmpty) ...[
                           if (bubble != null) const SizedBox(height: 4),
-                          _ImageBlock(images: images, maxWidth: maxWidth, mine: mine, onExpired: onAttachmentExpired),
+                          _ImageBlock(
+                            images: images,
+                            maxWidth: maxWidth,
+                            mine: mine,
+                            onExpired: onAttachmentExpired,
+                            onOpen: (index) => onOpenImages(images, index),
+                          ),
                         ],
                       ],
                     ),
@@ -1232,7 +1434,7 @@ class _Tombstone extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.block, size: 14, color: ink),
+        Icon(CupertinoIcons.nosign, size: 14, color: ink),
         const SizedBox(width: 6),
         Text(
           'Message deleted',
@@ -1278,7 +1480,9 @@ class _ReplyQuote extends StatelessWidget {
     } else {
       text = '';
     }
-    final IconData? icon = reply.deleted ? Icons.block : (reply.hasAttachments ? Icons.attach_file : null);
+    final IconData? icon = reply.deleted
+        ? CupertinoIcons.nosign
+        : (reply.hasAttachments ? CupertinoIcons.paperclip : null);
     return Semantics(
       button: onTap != null,
       label: 'Go to the quoted message from $author',
@@ -1367,12 +1571,21 @@ class _JumpHighlight extends StatelessWidget {
 /// bubble, no border. One picture is a wide tile in the bubble's own shape
 /// (tail included); several are laid out two-up as plain rounded tiles.
 class _ImageBlock extends StatelessWidget {
-  const _ImageBlock({required this.images, required this.maxWidth, required this.mine, required this.onExpired});
+  const _ImageBlock({
+    required this.images,
+    required this.maxWidth,
+    required this.mine,
+    required this.onExpired,
+    required this.onOpen,
+  });
 
   final List<AttachmentEntity> images;
   final double maxWidth;
   final bool mine;
   final ValueChanged<String> onExpired;
+
+  /// Tapping a picture expands the whole message's set, opening on this one.
+  final ValueChanged<int> onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -1384,6 +1597,7 @@ class _ImageBlock extends StatelessWidget {
           attachment: images.first,
           borderRadius: _bubbleRadius(mine: mine, tailed: true),
           onExpired: onExpired,
+          onTap: () => onOpen(0),
         ),
       );
     }
@@ -1395,14 +1609,15 @@ class _ImageBlock extends StatelessWidget {
         runSpacing: 6,
         alignment: mine ? WrapAlignment.end : WrapAlignment.start,
         children: [
-          for (final image in images)
+          for (var i = 0; i < images.length; i++)
             SizedBox(
               width: tile,
               height: tile,
               child: _AttachmentThumb(
-                attachment: image,
+                attachment: images[i],
                 borderRadius: BorderRadius.circular(AppRadii.xs),
                 onExpired: onExpired,
+                onTap: () => onOpen(i),
               ),
             ),
         ],
@@ -1415,11 +1630,15 @@ class _ImageBlock extends StatelessWidget {
 /// URL: every history fetch re-signs the URL, and without a stable key the
 /// 5-second poll would re-download every photo in the transcript each tick.
 class _AttachmentThumb extends StatelessWidget {
-  const _AttachmentThumb({required this.attachment, required this.borderRadius, this.onExpired});
+  const _AttachmentThumb({required this.attachment, required this.borderRadius, this.onExpired, this.onTap});
 
   final AttachmentEntity attachment;
   final BorderRadius borderRadius;
   final ValueChanged<String>? onExpired;
+
+  /// Expands the picture. Null on the composer's pending strip, where the
+  /// thumbnail is a row in a tray rather than something to open.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1428,13 +1647,19 @@ class _AttachmentThumb extends StatelessWidget {
     final placeholder = Container(
       color: colors.surf2,
       alignment: Alignment.center,
-      child: Icon(attachment.isImage ? Icons.image_outlined : Icons.insert_drive_file_outlined, color: colors.ink3),
+      child: Icon(attachment.isImage ? CupertinoIcons.photo : CupertinoIcons.doc, color: colors.ink3),
     );
-    return ClipRRect(
+    final thumb = ClipRRect(
       borderRadius: borderRadius,
       child: url == null || !attachment.isImage
           ? placeholder
           : CachedNetworkImage(
+              // Keyed on the link, not the id: `CachedNetworkImageProvider`
+              // compares equal on `cacheKey` alone, so a re-signed URL for
+              // the same attachment would otherwise leave a picture that
+              // 403'd sitting in its error state forever — the provider
+              // never looks different enough to resolve again.
+              key: ValueKey(url),
               imageUrl: url,
               cacheKey: attachment.id,
               fit: BoxFit.cover,
@@ -1451,6 +1676,12 @@ class _AttachmentThumb extends StatelessWidget {
               },
             ),
     );
+    if (onTap == null) return thumb;
+    // Opaque so the whole tile answers a tap, including the grey placeholder
+    // a picture that has not arrived yet draws. A long press still belongs to
+    // the bubble's own detector above: its recognizer claims the pointer at
+    // the long-press timeout, before a tap could be reported on lift.
+    return GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: thumb);
   }
 }
 
@@ -1481,7 +1712,7 @@ class _FileChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.insert_drive_file_outlined, size: 20, color: colors.ink2),
+              Icon(CupertinoIcons.doc, size: 20, color: colors.ink2),
               const SizedBox(width: 8),
               Flexible(
                 child: Column(
@@ -1668,9 +1899,10 @@ class _DeliveryMark extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
     final (icon, label) = switch (message.status) {
-      MessageDeliveryStatus.sending => (Icons.schedule, 'Sending'),
-      MessageDeliveryStatus.failed => (Icons.error_outline, 'Failed to send. Tap to retry'),
-      MessageDeliveryStatus.sent => isRead ? (Icons.done_all, 'Read') : (Icons.check, 'Sent'),
+      MessageDeliveryStatus.sending => (CupertinoIcons.clock, 'Sending'),
+      MessageDeliveryStatus.failed => (CupertinoIcons.exclamationmark_circle, 'Failed to send. Tap to retry'),
+      MessageDeliveryStatus.sent =>
+        isRead ? (CupertinoIcons.checkmark_circle_fill, 'Read') : (CupertinoIcons.checkmark, 'Sent'),
     };
     return Semantics(
       label: label,
@@ -1775,8 +2007,10 @@ class _TypingDots extends StatefulWidget {
 }
 
 class _TypingDotsState extends State<_TypingDots> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))..repeat();
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  )..repeat();
 
   @override
   void dispose() {

@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -157,7 +158,7 @@ class _ReasonRow extends StatelessWidget {
         child: Row(
           children: [
             Icon(
-              selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+              selected ? CupertinoIcons.largecircle_fill_circle : CupertinoIcons.circle,
               size: 20,
               // A colour change, not a glow — see `docs/GOTCHAS.md` on
               // blurred shadows in anything that rebuilds.

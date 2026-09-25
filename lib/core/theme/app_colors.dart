@@ -1,5 +1,39 @@
 import 'package:flutter/material.dart';
 
+/// Which palette family the app draws with. Orthogonal to [Brightness]: each
+/// flavor supplies both a light and a dark [AppColors] set, so the four
+/// themes the Theme screen offers are the two flavors crossed with the two
+/// brightnesses.
+///
+/// Adding a flavor means adding a case here plus its two palettes in
+/// [AppColors] — nothing else in the app hard-codes a palette, because every
+/// widget reads tokens through `AppColors.of(context)`.
+enum AppThemeFlavor {
+  /// The original hand-tuned Yello Mobile v2 palette: warm off-white paper
+  /// and warm charcoal, soft hairlines, amber-leaning yellow (ADR-020).
+  classic('Classic', 'Warm paper and charcoal, soft seams.'),
+
+  /// "Quiet rails", lifted from the Yello Design System artifact
+  /// (`project/tokens.json` / `project/README.md`): neutral grey-black
+  /// layers split by hairlines, one saturated yellow per view. Dark-first —
+  /// the light set re-points the same roles rather than being its own
+  /// design (ADR-035).
+  quietRails('Quiet rails', 'Neutral greys, one saturated yellow.');
+
+  const AppThemeFlavor(this.label, this.blurb);
+
+  /// Name shown on the Theme screen.
+  final String label;
+
+  /// One-line description shown under [label].
+  final String blurb;
+
+  /// Round-trips through `shared_preferences`. The stored string is the enum
+  /// `name`, so renaming a constant would orphan saved choices — keep the
+  /// names stable and change [label] instead.
+  static AppThemeFlavor fromName(String? name) => values.firstWhere((f) => f.name == name, orElse: () => classic);
+}
+
 /// Design-token color palette. It began as a 1:1 lift of the Yello Mobile v2
 /// Claude Design source (`:root` / `[data-theme="dark"]` custom properties in
 /// `Yello Mobile v2.dc.html`) and has since been retuned to a lighter, softer
@@ -7,6 +41,13 @@ import 'package:flutter/material.dart';
 /// [ThemeExtension] so every widget can reach the exact token set the app
 /// draws with, rather than approximating it through Material's ColorScheme
 /// roles.
+///
+/// Four palettes live here, as two [AppThemeFlavor]s crossed with the two
+/// brightnesses: [light]/[dark] are the classic pair, and
+/// [quietRailsLight]/[quietRailsDark] are the Yello Design System's own
+/// tables. Pick one with [resolve] rather than naming a constant — the named
+/// constants exist for the handful of widgets that deliberately want a fixed
+/// set regardless of the active theme (see `messages_page.dart`).
 @immutable
 class AppColors extends ThemeExtension<AppColors> {
   const AppColors({
@@ -136,6 +177,84 @@ class AppColors extends ThemeExtension<AppColors> {
     slot: Color(0xFF322E24),
   );
 
+  /// "Quiet rails" light — the design system's light table, which re-points
+  /// the same roles the dark set defines rather than being drawn on its own.
+  /// Neutral greys throughout (no warm cast anywhere), a pure-white card on a
+  /// faintly grey canvas, and the yellow split in two: [yel] stays the
+  /// saturated fill while [yeld] darkens to olive, which is the only way the
+  /// accent holds 4.5:1 as *text* on a light ground.
+  ///
+  /// Two tokens have no direct counterpart in the source table and are
+  /// derived here, both noted at their line: [line2] and [shell].
+  static const quietRailsLight = AppColors(
+    bg: Color(0xFFF7F7F5), // color-background
+    surf: Color(0xFFFFFFFF), // color-surface-container-lowest
+    // color-surface-container-low ("hover rows, input wells"), not
+    // -high (#E4E4E0): against a pure-white card the high step reads as a
+    // grey box rather than an inset, and `surf2` is mostly inset panels here.
+    surf2: Color(0xFFF1F1EE),
+    ink: Color(0xFF16181B), // color-on-surface
+    ink2: Color(0xFF5C6470), // color-on-surface-variant
+    ink3: Color(0xFF8A919C), // color-outline — ~3:1, so 13px+ metadata only
+    line: Color(0xFFE2E2DE), // color-outline-variant (surfaces and dividers)
+    // Derived: the midpoint between `line` and `surf`. The source table has
+    // no token below outline-variant, and outline-strong (#D4D4CF) is the
+    // *heavier* control border, so it can't stand in for the faint
+    // inside-a-card divider `line2` means.
+    line2: Color(0xFFF0F0EE),
+    yel: Color(0xFFFFD60A), // color-primary-container
+    yelb: Color(0xFFFFF2B8), // color-primary-fixed
+    yeld: Color(0xFF7A6300), // color-primary — olive, for contrast on light
+    onYel: Color(0xFF1A1400), // color-on-primary-container
+    red: Color(0xFFBA1A1A), // color-error
+    grn: Color(0xFF1B7A3F), // color-tertiary
+    // Derived: `shell` is the one surface that stays dark in *both* themes
+    // (ADR-009, and `messages_page.dart` paints fixed light ink on it), so
+    // color-chrome's light value (#FBFBF9) can't be used. The light ramp's
+    // darkest neutral stands in instead.
+    shell: Color(0xFF16181B),
+    slot: Color(0xFFEBEBE8), // color-surface-container
+  );
+
+  /// "Quiet rails" dark — the design system's default theme, and the one its
+  /// light set is derived from. Near-black canvas, cards a single tonal step
+  /// above it, and hairlines doing the separating work that shadow does
+  /// elsewhere.
+  static const quietRailsDark = AppColors(
+    bg: Color(0xFF0B0B0C), // color-background
+    surf: Color(0xFF0F0F12), // color-surface-container-lowest
+    // color-surface-container-high. Dark needs the larger step its light
+    // counterpart doesn't: -low (#131317) is barely off `surf` here.
+    surf2: Color(0xFF1E1E24),
+    ink: Color(0xFFF2F2F0), // color-on-surface
+    ink2: Color(0xFF9C9CA2), // color-on-surface-variant
+    ink3: Color(0xFF8A8A90), // color-outline
+    line: Color(0xFF1C1C20), // color-outline-variant
+    line2: Color(0xFF151519), // derived, as in [quietRailsLight]
+    yel: Color(0xFFFFCE2B), // color-primary-container
+    // color-primary-fixed-*dim*, not -fixed (#1A1A16): the plain tint is
+    // within ~1% of `surf`, which would make a selected chip invisible. The
+    // source calls -dim "a slightly stronger accent wash", which is exactly
+    // what `yelb` is used for here.
+    yelb: Color(0xFF2A2716),
+    yeld: Color(0xFFFFCE2B), // color-primary — no darkening needed on dark
+    onYel: Color(0xFF12120F), // color-on-primary-container
+    red: Color(0xFFFF5D5D), // color-error
+    grn: Color(0xFF3DDC84), // color-tertiary
+    shell: Color(0xFF0E0E10), // color-chrome
+    slot: Color(0xFF16161A), // color-surface-container
+  );
+
+  /// The palette for a ([AppThemeFlavor], [Brightness]) pair — the single
+  /// place the four sets are selected from.
+  static AppColors resolve(AppThemeFlavor flavor, Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    return switch (flavor) {
+      AppThemeFlavor.classic => isDark ? dark : light,
+      AppThemeFlavor.quietRails => isDark ? quietRailsDark : quietRailsLight,
+    };
+  }
+
   @override
   AppColors copyWith({
     Color? bg,
@@ -199,6 +318,5 @@ class AppColors extends ThemeExtension<AppColors> {
   }
 
   /// Convenience accessor: `AppColors.of(context).ink`.
-  static AppColors of(BuildContext context) =>
-      Theme.of(context).extension<AppColors>() ?? light;
+  static AppColors of(BuildContext context) => Theme.of(context).extension<AppColors>() ?? light;
 }

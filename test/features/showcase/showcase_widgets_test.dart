@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yello_social_app/features/showcase/domain/entities/project_entity.dart';
@@ -99,21 +100,21 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.text('FEATURED'), findsNothing);
       expect(find.textContaining('+'), findsNothing);
-      expect(find.byIcon(Icons.star_border_rounded), findsNothing);
-      expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
+      expect(find.byIcon(CupertinoIcons.star), findsNothing);
+      expect(find.byIcon(CupertinoIcons.eye), findsOneWidget);
     });
 
     testWidgets('like pill fires once per tap and is inert while busy', (tester) async {
       var likes = 0;
       await pumpAtNarrowWidth(tester, ProjectCard(project: project(), onTap: () {}, onToggleLike: () => likes++));
-      await tester.tap(find.byIcon(Icons.favorite_border));
+      await tester.tap(find.byIcon(CupertinoIcons.heart));
       expect(likes, 1);
 
       await pumpAtNarrowWidth(
         tester,
         ProjectCard(project: project(), busy: true, onTap: () {}, onToggleLike: () => likes++),
       );
-      await tester.tap(find.byIcon(Icons.favorite_border));
+      await tester.tap(find.byIcon(CupertinoIcons.heart));
       expect(likes, 1);
     });
   });
@@ -176,7 +177,7 @@ void main() {
         tester,
         TechChipRow(tech: const [], selected: null, onSelect: (_) {}, onOpenSheet: () => opened++, sheetActive: true),
       );
-      await tester.tap(find.byIcon(Icons.tune_rounded));
+      await tester.tap(find.byIcon(CupertinoIcons.slider_horizontal_3));
       expect(opened, 1);
     });
   });

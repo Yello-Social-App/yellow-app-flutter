@@ -13,7 +13,7 @@ void main() {
     status: 'ACTIVE',
   );
 
-  Future<void> pumpCard(WidgetTester tester, {required bool expanded}) async {
+  Future<void> pumpCard(WidgetTester tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(320, 900);
     addTearDown(tester.view.reset);
@@ -22,29 +22,30 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: SingleChildScrollView(
-            child: ProfileDetailsCard(user: user, expanded: expanded, onEdit: () {}),
+            child: ProfileDetailsCard(user: user, onEdit: () {}),
           ),
         ),
       ),
     );
   }
 
-  testWidgets('collapsed shows the always-on rows and hides the rest', (tester) async {
-    await pumpCard(tester, expanded: false);
+  // The card is a plain list now, not an expander: every row it has is on
+  // screen from the first frame, with no chevron to reveal the rest.
+  testWidgets('shows every row without an expander', (tester) async {
+    await pumpCard(tester);
 
     expect(tester.takeException(), isNull);
     expect(find.text('Amara Chen'), findsOneWidget);
     expect(find.text('amara'), findsOneWidget);
     expect(find.text('Joined Mar 14, 2026'), findsOneWidget);
-    expect(find.text('amara@example.com'), findsNothing);
+    expect(find.text('amara@example.com'), findsOneWidget);
   });
 
-  testWidgets('expanded adds email, the bio placeholder and account status', (tester) async {
-    await pumpCard(tester, expanded: true);
+  // Bio reads in the header, account status beside the connections row.
+  testWidgets('carries neither bio nor account status', (tester) async {
+    await pumpCard(tester);
 
-    expect(tester.takeException(), isNull);
-    expect(find.text('amara@example.com'), findsOneWidget);
-    expect(find.text('Add a bio'), findsOneWidget);
-    expect(find.text('Account active'), findsOneWidget);
+    expect(find.text('Add a bio'), findsNothing);
+    expect(find.text('Account active'), findsNothing);
   });
 }

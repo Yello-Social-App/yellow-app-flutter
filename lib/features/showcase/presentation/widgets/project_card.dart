@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -239,7 +240,7 @@ class _FeaturedPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.star_rounded, size: 11, color: colors.onYel),
+          Icon(CupertinoIcons.star_fill, size: 11, color: colors.onYel),
           const SizedBox(width: 3),
           Text(
             'FEATURED',
@@ -336,14 +337,14 @@ class _Footer extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         _Stat(
-          icon: Icons.visibility_outlined,
+          icon: CupertinoIcons.eye,
           value: project.viewCount,
           semanticsLabel: 'views',
         ),
         if (project.starCount != null) ...[
           const SizedBox(width: 8),
           _Stat(
-            icon: Icons.star_border_rounded,
+            icon: CupertinoIcons.star,
             value: project.starCount!,
             semanticsLabel: 'stars',
           ),
@@ -417,7 +418,7 @@ class _LikeButton extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                isLiked ? Icons.favorite : Icons.favorite_border,
+                isLiked ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
                 size: 14,
                 color: busy ? colors.ink3 : (isLiked ? colors.red : colors.ink),
               ),

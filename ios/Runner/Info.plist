@@ -28,6 +28,8 @@
 		<true/>
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>Yello needs access to your photos so you can attach one to a post.</string>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>Yello needs the microphone so you can record a voice message in a chat.</string>
 		<!-- Lets a push still reach firebaseMessagingBackgroundHandler while the
 		     app is backgrounded (not killed) rather than only on next foreground.
 		     Requires the "Background Modes" > "Remote notifications" capability

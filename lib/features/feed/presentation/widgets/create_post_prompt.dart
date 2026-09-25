@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -62,7 +63,7 @@ class CreatePostPrompt extends StatelessWidget {
                     color: colors.surf2,
                     border: Border.all(color: colors.line2),
                   ),
-                  child: Icon(Icons.photo_camera_outlined, size: 15, color: colors.ink2),
+                  child: Icon(CupertinoIcons.camera, size: 15, color: colors.ink2),
                 ),
               ],
             ),

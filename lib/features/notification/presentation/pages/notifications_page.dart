@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -34,14 +35,14 @@ class NotificationsPage extends StatelessWidget {
 /// is purely decorative context, not something that needs to describe the
 /// event on its own.
 IconData _iconFor(String type) => switch (type) {
-  NotificationTypes.postCreated => Icons.grid_view_rounded,
-  NotificationTypes.postCommented || NotificationTypes.commentReplied => Icons.mode_comment_outlined,
-  NotificationTypes.commentReacted || NotificationTypes.postReacted => Icons.favorite_border,
-  NotificationTypes.postReposted => Icons.repeat_rounded,
-  NotificationTypes.friendRequestReceived => Icons.person_add_alt_1_outlined,
-  NotificationTypes.friendRequestAccepted => Icons.person_outline,
-  NotificationTypes.reportResolved => Icons.shield_outlined,
-  _ => Icons.notifications_none_rounded,
+  NotificationTypes.postCreated => CupertinoIcons.square_grid_2x2,
+  NotificationTypes.postCommented || NotificationTypes.commentReplied => CupertinoIcons.bubble_left,
+  NotificationTypes.commentReacted || NotificationTypes.postReacted => CupertinoIcons.heart,
+  NotificationTypes.postReposted => CupertinoIcons.arrow_2_squarepath,
+  NotificationTypes.friendRequestReceived => CupertinoIcons.person_add,
+  NotificationTypes.friendRequestAccepted => CupertinoIcons.person,
+  NotificationTypes.reportResolved => CupertinoIcons.shield,
+  _ => CupertinoIcons.bell,
 };
 
 /// Pushes whatever screen [notification]'s `data` map points at — the same
@@ -187,7 +188,7 @@ class _Header extends StatelessWidget {
             ),
           ),
           AppIconButton(
-            icon: const Icon(Icons.settings_outlined),
+            icon: const Icon(CupertinoIcons.gear),
             onPressed: () => context.pushNamed(RouteNames.notificationPreferences),
             size: 38,
           ),
@@ -231,7 +232,7 @@ class _DismissibleNotificationRow extends StatelessWidget {
           alignment: Alignment.centerRight,
           padding: const EdgeInsets.symmetric(horizontal: 20),
           decoration: BoxDecoration(color: colors.red, borderRadius: BorderRadius.circular(AppRadii.lg)),
-          child: const Icon(Icons.delete_outline, color: Colors.white),
+          child: const Icon(CupertinoIcons.delete, color: Colors.white),
         ),
       ),
       child: _NotificationRow(
@@ -382,7 +383,7 @@ class _NotificationRow extends StatelessWidget {
                                   child: SizedBox(
                                     width: 34,
                                     height: 34,
-                                    child: Icon(Icons.close, size: 15, color: colors.ink2),
+                                    child: Icon(CupertinoIcons.xmark, size: 15, color: colors.ink2),
                                   ),
                                 ),
                               ),
@@ -421,7 +422,7 @@ class _RequestOutcomeChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(accepted ? Icons.check : Icons.close, size: 13, color: colors.ink2),
+          Icon(accepted ? CupertinoIcons.checkmark : CupertinoIcons.xmark, size: 13, color: colors.ink2),
           const SizedBox(width: 6),
           Text(accepted ? 'Accepted' : 'Declined', style: AppTextStyles.button.copyWith(color: colors.ink2)),
         ],

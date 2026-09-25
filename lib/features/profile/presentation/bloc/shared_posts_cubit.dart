@@ -177,6 +177,17 @@ class SharedPostsCubit extends Cubit<SharedPostsState> {
   List<PostEntity> _withMyReposts(List<PostEntity> posts) =>
       posts.map((p) => _myRepostIds.containsKey(p.id) ? p.copyWith(repostedByMe: true) : p).toList();
 
+  /// Applies a post that came back from its own detail screen — a reaction or
+  /// a new comment made in there changes counts this list shows, and nothing
+  /// re-fetches it on the way back (see ADR-032). No-ops on a post this list
+  /// doesn't hold.
+  ///
+  /// [PostEntity.repostedByMe] is re-derived from [_myRepostIds] rather than
+  /// taken from the incoming copy — see `FeedCubit.replacePost`'s identical
+  /// doc for why that flag can never be trusted across screens.
+  void applyUpdated(PostEntity post) =>
+      _replace(post.id, (_) => post.copyWith(repostedByMe: _myRepostIds.containsKey(post.id)));
+
   void _replace(String id, PostEntity Function(PostEntity) update) {
     final index = state.posts.indexWhere((p) => p.id == id);
     if (index == -1) return;

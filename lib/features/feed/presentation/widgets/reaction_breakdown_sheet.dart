@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -78,7 +79,7 @@ Future<void> showReactionBreakdownSheet(
                       for (final entry in entries)
                         InkWell(
                           // Pop via `tileContext` (inside this sheet's own
-                          // subtree — see `reaction_picker_sheet.dart` for why
+                          // subtree — see `reaction_picker.dart` for why
                           // that's the safe context to pop with), then reopen
                           // using the outer `context` this function was
                           // called with, which is still mounted underneath.
@@ -118,7 +119,7 @@ Future<void> showReactionBreakdownSheet(
                                 ),
                                 const SizedBox(width: 6),
                                 Icon(
-                                  Icons.chevron_right,
+                                  CupertinoIcons.chevron_right,
                                   size: 18,
                                   color: colors.ink2,
                                 ),

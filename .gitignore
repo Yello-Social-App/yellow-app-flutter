@@ -43,9 +43,22 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/build/
+
+# Sideloaded release APKs staged beside the repo (ADR-029). The APK the
+# release itself ships is built into build/, which is already ignored.
+*.apk
 
 # Backend repo nested in this project - not part of the Flutter app repo
 /yello_social_app_backend/
 
 # Claude Code local overrides (machine-specific, not shared)
 .claude/settings.local.json
+
+# Release signing. The keystore and its passwords sign every APK a user
+# installs — Android refuses an update signed by a different key, so losing
+# or leaking these is unrecoverable. Keep the .jks backed up somewhere that
+# is not this repo. See ADR-025 and android/app/build.gradle.kts.
+/android/key.properties
+*.jks
+*.keystore

@@ -24,6 +24,7 @@ abstract final class MessageMapper {
       attachments: AttachmentMapper.fromJsonList(json['attachments']),
       reactions: ReactionMapper.fromJsonList(json['reactions'], viewerId: viewerId),
       groupInvite: GroupInviteCardMapper.fromJsonOrNull(json['groupInvite'], viewerId: viewerId),
+      storyReply: StoryReplyMapper.fromJsonOrNull(json['storyReply']),
       editedAt: _date(json['editedAt']),
       deletedAt: _date(json['deletedAt']),
     );
@@ -45,6 +46,22 @@ abstract final class MessageMapper {
   static DateTime? _date(dynamic raw) => raw is String ? DateTime.tryParse(raw) : null;
 }
 
+abstract final class StoryReplyMapper {
+  /// `Message.storyReply` — present on both the `message.new` frame and
+  /// history, and null on every message that is not a story reply.
+  static StoryReplyEntity? fromJsonOrNull(dynamic raw) {
+    if (raw is! Map<String, dynamic>) return null;
+    final storyId = raw['storyId'] as String?;
+    if (storyId == null || storyId.isEmpty) return null;
+    return StoryReplyEntity(
+      storyId: storyId,
+      storyAuthorId: raw['storyAuthorId'] as String? ?? '',
+      storyIsImage: raw['storyType'] == 'IMAGE',
+      storyExpiresAt: raw['storyExpiresAt'] is String ? DateTime.tryParse(raw['storyExpiresAt'] as String) : null,
+    );
+  }
+}
+
 abstract final class AttachmentMapper {
   static AttachmentEntity fromJson(Map<String, dynamic> json) => AttachmentEntity(
         id: json['id'] as String,
@@ -52,9 +69,30 @@ abstract final class AttachmentMapper {
         fileName: json['fileName'] as String? ?? '',
         mimeType: json['mimeType'] as String? ?? 'application/octet-stream',
         sizeBytes: (json['sizeBytes'] as num?)?.toInt() ?? 0,
+        voice: _voiceFromJson(json['voice']),
         url: json['url'] as String?,
         urlExpiresAt: json['urlExpiresAt'] is String ? DateTime.tryParse(json['urlExpiresAt'] as String) : null,
       );
+
+  /// `voice` is present only on a VOICE attachment. A `durationMs` of 0 or
+  /// less means the server could not measure the audio, which leaves nothing
+  /// to draw — the attachment then renders as a plain file rather than as a
+  /// player stuck at 0:00.
+  static VoiceMetaEntity? _voiceFromJson(dynamic raw) {
+    if (raw is! Map<String, dynamic>) return null;
+    final durationMs = (raw['durationMs'] as num?)?.toInt() ?? 0;
+    if (durationMs <= 0) return null;
+    final waveform = raw['waveform'];
+    return VoiceMetaEntity(
+      durationMs: durationMs,
+      waveform: waveform is List
+          ? [
+              for (final value in waveform)
+                if (value is num) value.toInt().clamp(0, 100),
+            ]
+          : const [],
+    );
+  }
 
   static List<AttachmentEntity> fromJsonList(dynamic raw) => raw is List
       ? raw.whereType<Map<String, dynamic>>().where((e) => e['id'] is String).map(fromJson).toList(growable: false)

@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -25,7 +26,8 @@ import '../widgets/post_card.dart';
 import '../widgets/post_image_carousel.dart';
 import '../widgets/post_options_sheet.dart';
 import '../widgets/reaction_breakdown_sheet.dart';
-import '../widgets/reaction_picker_sheet.dart';
+import '../widgets/reaction_glyph.dart';
+import '../widgets/reaction_picker.dart';
 
 class PostDetailPage extends StatelessWidget {
   const PostDetailPage({super.key, required this.postId});
@@ -107,84 +109,112 @@ class _PostDetailViewState extends State<_PostDetailView> {
         AppStatusSnackbar.showSuccess(context, message: 'Post deleted.');
         Navigator.of(context).maybePop();
       },
-      child: Scaffold(
-        backgroundColor: colors.bg,
-        body: SafeArea(
-          child: BlocBuilder<PostDetailCubit, PostDetailState>(
-            builder: (context, state) {
-              return Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
-                    child: Row(
-                      children: [
-                        AppIconButton(
-                          icon: const Icon(Icons.arrow_back),
-                          size: 38,
-                          onPressed: () => Navigator.of(context).maybePop(),
-                        ),
-                        const SizedBox(width: 11),
-                        // Same brand wordmark treatment the tab-level
-                        // headers use (Circle / Inbox / Signals), but at the
-                        // inline `titleLg` step this back-arrow row is built
-                        // around rather than the 34px page-level one.
-                        const YelloWordmark(
-                          fontSize: AppTextStyles.displayXlFontSize,
-                          text: 'Post',
-                        ),
-                        const Spacer(),
-                        if (state.status == PostDetailStatus.loaded)
+      // Pops with the post this screen ended up holding, so a reaction or a
+      // new comment made here lands back on the row that was tapped —
+      // whichever list that was (feed, a profile, Shared posts). Nothing
+      // re-fetches those on the way back, so without this the counts under
+      // the card stay at what they were on tap. `canPop: false` plus an
+      // explicit pop is what makes it work for the system back gesture too,
+      // not just the arrow — same shape as the community thread. See
+      // ADR-032.
+      child: PopScope<PostEntity>(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) return;
+          context.pop(_result(cubit.state));
+        },
+        child: Scaffold(
+          backgroundColor: colors.bg,
+          body: SafeArea(
+            child: BlocBuilder<PostDetailCubit, PostDetailState>(
+              builder: (context, state) {
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
+                      child: Row(
+                        children: [
                           AppIconButton(
-                            icon: const Icon(Icons.more_horiz),
+                            icon: const Icon(CupertinoIcons.back),
                             size: 38,
-                            onPressed: () =>
-                                _showPostMenu(context, cubit, state),
+                            onPressed: () => context.pop(_result(cubit.state)),
                           ),
-                      ],
-                    ),
-                  ),
-                  Container(height: 1.5, color: colors.line),
-                  Expanded(
-                    child: switch (state.status) {
-                      PostDetailStatus.loading => const Center(
-                        child: CircularProgressIndicator(),
+                          const SizedBox(width: 11),
+                          // Same brand wordmark treatment the tab-level
+                          // headers use (Circle / Inbox / Signals), but at the
+                          // inline `titleLg` step this back-arrow row is built
+                          // around rather than the 34px page-level one.
+                          const YelloWordmark(
+                            fontSize: AppTextStyles.displayXlFontSize,
+                            text: 'Post',
+                          ),
+                          const Spacer(),
+                          if (state.status == PostDetailStatus.loaded)
+                            AppIconButton(
+                              icon: const Icon(CupertinoIcons.ellipsis),
+                              size: 38,
+                              onPressed: () =>
+                                  _showPostMenu(context, cubit, state),
+                            ),
+                        ],
                       ),
-                      PostDetailStatus.error => Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: ErrorView(
-                            message:
-                                state.errorMessage ??
-                                'Could not load this post.',
-                            onRetry: cubit.load,
+                    ),
+                    Container(height: 1.5, color: colors.line),
+                    Expanded(
+                      child: switch (state.status) {
+                        PostDetailStatus.loading => const Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                        PostDetailStatus.error => Center(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                            child: ErrorView(
+                              message:
+                                  state.errorMessage ??
+                                  'Could not load this post.',
+                              onRetry: cubit.load,
+                            ),
                           ),
                         ),
-                      ),
-                      PostDetailStatus.loaded => _Loaded(
-                        state: state,
-                        onStartReply: _startReply,
-                      ),
-                      PostDetailStatus.deleted => const SizedBox.shrink(),
-                    },
-                  ),
-                  if (state.status == PostDetailStatus.loaded)
-                    _CommentBar(
-                      controller: _commentController,
-                      focusNode: _commentFocusNode,
-                      cubit: cubit,
-                      replyToId: _replyParent?.id,
-                      replyToName: _replyToName,
-                      onCancelReply: _cancelReply,
+                        PostDetailStatus.loaded => _Loaded(
+                          state: state,
+                          onStartReply: _startReply,
+                        ),
+                        PostDetailStatus.deleted => const SizedBox.shrink(),
+                      },
                     ),
-                ],
-              );
-            },
+                    if (state.status == PostDetailStatus.loaded)
+                      _CommentBar(
+                        controller: _commentController,
+                        focusNode: _commentFocusNode,
+                        cubit: cubit,
+                        replyToId: _replyParent?.id,
+                        replyToName: _replyToName,
+                        onCancelReply: _cancelReply,
+                      ),
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),
     );
   }
 }
+
+/// What this screen hands back on the way out: the post as it now stands, so
+/// whichever list pushed it can swap that row in place instead of showing the
+/// counts it had on tap (see ADR-032).
+///
+/// Null while the post is still loading or failed to, and null once it is
+/// deleted — a delete already told the feed to drop the card outright
+/// (`FeedCubit.removePost`, in the listener above), and handing the corpse
+/// back on top of that would be asking the list to re-seed what it just
+/// removed. Hide and mute stay `loaded` and do hand the post back, which is
+/// harmless: every applier swaps an existing row and no-ops when the row is
+/// already gone.
+PostEntity? _result(PostDetailState state) => state.status == PostDetailStatus.loaded ? state.post : null;
 
 void _showPostMenu(
   BuildContext context,
@@ -440,8 +470,10 @@ class _Loaded extends StatelessWidget {
               comment: orphan,
               canDelete: state.canDeleteComment(orphan),
               onDelete: () => _confirmDeleteComment(context, cubit, orphan.id),
-              onQuickLike: () =>
-                  cubit.reactToComment(orphan.id, ReactionType.like),
+              onQuickLike: () => cubit.reactToComment(
+                orphan.id,
+                orphan.viewerReactionType ?? ReactionType.like,
+              ),
               onReact: (type) => cubit.reactToComment(orphan.id, type),
               onReply: () => onStartReply(orphan),
               onViewReactions: () => showReactionBreakdownSheet(
@@ -563,9 +595,11 @@ class _PostHeaderCard extends StatelessWidget {
                 _LikeButton(
                   post: post,
                   onTap: cubit.toggleLike,
-                  onLongPress: () async {
+                  // `buttonContext`, not this one: the picker anchors its
+                  // floating rail to the button's own box.
+                  onLongPress: (buttonContext) async {
                     final picked = await showReactionPicker(
-                      context,
+                      buttonContext,
                       current: post.viewerReactionType,
                     );
                     if (picked != null) cubit.react(picked);
@@ -573,7 +607,7 @@ class _PostHeaderCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 _Chip(
-                  icon: Icons.mode_comment_outlined,
+                  icon: CupertinoIcons.bubble_left,
                   label: '${post.commentCount}',
                 ),
                 const Spacer(),
@@ -644,8 +678,9 @@ class _CommentRow extends StatelessWidget {
   final bool canDelete;
   final VoidCallback onDelete;
 
-  /// Plain tap on the reaction row — toggles `LIKE` (see `onReact` for the
-  /// long-press picker).
+  /// Plain tap on the reaction row — adds `LIKE` if the viewer hasn't
+  /// reacted, otherwise removes whatever reaction they already left (see
+  /// `onReact` for the long-press picker).
   final VoidCallback onQuickLike;
   final ValueChanged<ReactionType> onReact;
   final VoidCallback onReply;
@@ -660,9 +695,11 @@ class _CommentRow extends StatelessWidget {
   /// comment above" visual cue.
   final bool isReply;
 
-  Future<void> _pickReaction(BuildContext context) async {
+  /// [glyphContext] is the little reaction glyph's own context, not the
+  /// row's — the picker anchors its floating rail to that box.
+  Future<void> _pickReaction(BuildContext glyphContext) async {
     final picked = await showReactionPicker(
-      context,
+      glyphContext,
       current: comment.viewerReactionType,
     );
     if (picked != null) onReact(picked);
@@ -724,7 +761,7 @@ class _CommentRow extends StatelessWidget {
                           child: Padding(
                             padding: const EdgeInsets.all(2),
                             child: Icon(
-                              Icons.close,
+                              CupertinoIcons.xmark,
                               size: 15,
                               color: colors.ink2,
                             ),
@@ -741,29 +778,27 @@ class _CommentRow extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      InkWell(
-                        onTap: onQuickLike,
-                        onLongPress: () => _pickReaction(context),
-                        borderRadius: BorderRadius.circular(999),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 2,
-                            horizontal: 2,
+                      // Wrapped so the picker anchors to this glyph rather
+                      // than to the whole comment bubble.
+                      Builder(
+                        builder: (glyphContext) => InkWell(
+                          onTap: onQuickLike,
+                          onLongPress: () => _pickReaction(glyphContext),
+                          borderRadius: BorderRadius.circular(999),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 2,
+                              horizontal: 2,
+                            ),
+                            // Fixed-size slot — see [ReactionGlyph]; without
+                            // it the "Like · Reply" row reflowed whenever
+                            // the active reaction changed.
+                            child: ReactionGlyph(
+                              reaction: reacted,
+                              color: reacted == null ? colors.ink3 : colors.red,
+                              size: 14,
+                            ),
                           ),
-                          child: reacted == null || reacted == ReactionType.like
-                              ? Icon(
-                                  reacted == null
-                                      ? Icons.favorite_border
-                                      : Icons.favorite,
-                                  size: 14,
-                                  color: reacted == null
-                                      ? colors.ink3
-                                      : colors.red,
-                                )
-                              : Text(
-                                  reacted.emoji,
-                                  style: const TextStyle(fontSize: 13),
-                                ),
                         ),
                       ),
                       // A sibling tap target, not nested inside the quick-like
@@ -854,7 +889,13 @@ class _CommentThread extends StatelessWidget {
       comment: comment,
       canDelete: state.canDeleteComment(comment),
       onDelete: () => _confirmDeleteComment(context, cubit, comment.id),
-      onQuickLike: () => cubit.reactToComment(comment.id, ReactionType.like),
+      // The viewer's *current* type, so a plain tap removes an existing
+      // reaction of any type instead of switching it to LIKE — see
+      // `FeedRepositoryImpl.toggleLike` for the wire-level reason.
+      onQuickLike: () => cubit.reactToComment(
+        comment.id,
+        comment.viewerReactionType ?? ReactionType.like,
+      ),
       onReact: (type) => cubit.reactToComment(comment.id, type),
       onReply: () => onStartReply(comment),
       onViewReactions: () => showReactionBreakdownSheet(
@@ -965,8 +1006,10 @@ class _ReplyGroup extends StatelessWidget {
                   canDelete: state.canDeleteComment(replies[i]),
                   onDelete: () =>
                       _confirmDeleteComment(context, cubit, replies[i].id),
-                  onQuickLike: () =>
-                      cubit.reactToComment(replies[i].id, ReactionType.like),
+                  onQuickLike: () => cubit.reactToComment(
+                    replies[i].id,
+                    replies[i].viewerReactionType ?? ReactionType.like,
+                  ),
                   onReact: (type) => cubit.reactToComment(replies[i].id, type),
                   onReply: () => onStartReply(
                     topLevelParent,
@@ -1048,8 +1091,9 @@ class _LikeButton extends StatelessWidget {
   final PostEntity post;
   final VoidCallback onTap;
 
-  /// Opens the reaction picker (see `reaction_picker_sheet.dart`).
-  final VoidCallback onLongPress;
+  /// Opens the reaction picker (see `reaction_picker.dart`), handed this
+  /// button's own context so the rail floats directly above it.
+  final ValueChanged<BuildContext> onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -1066,20 +1110,20 @@ class _LikeButton extends StatelessWidget {
       ),
       child: InkWell(
         onTap: onTap,
-        onLongPress: onLongPress,
+        onLongPress: () => onLongPress(context),
         borderRadius: BorderRadius.circular(AppRadii.pill),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              reacted == null || reacted == ReactionType.like
-                  ? Icon(
-                      reacted == null ? Icons.favorite_border : Icons.favorite,
-                      size: 16,
-                      color: reacted == null ? colors.ink2 : Colors.white,
-                    )
-                  : Text(reacted.emoji, style: const TextStyle(fontSize: 15)),
+              // Fixed-size slot so the pill keeps one width/height across
+              // every reaction — see [ReactionGlyph].
+              ReactionGlyph(
+                reaction: reacted,
+                color: reacted == null ? colors.ink2 : Colors.white,
+                size: 16,
+              ),
               const SizedBox(width: 8),
               Text(
                 Formatters.compactCount(post.reactionTotal),
@@ -1096,7 +1140,7 @@ class _LikeButton extends StatelessWidget {
 }
 
 /// Mirrors the feed card's repost pill (`post_card.dart`'s `_Pill` with
-/// `Icons.repeat`) — same green active state and count, wired to
+/// `CupertinoIcons.arrow_2_squarepath`) — same green active state and count, wired to
 /// `PostDetailCubit.toggleRepost` instead of `FeedCubit.toggleRepost`.
 class _RepostButton extends StatelessWidget {
   const _RepostButton({required this.post, required this.onTap});
@@ -1125,7 +1169,7 @@ class _RepostButton extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                Icons.repeat,
+                CupertinoIcons.arrow_2_squarepath,
                 size: 16,
                 color: reposted ? Colors.white : colors.ink2,
               ),
@@ -1216,7 +1260,7 @@ class _CommentBar extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 8, left: 4),
               child: Row(
                 children: [
-                  Icon(Icons.reply, size: 14, color: colors.ink2),
+                  Icon(CupertinoIcons.reply, size: 14, color: colors.ink2),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -1232,7 +1276,7 @@ class _CommentBar extends StatelessWidget {
                     borderRadius: BorderRadius.circular(999),
                     child: Padding(
                       padding: const EdgeInsets.all(2),
-                      child: Icon(Icons.close, size: 15, color: colors.ink2),
+                      child: Icon(CupertinoIcons.xmark, size: 15, color: colors.ink2),
                     ),
                   ),
                 ],
@@ -1266,7 +1310,7 @@ class _CommentBar extends StatelessWidget {
               ),
               const SizedBox(width: 9),
               AppIconButton(
-                icon: const Icon(Icons.arrow_upward),
+                icon: const Icon(CupertinoIcons.arrow_up),
                 filled: true,
                 borderColor: colors.ink,
                 size: 46,

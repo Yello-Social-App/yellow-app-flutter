@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -58,7 +59,7 @@ class _CommunityDetailView extends StatelessWidget {
                   child: Row(
                     children: [
                       AppIconButton(
-                        icon: const Icon(Icons.arrow_back),
+                        icon: const Icon(CupertinoIcons.back),
                         onPressed: () => Navigator.of(context).maybePop(),
                       ),
                       const SizedBox(width: 12),
@@ -311,7 +312,7 @@ class _Header extends StatelessWidget {
               AppButton(
                 label: 'New thread',
                 dense: true,
-                icon: const Icon(Icons.add, size: 14),
+                icon: const Icon(CupertinoIcons.add, size: 14),
                 onPressed: onCompose,
               ),
           ],

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
@@ -211,10 +212,10 @@ class _CreatePostViewState extends State<_CreatePostView> {
                         Row(
                           children: [
                             for (final t in [
-                              (Icons.photo_camera_outlined, 'Photos', () => _pickImages(cubit)),
-                              (Icons.videocam_outlined, 'Video', () => _notAvailableYet('Video')),
-                              (Icons.place_outlined, 'Place', () => _notAvailableYet('Place')),
-                              (Icons.sentiment_satisfied_outlined, 'Feel', () => _notAvailableYet('Feel')),
+                              (CupertinoIcons.camera, 'Photos', () => _pickImages(cubit)),
+                              (CupertinoIcons.videocam, 'Video', () => _notAvailableYet('Video')),
+                              (CupertinoIcons.location, 'Place', () => _notAvailableYet('Place')),
+                              (CupertinoIcons.smiley, 'Feel', () => _notAvailableYet('Feel')),
                             ])
                               Expanded(
                                 child: Padding(
@@ -459,13 +460,16 @@ class _MediaCardStackState extends State<_MediaCardStack> {
                         Positioned(
                           top: 8,
                           right: 8,
-                          child: _RoundIconButton(icon: Icons.close, onTap: () => widget.onRemoveAt(_index)),
+                          child: _RoundIconButton(icon: CupertinoIcons.xmark, onTap: () => widget.onRemoveAt(_index)),
                         ),
                         if (images.length < AppConstants.postMaxImages)
                           Positioned(
                             bottom: 8,
                             right: 8,
-                            child: _RoundIconButton(icon: Icons.add_photo_alternate_outlined, onTap: widget.onAddMore),
+                            child: _RoundIconButton(
+                              icon: CupertinoIcons.plus_square_on_square,
+                              onTap: widget.onAddMore,
+                            ),
                           ),
                       ],
                     ),
@@ -703,7 +707,7 @@ class _AddTagChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.add, size: 14, color: colors.ink2),
+              Icon(CupertinoIcons.add, size: 14, color: colors.ink2),
               const SizedBox(width: 4),
               Text('Add tag', style: AppTextStyles.metaMono.copyWith(color: colors.ink2)),
             ],
@@ -823,7 +827,7 @@ class _CheckRow extends StatelessWidget {
                 color: checked ? colors.yel : Colors.transparent,
                 border: Border.all(color: checked ? colors.ink : colors.line, width: 1.5),
               ),
-              child: checked ? Icon(Icons.check, size: 14, color: colors.onYel) : null,
+              child: checked ? Icon(CupertinoIcons.checkmark, size: 14, color: colors.onYel) : null,
             ),
             const SizedBox(width: 12),
             Expanded(

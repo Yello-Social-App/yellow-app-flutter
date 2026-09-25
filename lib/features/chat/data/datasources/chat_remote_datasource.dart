@@ -37,6 +37,12 @@ abstract final class ChatRoutes {
   static String attachments(String id) => '$_root/conversations/$id/attachments';
   static String attachment(String attachmentId) => '$_root/attachments/$attachmentId';
 
+  /// Voice notes have their own upload route — the general one stores what
+  /// it is given, this one transcodes to mono AAC/M4A and measures the
+  /// duration and waveform. A recording posted to [attachments] would come
+  /// back as a plain file with no `voice` block.
+  static String voiceAttachments(String id) => '${attachments(id)}/voice';
+
   // Groups — every one of these is 400 on a DM.
   static String photo(String id) => '$_root/conversations/$id/photo';
   static String members(String id) => '$_root/conversations/$id/members';
@@ -82,6 +88,7 @@ abstract interface class ChatRemoteDataSource {
   });
   Future<List<ReactionEntity>> removeReaction({required String conversationId, required String messageId});
   Future<AttachmentEntity> uploadAttachment({required String conversationId, required File file});
+  Future<AttachmentEntity> uploadVoiceAttachment({required String conversationId, required File file});
   Future<AttachmentEntity> getAttachment(String attachmentId);
   Future<void> markRead({required String conversationId, required String messageId});
 
@@ -232,6 +239,21 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
       _guard(() async {
         final res = await _dio.post<Map<String, dynamic>>(
           ChatRoutes.attachments(conversationId),
+          data: await _fileForm(file),
+        );
+        return AttachmentMapper.fromJson(_body(res));
+      });
+
+  /// Same one-field multipart body as [uploadAttachment], against the voice
+  /// route. The server reads the format from the bytes — M4A/MP4, WebM or
+  /// Ogg — so the filename is cosmetic here too, and the recording comes
+  /// back already converted, with `voice.durationMs` and `voice.waveform`
+  /// measured from the audio.
+  @override
+  Future<AttachmentEntity> uploadVoiceAttachment({required String conversationId, required File file}) =>
+      _guard(() async {
+        final res = await _dio.post<Map<String, dynamic>>(
+          ChatRoutes.voiceAttachments(conversationId),
           data: await _fileForm(file),
         );
         return AttachmentMapper.fromJson(_body(res));

@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +10,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/error_view.dart';
+import '../../../feed/domain/entities/post_entity.dart';
 import '../../../feed/presentation/widgets/post_card.dart';
 import '../bloc/shared_posts_cubit.dart';
 
@@ -45,7 +47,7 @@ class _SharedPostsView extends StatelessWidget {
               child: Row(
                 children: [
                   AppIconButton(
-                    icon: const Icon(Icons.arrow_back),
+                    icon: const Icon(CupertinoIcons.back),
                     size: 38,
                     onPressed: () => Navigator.of(context).maybePop(),
                   ),
@@ -103,8 +105,7 @@ class _SharedPostsView extends StatelessWidget {
                           for (final post in state.posts)
                             PostCard(
                               post: post,
-                              onOpen: () =>
-                                  context.pushNamed(RouteNames.postDetail, pathParameters: {'postId': post.id}),
+                              onOpen: () => _openPost(context, cubit, post.id),
                               onLike: () => cubit.toggleLike(post),
                               onReact: (type) => cubit.react(post, type),
                               onSave: () => cubit.toggleSave(post.id),
@@ -122,4 +123,12 @@ class _SharedPostsView extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Opens the post's own screen and applies whatever it pops back onto this
+/// row — a reaction or a comment made in there changes counts the card here
+/// shows, and nothing re-fetches this list on the way back. See ADR-032.
+Future<void> _openPost(BuildContext context, SharedPostsCubit cubit, String postId) async {
+  final updated = await context.pushNamed<PostEntity>(RouteNames.postDetail, pathParameters: {'postId': postId});
+  if (updated != null) cubit.applyUpdated(updated);
 }

@@ -886,9 +886,15 @@ response, add the toggle and delete this ADR's reasoning —
 The Profile tab was restructured to a cover/avatar/details layout (modelled
 on a mainstream social profile). The avatar, its camera badge and the compose
 bubble all overlap the cover, and all three are tappable — so the overlap is
-built with `Stack` + `Positioned`, and the cover block reserves
-`coverHeight + avatarOverhang` of real height. Nothing is shifted with
+built with `Stack` + `Positioned`. Nothing is shifted with
 `Transform.translate`.
+
+*Amended:* the identity block went back to sitting on a surf card, as it does
+on `public_profile_page.dart`, with the avatar straddling the card's top edge.
+The mechanism is unchanged — the card is the header `Stack`'s only
+non-positioned child, so it is what gives the Stack its height, and the avatar
+is still `Positioned` on top of it rather than translated. `ShimmerOwnProfileView`
+mirrors the same shape.
 
 **Why:** `RenderTransform.hitTest` inverse-transforms a tap against the
 child's *untransformed* box, so a translated widget silently stops accepting
@@ -922,3 +928,814 @@ suite instead of shipping.
 
 **Revisit if:** the API grows real profile-detail fields, or Circle gets its
 own nav button.
+
+---
+
+## ADR-025 — Direct reply lives on alerts the app draws, so it needs data-only chat pushes
+
+**Status:** Accepted — client side complete, background coverage waiting on
+`yello-notify`.
+
+A chat notification now carries a Reply action: an Android `RemoteInput`
+action and, on iOS, a `UNTextInputNotificationAction` under the category
+`yello_chat_reply`. The text is sent straight to
+`POST /ws/conversations/{id}/messages` from whichever isolate the reply
+arrived on, and the alert is rewritten in place with the outcome —
+`chat_reply_action.dart` for the action and the send,
+`push_notification_service.dart` for the drawing and the two response
+handlers.
+
+**Why the send does not go through DI:** a reply typed while the app is not
+running is delivered to `flutter_local_notifications`' own background engine.
+`sl` is empty there and `bootstrap()` never ran, so `sendChatReply` builds a
+`SecureStorageServiceImpl` and a pinned `Dio` itself and re-seeds
+`AppConfig` from `AppConfig.defaultBaseUrl` (which is why the base URL is now
+a constant rather than a literal in `main.dart`). It reproduces
+`AuthInterceptor`'s two rules deliberately — skip a token already known to be
+expired, refresh once on a 401 — because the interceptor itself is attached
+to a `Dio` that does not exist over there. Both attempts reuse one
+`clientId`, so the refresh retry cannot post the reply twice.
+
+**Why this is currently foreground-only:** an action button exists only on a
+notification *Dart* drew. Android hands a push that carries its own
+`notification` block to the system tray and runs no app code at all — not
+`onMessage`, not the background handler — so the alert the user sees when
+Yello is closed is the OS's, and nothing can be attached to it. There is no
+client-side way around that; it is a property of FCM, not of this app. See
+`docs/GOTCHAS.md`.
+
+**What closes the gap** (both on `yello-notify`, both small — the app is
+already written for them, and needs no further change when they land):
+
+1. Send `CHAT_MESSAGE` **data-only** — no `notification` block, `title` and
+   `body` repeated as `data` keys, Android priority `high`. The background
+   handler then draws the alert itself, with the Reply action on it.
+   `firebaseMessagingBackgroundHandler` and `_onForegroundMessage` both
+   already take their copy from `data` when the block is absent.
+2. Set `apns.payload.aps.category` to `yello_chat_reply`. iOS will not accept
+   a data-only push as a visible alert, so there the notification block stays
+   and the category is what grows the reply field.
+
+*Amended:* a chat alert is drawn with `MessagingStyle` and
+`CATEGORY_MESSAGE`, not as plain title/body — that is what makes Android
+present it as a conversation with the reply field open rather than a
+one-liner with everything folded behind a chevron. `conversationTitle` stays
+null because the payload never says whether the conversation is a group, and
+setting it makes Android prefix every line with a sender name. How much of
+this a device honours is the device's call: One UI's *Notification pop-up
+style: Brief* collapses every heads-up to a pill regardless.
+
+*Amended:* a successful reply **clears** the notification (the action carries
+`cancelNotification: true`) rather than rewriting it with the sent line. It
+also means the shade never sits on the system's progress spinner, which only
+resolves when the notification changes or goes. A failed send puts a fresh
+alert back carrying the text that didn't go out, so the words are recoverable.
+
+*Amended:* the refresh after a reply goes through `IsolateNameServer`, not
+through `_updates` directly. Every action tap is delivered to the plugin's
+background dispatcher — even with the app foregrounded — so the handler runs
+in an engine that cannot see the service's streams. The running app publishes
+a port; the reply pings it. See `docs/GOTCHAS.md`.
+
+**Rejected:** redrawing the OS's alert from the app (cancel id `0`, re-show
+with the action). The handler that would do it never runs on Android for a
+notification-block push, so there is nothing to redraw from — and where it
+does run, iOS, it would double the alert.
+
+**Revisit if:** `yello-notify` starts sending chat pushes data-only (drop the
+foreground-only caveat), or iOS background replies to a service-drawn push
+turn out to need a Notification Service Extension of their own.
+
+---
+
+## ADR-026 — The Profile tab's chrome collapses into an app bar, driven by a `ValueNotifier` rather than a sliver
+
+**Status:** Accepted.
+
+The Profile tab's menu and search buttons already floated over the cover
+photo in a `Positioned` on top of the page's `ListView`. They now sit inside
+`_ProfileTopBar`, which fades a `surf` surface, a cast shadow and an
+identity — avatar, name, `@username`, entering from the left — in over the
+72px of scroll that ends 40px before the header's own name line would reach
+the top of the viewport. The buttons do not move.
+
+**Why not a `SliverAppBar`.** The obvious shape is `CustomScrollView` +
+a pinned `SliverAppBar` with a `flexibleSpace`, the way `FeedPage` does its
+top bar. It does not fit here. The header's avatar straddles the identity
+card's top edge with `Stack`/`Positioned` (ADR-024), the cover fades into
+`bg` behind it, and the whole thing is one `ListView` on purpose so there is
+exactly one scrollable on the screen. Converting to slivers to get a
+collapse would mean rebuilding that geometry inside a `FlexibleSpaceBar`'s
+`collapseMode`, and `docs/GOTCHAS.md` already records what chasing a
+`flexibleSpace` collapse cost on the feed. The bar here is an overlay that
+reads the scroll offset; the list underneath is untouched.
+
+**Why a `ValueNotifier` and not `setState`.** The page holds a `ListView`
+whose children are the header, the segmented switcher and a column of real
+`PostCard`s. A `setState` in the scroll listener rebuilds all of that once
+per frame for the length of a flick. The offset goes into a `ValueNotifier`
+instead, and only the ~56px bar listens. Two further cuts fall out of that:
+the offset is **clamped to the end of the collapse**, so scrolling on past it
+writes the same value and `ValueNotifier` stops notifying entirely; and the
+two buttons are passed as `ValueListenableBuilder`'s `child`, so they are
+built once and handed through every rebuild. The title reads the user from
+its own `BlocSelector`, not a `BlocBuilder`, so a scroll frame never re-runs
+a whole `ProfileState` comparison.
+
+**Why the collapse threshold lives on `ProfileHeader`.** The hand-off point
+is a fact about the header's geometry — cover height, card overlap, avatar
+size — not about the bar. `ProfileHeader.nameOffset` derives it from the
+constants that already exist there, and the bar subtracts from that. Change
+the cover height and the hand-off follows on its own.
+
+**Why the bar grows an `AbsorbPointer`.** The background is a
+`BoxDecoration` colour, and a `DecoratedBox` does not hit-test — only
+`ColoredBox` is opaque to pointers, and it is opaque at every alpha
+including zero. So an opaque-looking bar would have let a tap fall through
+to whatever post card was scrolled under it. A `Positioned.fill`
+`AbsorbPointer`, switched on only once the bar is no longer fully
+transparent, blocks that while leaving the resting state as see-through to
+cover drags as it was before.
+
+**The collapsed state's depth cue is a painted shadow, not a `boxShadow`.**
+The bar reads as floating — a `surf` surface over the page's `bg` with a
+shadow cast onto the list, deliberately the same elevation language
+`BottomNavBar` already uses at the other end of the screen (black at 0.08
+light / 0.45 dark, 16px blur, 4px offset), plus `AppShadows.card`'s tighter
+contact layer to anchor the edge.
+
+It cannot be a `BoxShadow` in this bar's `BoxDecoration`, because that
+decoration changes on every scroll frame, and a blurred shadow on a
+per-frame decoration is precisely the pattern that crashed Impeller on this
+project (`docs/GOTCHAS.md`; ADR-012 sets out where a declared blurred shadow
+is still fine — a decoration that only rebuilds with its parent, which this
+is not). So `_TopBarShadowPainter` draws it with a `MaskFilter.blur` on a
+`Paint` instead: the same animated-blur technique `_ActiveTabIndicatorPainter`
+has driven from a running animation since the bottom bar shipped. The painter
+clips to the strip *below* the bar, so the blur's top and side falloff never
+tints the bar itself at any point in the fade, and the inner `Stack` is
+`Clip.none` so the shadow can reach past the bar's own box at all.
+
+*Amended:* this ADR originally shipped with a bottom hairline and no shadow,
+on the reasoning that any blurred shadow here was too close to the Impeller
+crash to risk. The painter route gets the floating read without going near
+the banned pattern, and both modes are verified on-device (Samsung
+`R5CX11J4TPR`) — which the hairline version never was.
+
+**The title's `Transform.translate` is not a re-run of ADR-024.** That ADR
+bans `Transform` for *tappable* overlaps, because a translated child cannot
+hit-test a tap past its own untransformed box. The title is wrapped in an
+`IgnorePointer` and takes no taps at all, so the trap does not apply and a
+translate is the cheapest way to slide it.
+
+**Revisit if:** the profile ever needs a real collapsing cover (a parallax
+or a shrinking image), at which point the sliver rewrite buys something this
+overlay cannot give.
+
+---
+
+## ADR-027 — The profile's All / Shared / Saved filters are `SegmentedTabs`, not a chip row
+
+**Status:** Accepted.
+
+`SegmentedTabs` names this screen in its own doc comment as the example of
+what it is for, and draws the line: segments are for a choice that is
+exclusive and always made, `FilterChipPill` is for independent toggles any
+of which may be off. The profile had drifted to a horizontally scrolling row
+of bordered pills, which says the wrong thing about a three-way filter where
+one is always active. It is now the shared control, with the counts kept in
+the labels (`All 12`, `Shared 3`, `Saved 7`).
+
+The horizontal scroll went with it. `SegmentedTabs` splits the width evenly
+and each segment already ellipsises, so the reason the row scrolled — three
+count-carrying labels outgrowing a narrow screen — is handled inside the
+control. `ShimmerOwnProfileView` follows: one full-width 45px pill where it
+used to draw three 36px ones, because the skeleton should describe one
+control rather than three.
+
+---
+
+## ADR-028 — Settings is its own feature, and App version shows no update check
+
+**Status:** Accepted; the "no update check" half is superseded by ADR-029,
+which builds the Updates group against the release channel's published
+manifest rather than against an API endpoint. Everything else below stands.
+
+The account menu on the profile (☰) had grown into two different things: a
+theme switch that acted in place, three shortcuts to screens that already
+had another way in (Your circle, Shared posts), and two real account
+screens. It is now one thing — a list where every row opens a screen —
+holding Theme, Send feedback, Notification preferences, App version and Log
+out.
+
+**The two new screens live in `lib/features/settings/`, not in `profile/`.**
+Neither one is about a profile; the only thing tying them to that screen is
+the button that opens them. `ThemeCubit` stays in `core/theme` (the root
+`MaterialApp` reads it, so it cannot belong to a feature) and grew
+`setMode`, replacing `toggle` — with the screen making the choice
+explicitly, a caller that flips whatever is current no longer has a user.
+
+**App version reads the device, through the usual layers.** It is a local
+read (`package_info_plus` + `device_info_plus`) behind
+`AppInfoLocalDataSource` → `AppInfoRepository` → `GetAppBuildInfoUseCase` →
+`AppVersionCubit`, the same shape `BookmarksLocalDataSource` already uses
+for a device-local feature. The repository skips the `NetworkInfo` gate the
+remote-backed ones open with: this data must still resolve with the radio
+off. The OS and device rows are best-effort and are simply left out when
+`device_info_plus` cannot answer, rather than failing the screen that was
+asked for a version number.
+
+**The reference design's "Updates" group is deliberately not built.** It
+carries a *Check now* button, a "checked 54 minutes ago" line and a "check
+automatically" toggle. The API serves no version resource to compare an
+installed build against, and Yello ships through the Play Store and the App
+Store, so all three controls could only ever invent their answer — a toggle
+nothing reads, a timestamp of a check that never happened. In its place a
+"This build" card states what is true (this is the installed build, new ones
+come from the store) and a *Copy* button puts the whole diagnostic line on
+the clipboard, which is what the version screen is actually opened for.
+
+**What removing the three menu rows costs.** Your circle (shell branch 1)
+now has exactly one entry point, the connections row on the profile header —
+noted in both places in the code. Shared posts keeps its own `Shared` tab on
+the profile, so only the full-screen version is now unreachable from the UI;
+its route stays registered. Privacy & safety is still reachable from the
+notifications screen and is still where a tapped `REPORT_RESOLVED` push
+lands, which is why that route must stay.
+
+**Revisit if:** the app gains enough settings to want a settings *hub*
+screen rather than a bottom-sheet menu. (The other revisit condition here
+was "the backend grows a latest-version endpoint". ADR-029 took the group
+in a different direction — a manifest published with each release — without
+the backend growing anything.)
+
+---
+
+## ADR-029 — Yello updates itself from a published manifest, because it is sideloaded
+
+**Status:** Accepted. Supersedes ADR-028's "the Updates group is deliberately
+not built".
+
+Yello is not installed from a store. It is handed to people as an APK, which
+means every update so far has been a file sent by hand, and a user who never
+receives that file simply keeps running an old build forever. The Updates
+group ADR-028 declined to build is now built — against the release channel,
+not against the API.
+
+**The version check is a static manifest, not an endpoint.** Each release
+publishes a `latest.json` beside its APK:
+
+```json
+{
+  "version": "0.4.0",
+  "buildNumber": 3,
+  "notes": "What changed, one or two lines.",
+  "apkUrl": "https://github.com/Yello-Social-App/yellow-app-flutter/releases/download/v0.4.0/yello-0.4.0.apk",
+  "sizeBytes": 63779818
+}
+```
+
+`AppConfig.updateManifestUrl` points at
+`…/releases/latest/download/latest.json`, a permanent redirect onto whatever
+the newest release attached — so cutting a version never edits the app. The
+API is untouched: it still serves no version resource, and ADR-028's
+"revisit if the backend grows a latest-version endpoint" was too narrow a
+condition. It did not need one.
+
+**It does not go through `ApiClient`.** The manifest and the APK are fetched
+off-host, and `AuthInterceptor` attaches the session bearer token to every
+request on that Dio. Pointing it at a download host would hand the session
+to whoever runs it, so `AppUpdateRemoteDataSourceImpl` owns a bare `Dio`
+with no interceptors. A non-`https` `apkUrl` is refused outright — the file
+is about to be executed by the OS installer, so a plaintext hop is a
+code-execution hole, not a privacy one.
+
+**The comparison key is the build number, never the version string.** It is
+the Android `versionCode`, the one value the platform guarantees increases
+between installable builds. Equal build numbers are not an update:
+re-installing the running build is the case where Android shows its own
+unhelpful "app not installed". An unparseable installed build offers
+nothing rather than guessing.
+
+**Installing is three intents of Kotlin, not a package.** `MainActivity`
+holds the `yello/installer` channel: where to download to (app-private
+cache, so no storage permission), whether `REQUEST_INSTALL_PACKAGES` has
+been granted, the OS screen that grants it, and handing the file to the
+package installer through a `FileProvider` content URI. Every pub.dev option
+in this space bundles its own download stack, which this app already has in
+`dio`. A refusal comes back as `false`, not as an error: "install unknown
+apps" being off is the ordinary first run, and the card asks for it rather
+than reporting a failure.
+
+**Android only.** iOS can install nothing but what the App Store hands it,
+so the group is absent there rather than shown with a button that could only
+apologise. `AppUpdateCubit` is a singleton provided with
+`BlocProvider.value`, because a 60 MB download must survive the user leaving
+the App version screen — a factory would close the cubit mid-transfer.
+
+**This only works if every APK is signed with the same key.** Android
+refuses an update whose signature differs from the installed app, and the
+only way out is uninstalling, which takes the user's data with it. Release
+builds previously used the *debug* keystore — per-machine, auto-expiring —
+which is fine for `flutter run --release` and fatal for distribution.
+`android/app/build.gradle.kts` now reads `android/key.properties` (gitignored,
+as is `*.jks`) and falls back to the debug key only when that file is
+absent. **A build made without the keystore must not be handed to anyone.**
+
+**Revisit if:** Yello goes to the Play Store, at which point this whole path
+is replaced by Play in-app updates (`in_app_update`) — Play policy forbids
+an app updating itself and treats `REQUEST_INSTALL_PACKAGES` as a restricted
+permission. Also revisit if the update needs to be forced rather than
+offered, which would want a `minBuildNumber` field in the manifest and a
+gate at startup rather than a card in settings.
+
+---
+
+## ADR-030 — Stories moved onto the real API, keyed by author id, and kept inside the feed feature
+
+**Date:** 2026-09-24 · **Status:** accepted
+
+`/v1/stories` shipped, so the client-side seed that stood in for it
+(`StoryLocalDataSource`, an in-memory list whose "seen" flag reset every
+app launch) is gone, along with `GetStoriesUseCase` and
+`MarkStorySeenUseCase`. `docs/BACKEND.md` listed Stories as a permanent gap;
+it no longer is. Ten endpoints are wired: post, rail feed, my stories, one
+user's stories, one story, mark viewed, viewers, archive, delete, reply.
+
+**Stories live in `features/feed`, not a feature of their own.** They are
+already there, the rail is part of the Home tab, and the alternative meant
+moving twelve files to buy a boundary that only the rail ever crosses. What
+did get split is the *contract*: `StoryRepository` is separate from
+`FeedRepository` rather than adding ten methods to it — the two share
+nothing but a screen.
+
+**The viewer route takes an author id, not a rail index.** `/story/:authorId`
+replaced `/story/:userIndex`. A rail is a snapshot; a ring whose last story
+expires between the render and the tap shifts every index after it, and an
+index-keyed route would then play the wrong person's story. `?only=true`
+plays that one author's ring (`GET /users/{id}/stories`) instead of
+continuing through the rail — the deep-link and open-from-elsewhere shape.
+Nothing links to it from a profile yet; the route is the seam for when
+something does.
+
+**The rail is two calls, made together.** `/stories/feed` deliberately
+excludes your own stories, so "Your story" comes from `/stories/me`.
+`StoryRepositoryImpl.getRail` fires both and folds them into one
+`StoryRailEntity` whose `all` is your ring first, then the server's order.
+`Future.wait` rather than two sequential `await`s: it rethrows the original
+exception so `_run`'s `on AppException` still catches it, *and* consumes the
+other future's error instead of leaving it unhandled.
+
+**Cover keys map to gradients on the client.** The server stores
+`cover-0` … `cover-7` and never a colour, so
+`kStoryCoverGradients` is the entire definition of what a text story looks
+like — changing a pair restyles every existing story of that cover,
+archived ones included, with no migration. An unknown key renders as
+`cover-0` rather than a blank frame, so a newer backend adding `cover-8`
+degrades instead of breaking.
+
+**Progress ticks are kept out of the page rebuild.** The slide timer emits
+~16 times a second. The viewer's `BlocConsumer` has a `buildWhen` that
+ignores `progress` outright, and `_ProgressBars` reads it through a
+`BlocSelector` — without that, every tick would rebuild the decoded
+full-screen photo behind it.
+
+**The heart sends a reply, it does not react.** There are no story
+reactions server-side (the contract lists them as not built), so a local
+heart would be a button that does nothing off-device. It posts "❤️" through
+`POST /stories/{id}/replies`, which is what it visibly does in Messenger
+anyway.
+
+**Story replies reach chat as a reference, not content.** `Message.storyReply`
+carries `{storyId, storyAuthorId, storyType, storyExpiresAt}` and nothing
+else, so the bubble's preview has to fetch the story itself.
+`StoryPreviewCubit` is a **singleton** cache keyed by story id: several
+replies in one conversation commonly point at the same story, and a
+per-bubble fetch would be one request each. It also refuses to spend a
+request on a story that is expired and not the viewer's own — that is a
+guaranteed `404` — and remembers ids that 404'd so the same bubble never
+asks twice.
+
+**`viewCount` and the viewer list are not the same fact.** Names are deleted
+48 h after posting while the count survives, so an empty viewers sheet under
+"Seen by 23" is correct. The sheet says so in words rather than rendering an
+error.
+
+**Revisit if:** highlights, story reactions or video stories land (all three
+are listed as not built), or if a `STORY_POSTED` push appears — the rail is
+currently re-read on refresh, with no live invalidation.
+
+---
+
+## ADR-031 — A plain tap on the like pill removes any reaction, and the picker holds only real ones
+
+**Date:** 2026-09-25 · **Status:** accepted
+
+Three things about the reaction control were wrong at once, and two of them
+came from the same misreading of the endpoint.
+
+**The endpoint is a toggle keyed on the type you send.**
+`POST /reactions/{targetType}/{targetId}` decides add / change / remove from
+the viewer's *current* reaction: a type they do not have is a **switch**, the
+type they do have is a **removal**. There is no `DELETE`. So `toggleLike`
+hardcoding `LIKE` meant a plain tap on a post the viewer had reacted to with
+😆 read as "change it to LIKE" — the reaction could be cycled but never taken
+back without opening the picker and finding the one already-selected tile.
+`FeedRepositoryImpl.toggleLike` now echoes `post.viewerReactionType` when
+there is one, which is why it takes the whole `PostEntity` and not just an
+id. That single change fixes every surface that calls `toggleLike`
+(`FeedCubit`, `ProfileCubit`, `PublicProfileCubit`, `SharedPostsCubit`,
+`PostDetailCubit`); the two cubits that also predict the result optimistically
+had to echo the same type in `_predictReaction`, or the pill flipped to a
+heart for a moment before the server's removal landed on top of it.
+`CommunityPostCard` already did this (`onReact(viewerReaction ?? like)`),
+which is where the shape came from.
+
+**A reaction glyph needs a fixed box.** The affordance swaps between an
+`Icon` and a `Text` emoji, and emoji advance widths differ per glyph — `❤️`
+is a narrow text-presentation glyph, `😆`/`😮` are wide pictographic ones. Laid
+out at natural size, the pill resized every time the reaction changed, which
+is what it looked like on-device: a button that grew and shrank depending on
+what you had picked. `ReactionGlyphSlot` is a `SizedBox.square` +
+`FittedBox(scaleDown)`; `ReactionGlyph` is the heart/emoji pair inside one.
+`_Pill` in `post_card.dart` puts *every* icon in the same 15px slot, not just
+the reaction one, so the whole action row keeps one height rather than the
+pills disagreeing about it. `scaleDown` rather than `contain`: a glyph that
+measures wider than its em gets pulled back in, and the smaller ones are not
+scaled up to fill the box.
+
+**The 🖕 tile stopped being decorative and became `LOVE`'s glyph.** It
+started as a 7th tile that popped the sheet with no value and showed a "sent
+into the void" snackbar — a reaction that looked like it had silently
+failed. It cannot be a 7th *type*: `ReactionType` on the backend is a closed
+enum (re-verified 2026-09-25 against the live `/docs/json`:
+`LIKE|LOVE|HAHA|WOW|SAD|ANGRY`), so there is nowhere to store, count or list
+one back. So it borrows a real type instead: `ReactionType.love` renders as
+🖕 (`ReactionType.emoji`), which is a **display** choice only — it still
+travels and counts as `LOVE`. `LOVE` is the one to borrow because this app's
+quick-tap already draws a heart for `LIKE`, so ❤️ was the row's least
+distinct tile. The cost, accepted knowingly: the reaction is `LOVE` to the
+backend and to any client that hasn't made the same swap.
+
+A decorative tile was the alternative and was rejected — a control that
+reports success while sending nothing is worse than one that sends a
+differently-named reaction.
+
+**The picker floats against the button, it is not a bottom sheet.** A sheet
+put the reactions at the opposite end of the screen from the thumb that had
+just long-pressed. `showReactionPicker` is now a `PopupRoute` whose rail is
+placed by a `SingleChildLayoutDelegate` against the anchor's rect: above it
+by default, flipped below when it would cross the top safe area, and slid
+along the screen when centring would push it past an edge. It takes the
+**button's** context, not the caller's — the three feed call sites pass a
+`Builder`'s context or the button's own, since anchoring to the enclosing row
+would float the rail above the wrong thing. A `PopupRoute` rather than a bare
+`OverlayEntry`: it brings the barrier, back-button dismissal and a return
+value, so every call site kept its `await` + `if (picked != null)` shape.
+
+`CommunityPostCard` had a near-copy of the old sheet; it now calls the same
+function, so a long press behaves identically on both kinds of post.
+
+The rail has **no drop shadow**, which a floating surface would normally
+want: the whole subtree is scaled and faded every frame of the entry
+animation, and a blurred `BoxShadow` under that is this project's documented
+Impeller crash. A 10% barrier scrim does the separating instead.
+
+**Revisit if:** the backend's `ReactionType` gains a value — the rail is
+`for (final type in ReactionType.values)` and already `FittedBox`-guarded for
+width, so a 7th tile is one enum case plus its wire mapping. A real 7th type
+would also free `LOVE` to go back to ❤️.
+
+---
+
+## ADR-032 — A detail screen hands its entity back on pop; the list swaps that one row
+
+**Status:** Accepted
+
+Every screen that opens a post, a thread or a project pops with the entity it
+is holding, and the list that pushed it applies that entity to the matching
+row. No list re-fetches on the way back.
+
+- The detail side is a `PopScope<T>` with `canPop: false` and an explicit
+  `context.pop(<entity>)`, so the system back gesture carries the result too
+  and not just the arrow: `PostDetailPage`, `CommunityPostPage`,
+  `ProjectDetailPage`.
+- The list side is `final updated = await context.pushNamed<T>(...)`, then
+  one apply call: `FeedCubit.replacePost`, `CommunityFeedCubit.applyUpdated`,
+  `CommunityDetailCubit.applyUpdated`, `ShowcaseCubit.applyUpdated`,
+  `ProfileCubit.applyUpdated`, `PublicProfileCubit.applyUpdated`,
+  `SharedPostsCubit.applyUpdated`.
+- Every applier swaps in place and no-ops on an id it doesn't hold, so it is
+  safe to fire at a list that has already dropped the row (a delete, a hide,
+  a mute) and it never re-seeds something that was removed.
+
+**Why:** reacting or commenting changes counts the card underneath is
+showing, and nothing was carrying that back. The feed is a
+`registerLazySingleton` kept alive across tab switches
+([GOTCHAS](GOTCHAS.md#long-lived-singleton-cubits-go-stale)), the communities
+timeline is created once per visit to Explore, and a profile list is held by
+its page — none of them re-read anything when a push pops. So the row kept
+the numbers it had at the moment it was tapped, for as long as the screen
+stayed alive: react on the thread, come back, the count has not moved.
+
+**Why not just refresh the list on the way back.** It is one more request per
+back-press on a list the user is already looking at, and against a
+server-sorted feed (`hot`, `trending`) the refetch can reorder or re-page the
+list under the finger that just came back to it — the row you were looking at
+moves or disappears. It also cannot fix Saved, which is local
+(`shared_preferences`, ADR-007) and not in any list response. The entity that
+comes back is already the server's own answer: every mutating call on a detail
+screen folds the response into `state.post`, so nothing has to be re-read to
+know what the row should now say.
+
+**What it changes elsewhere:**
+
+- `PostEntity.repostedByMe` is *not* taken from the incoming copy. That flag
+  is on no wire response (see its doc) — each screen recovers it separately,
+  best-effort — so every applier re-derives it from its own `_myRepostIds`,
+  the map its own cancel path reads. Trusting someone else's copy is how a
+  pill ends up saying "Reposted" with nothing on that screen able to undo it,
+  or "Repost" on something already reposted, one tap from a duplicate.
+- `_result` in `post_detail_page.dart` returns null once the post is deleted,
+  because the delete path has already told the feed to drop the card.
+- A nested `RepostedPostPreview` opened from inside a repost still pops its
+  result, but nothing applies it: the row in the list is the *repost*, and the
+  post that changed is the `originalPost` inside it. Left alone rather than
+  half-solved — see the gap noted in GOTCHAS.
+
+**Cost:** a list can now be written back to from a screen it doesn't own, so
+an applier that doesn't no-op on an unknown id would resurrect deleted rows.
+Keep them id-matched and in-place.
+
+**Do not** add a `refresh()` on pop as well. Two mechanisms for the same
+staleness is how they disagree.
+
+---
+
+## ADR-033 — Voice notes record in a full-screen stage, and pause finishes the take
+
+**Status:** Accepted
+
+A voice message is recorded in a `PopupRoute` over the conversation
+(`voice_recorder_sheet.dart`), not in the composer: a status line, a 240px
+radial meter around an 88px orb, a `m:ss` clock, and discard · stop ·
+send. It follows the recorder design the feature was specified from, redrawn
+in this app's tokens rather than the mockup's own dark palette (ADR-020 — the
+palette here is deliberately not the design file's).
+
+The mic **replaces the send button** when there is nothing to send, rather
+than taking a fourth slot in the composer row. At 320dp that row already
+holds an attach control and a five-line field; a fourth control is what makes
+the field collapse. The swap is driven by the `TextEditingController` rather
+than by `ChatState` — the draft is not in the state (only the typing signal
+derived from it is), and listening to the controller rebuilds one button
+instead of the composer on every keystroke.
+
+**Pause is a stop, and the red button records a new take.** The design shows
+pause/resume, and `record` does support both — but a paused `MediaRecorder`
+has no readable file on Android, so a paused take cannot be played back,
+which is what the design's own "tap to preview" promises. Finishing the take
+on pause makes preview work every time, at the cost of a resume that a voice
+note has little use for. Send from the recording state stops and uploads in
+one tap, so Stop is never a step anyone has to know about.
+
+**The upload happens in the sheet; the message is sent by `ChatCubit`.**
+`VoiceRecorderCubit` stops at an uploaded `AttachmentEntity`, and
+`ChatCubit.sendVoiceNote` puts the message around it through the same
+optimistic `_deliver` path as everything else. A second delivery route would
+have had to learn about `clientId` idempotency, retries, reply targets and
+the inbox preview all over again. It is deliberately *not* folded into
+`send`: a voice note travels alone and carries no draft, so it never enters
+`pendingAttachments` with the photos.
+
+**One player for the whole app** (`VoiceNotePlayer`, a DI lazy singleton).
+Only one note plays at a time — the service's own client guidance, and what
+every messenger does — and a transcript can hold hundreds of bubbles, each of
+which would otherwise want a real platform player. Bubbles watch its single
+`ValueNotifier` and compare `noteId` against their own. Its `AudioPlayer` is
+built on the first play, so a session that never opens a note never opens an
+audio session (and a widget test that constructs one never reaches a
+platform channel that isn't there).
+
+**What it changes elsewhere:**
+
+- `AttachmentKind` gains `voice`, and `AttachmentEntity` a `VoiceMetaEntity`.
+  `isVoice` requires *both* the kind and the metadata: a VOICE attachment the
+  server could not measure renders as a file chip rather than as a player
+  stuck at 0:00.
+- The waveform drawn is always the **server's**, measured from the audio on
+  upload — so every device draws a note identically, and a bubble looks right
+  before anything is decoded locally.
+- `LastMessageKind.voice` gives the inbox row "Sent a voice message", the
+  same words `yello-notify` puts in the push, instead of the filename (every
+  note on the service is called `voice-message.m4a`).
+- Both meters are `CustomPainter`s. Sixty rotated widgets rebuilding twelve
+  times a second is the version that drops frames, and an animated blurred
+  decoration is this project's documented crash (GOTCHAS).
+- `RECORD_AUDIO` / `NSMicrophoneUsageDescription` are asked for when the
+  recorder opens, by `record`'s own `hasPermission()`. Someone who never
+  sends a voice note is never asked.
+
+**Cost:** three new dependencies (`record`, `just_audio`, `path_provider`)
+and a platform surface — microphone and audio focus — this app did not have.
+A `503 UNAVAILABLE` from the upload route means the deployment has no bucket
+or no ffmpeg; the mic button is still drawn and the failure is a message
+rather than a hidden control, which the service's own guidance would rather
+we did the other way round.
+
+**Not built, deliberately:** the 1× / 1.5× / 2× speed control from the API's
+checklist. It is not in the design, and nothing in it is load-bearing for
+sending or hearing a note.
+---
+
+## ADR-034 — Chat photos open in the shared viewer, and a re-signed link is a state revision
+
+**Status:** Accepted
+
+A photo in a transcript expands into `PhotoViewerPage` — the same full-screen
+viewer a post's photos open into — rather than getting a chat-specific
+lightbox. A tap opens the whole message's set on the picture that was tapped,
+so a four-photo message is swiped through in the viewer instead of four
+separate opens.
+
+**The viewer takes cache keys now, not just URLs.** A post's photo URL is
+permanent, so keying the image cache on the URL is free there. A chat
+attachment's is presigned and re-signed on **every** history fetch, so the
+same file arrives under a different URL every few seconds; keyed on the URL,
+expanding a picture would re-download a file that is already on disk. The
+chat passes the attachment ids as `PhotoViewerArgs.cacheKeys` — the keys the
+transcript's own thumbnails are stored under — so opening one is a cache hit.
+Posts pass nothing and keep the old behaviour.
+
+**A stale link is re-signed before the viewer opens**, by
+`ChatCubit.viewableImageUrls`, the picture-side twin of `playableVoiceUrl`:
+R2 answers 403 past the hour and the viewer would open on its error state.
+A message's links are re-signed concurrently, so a four-photo message costs
+one round trip.
+
+**Re-signing had to become visible to the UI at all.** It was not:
+`AttachmentEntity.props` deliberately exclude the URL (see GOTCHAS), so a
+message carrying a freshly signed attachment is `==` the old one, the
+`ChatState` is `==` the old one, and `emit` drops equal states — the fetch
+happened on every expiry and changed nothing on screen. `ChatState` gains an
+`attachmentRevision` counter, bumped in `refreshAttachment`, purely so that
+one emit lands; the poll's own re-signing still goes unnoticed, which is what
+the excluded prop is for. The thumbnail additionally keys on the URL
+(`key: ValueKey(url)`), because `CachedNetworkImageProvider` compares equal
+on `cacheKey` alone and would otherwise never re-resolve a picture that 403'd.
+
+**Cost:** one more field on `ChatState`, and a counter is a blunt instrument —
+any future code that re-signs a link has to remember to bump it, or land in
+the same silence. The alternative, putting the URL back in
+`AttachmentEntity.props`, makes every 5-second poll look like a changed
+transcript, which is the more expensive mistake.
+
+---
+
+## ADR-035 — A theme is a palette flavor crossed with a brightness, not one of four themes
+
+**Status:** Accepted
+
+The Theme screen now offers four themes: the original pair (ADR-020) and a
+second pair lifted from the Yello Design System's own token tables
+("Quiet rails" — neutral grey-black layers, one saturated yellow per view).
+They are stored as **two axes**, not as a four-valued enum: `ThemeState`
+carries an `AppThemeFlavor` and a `ThemeMode`, and `AppColors.resolve`
+crosses them.
+
+**Because `MaterialApp` owns one of the axes and not the other.** It picks
+between `theme` and `darkTheme` by brightness itself, and has no concept of a
+flavor — so the flavor has to be baked into *both* `ThemeData`s before they
+are handed over, while the brightness stays `themeMode`'s job. A flat
+four-value enum would have to be decomposed back into exactly this shape at
+the one place it is consumed, and would make "keep my palette, switch to
+dark" two unrelated values instead of one field changing.
+
+**The palettes are a re-point, not a redesign.** Every widget already reads
+`AppColors.of(context)`, so a new flavor is two `const AppColors` and nothing
+else — no widget changed for this. The cost of that is the token set is the
+ceiling: the design system distinguishes `outline-variant` (hairlines on
+surfaces) from `outline-strong` (control borders), but this app has a single
+`line` token doing both, so `line` takes `outline-variant` — the role it
+actually draws most — and `outline-strong` goes unused.
+
+**Three tokens are deliberately not the source table's value**, each noted at
+its line in `app_colors.dart`: `line2` (no token exists below
+`outline-variant`, so it is derived as the midpoint to the card surface),
+`shell` (stays dark in *both* flavors' light sets, because ADR-009's slab
+still paints fixed light ink on it), and dark `yelb` (`primary-fixed` sits
+within ~1% of `surf` on this palette, which would make a selected chip
+invisible, so the `-dim` wash the source offers for exactly this is used).
+
+**The flavor persists under its own key**, `settings.theme_flavor`, holding
+an enum `name`. An install that predates it has no value there and
+`AppThemeFlavor.fromName` resolves that to `classic`, so upgrading keeps the
+theme the device already had.
+
+**Cost:** four palettes to keep honest instead of two, and any token added to
+`AppColors` from here on has to be answered four times. Typography is
+untouched — the app is already on Geist plus a body face, which is what the
+source system asks for — so the flavors differ in colour only.
+
+---
+
+## ADR-036 — The interface draws Cupertino icons, imported with a `show` clause
+
+**Status:** Accepted
+
+Every icon in the app is a `CupertinoIcons` glyph instead of a Material one —
+264 call sites across 60 files, swapped one-for-one. `cupertino_icons` was
+already a dependency; nothing else about the app became Cupertino, so this is
+a glyph change, not a move to `CupertinoApp`, `CupertinoButton` or Cupertino
+theming.
+
+**The import is `show CupertinoIcons`, never the bare library.** A file that
+imports both `package:flutter/material.dart` and
+`package:flutter/cupertino.dart` in full pulls two overlapping widget sets
+into one namespace, and the next person to add a widget in that file gets to
+resolve the ambiguity. The `show` clause takes the one symbol that is
+actually wanted and leaves the rest of Cupertino out of scope, which is also
+the honest statement of what this change is.
+
+**Three glyphs have no Cupertino counterpart and are handled, not faked:**
+
+- `Icons.apple` stays Material, in `login_page.dart`. It is a brand mark, not
+  an interface icon — there is no Apple logo in `CupertinoIcons`, and an
+  approximation on a "Sign in with Apple" button would be wrong.
+- `Icons.done_all` (the double check that means *read* in a transcript) has
+  no Cupertino equivalent. Sent is `checkmark` and read is
+  `checkmark_circle_fill` — the pair still reads as one state escalating into
+  the next, which is the only thing the double check was doing.
+- `Icons.eco_outlined`, `celebration_outlined` and `cake_outlined` are
+  decorative (auth-hero accent bubbles, a birthday row). Cupertino has no
+  leaf and no cake, so they take `sparkles` and `gift`.
+
+**The rest of the mapping is one-for-one and semantic, not literal.** Where
+Material drew an arrow and Cupertino draws a chevron (`arrow_back` → `back`),
+or Material had a `_rounded`/`_outlined` variant Cupertino does not
+(`check_rounded` and `check` both → `checkmark`), the destination is the iOS
+idiom for the same job rather than the closest-looking shape. Repost is the
+one deliberate upgrade: `Icons.repeat` was the media-loop glyph, and
+`arrow_2_squarepath` is the one people read as "repost".
+
+**Cost, and what is unverified:** Cupertino glyphs sit on a different optical
+grid than Material's 24px one — they generally read lighter and slightly
+smaller at the same `size:`. Every `size:` in the app was tuned against
+Material. Nothing was re-tuned here, because the sizes have to be judged on a
+screen and there is no device attached to this sandbox. Expect a pass over
+icon sizes after the first on-device look, concentrated on the small ones
+(the 13-14px post-action row) where the weight difference shows most.
+
+---
+
+## ADR-037 — "Not listened to yet" is a local fact, drawn in the unread accent
+
+**Status:** Accepted
+
+A voice note in a transcript now reads as one of two things at a glance:
+**unheard** — the play button is brand yellow under an ink ring, the whole
+waveform is drawn in `yeld`, the length is ink and bold, and a small yellow
+dot sits after it — or **heard**, which is the quiet ink-on-surface bubble
+the app already had. That is deliberately the same yellow-disc-plus-ink-ring
+language the Inbox uses for an unread row, so one visual vocabulary covers
+"not read" and "not listened to" instead of two.
+
+**The waveform's unheard colour is `yeld`, not `yel`.** An unheard note has
+no played portion, so a single colour carries the entire waveform: flat
+brand yellow is a *fill* token and 3px strokes of it disappear against a
+white card, while `yeld` is the accent that is defined to hold contrast as
+ink on a light ground (and is the same yellow again in dark).
+
+**The state is stored on-device, not on the server.** `yello-chat` has no
+per-attachment playback flag — a message carries read receipts, not "played"
+— so `VoiceNotePlaysStore` keeps the heard ids in `shared_preferences`,
+exactly as saved posts do. It does not follow the account to another phone,
+and it cannot: there is no endpoint to sync it through. This is a permanent
+client-side stand-in, not a placeholder.
+
+**Unknown reads as heard.** The store's notifier is `null` until the prefs
+read lands, and a bubble treats `null` as heard. The alternative — an empty
+set until proven otherwise — flashes the accent across a whole transcript of
+notes the user played yesterday, for as long as a disk read takes, on every
+cold start.
+
+**A note is heard the moment it starts playing**, marked from
+`ChatPage._playVoice` on a successful `toggle`, not on completion. A note
+someone listened to half of, or scrubbed to the end of, is not new any more;
+waiting for `ProcessingState.completed` leaves both wearing the accent. The
+notifier is updated before the prefs write and the write is not awaited, so
+the bubble drops out of the accent on the tap rather than after I/O.
+
+**Only an incoming note can be unheard.** On a yellow (own) bubble the style
+is never applied: that note is one you recorded, and whether the other side
+has played it is a fact the API does not report — inventing a marker for it
+would be a lie rather than a gap.
+
+**The stored set is capped at 600 ids, oldest dropped first**, so the key
+cannot grow without bound over the life of an install. A note scrolled far
+enough back to fall off reads as heard, which is the harmless side of that
+trade; a genuinely new note reading as heard is not.
+
+**Cost:** one more DI singleton and one more `ValueListenableBuilder` per
+voice bubble, and the heard set is per-device — reinstalling the app, or
+opening Yello on a second phone, marks every note new again.

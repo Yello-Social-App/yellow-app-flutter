@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -66,7 +67,7 @@ class CommunityPostRouteFallback extends StatelessWidget {
               Row(
                 children: [
                   AppIconButton(
-                    icon: const Icon(Icons.arrow_back),
+                    icon: const Icon(CupertinoIcons.back),
                     onPressed: () => Navigator.of(context).maybePop(),
                   ),
                 ],
@@ -207,7 +208,7 @@ class _CommunityPostViewState extends State<_CommunityPostView> {
                     child: Row(
                       children: [
                         AppIconButton(
-                          icon: const Icon(Icons.arrow_back),
+                          icon: const Icon(CupertinoIcons.back),
                           onPressed: () => context.pop(cubit.state.post),
                         ),
                         const SizedBox(width: 12),
@@ -732,7 +733,7 @@ class _Composer extends StatelessWidget {
                   ),
                   GestureDetector(
                     onTap: isEditing ? onCancelEdit : onCancelReply,
-                    child: Icon(Icons.close, size: 16, color: colors.ink3),
+                    child: Icon(CupertinoIcons.xmark, size: 16, color: colors.ink3),
                   ),
                 ],
               ),

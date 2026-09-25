@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -13,8 +14,8 @@ class AuthHero extends StatelessWidget {
   const AuthHero({
     super.key,
     required this.icon,
-    this.badgeA = Icons.mail_outline,
-    this.badgeB = Icons.eco_outlined,
+    this.badgeA = CupertinoIcons.mail,
+    this.badgeB = CupertinoIcons.sparkles,
     this.leading,
     this.filled = true,
   });

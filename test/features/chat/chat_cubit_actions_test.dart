@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:dartz/dartz.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:yello_social_app/core/audio/voice_note_player.dart';
 import 'package:yello_social_app/core/error/failures.dart';
+import 'package:yello_social_app/features/chat/domain/entities/attachment_entity.dart';
 import 'package:yello_social_app/features/chat/domain/entities/conversation_entity.dart';
 import 'package:yello_social_app/features/chat/domain/entities/group_invite_entity.dart';
 import 'package:yello_social_app/features/chat/domain/entities/message_entity.dart';
@@ -21,6 +23,7 @@ MessageEntity _message(
   List<ReactionEntity> reactions = const [],
   ReplyPreviewEntity? replyTo,
   GroupInviteCardEntity? groupInvite,
+  List<AttachmentEntity> attachments = const [],
 }) =>
     MessageEntity(
       id: id,
@@ -33,6 +36,17 @@ MessageEntity _message(
       reactions: reactions,
       replyTo: replyTo,
       groupInvite: groupInvite,
+      attachments: attachments,
+    );
+
+AttachmentEntity _image(String id, {required String url, required Duration expiresIn}) => AttachmentEntity(
+      id: id,
+      kind: AttachmentKind.image,
+      fileName: '$id.jpg',
+      mimeType: 'image/jpeg',
+      sizeBytes: 2048,
+      url: url,
+      urlExpiresAt: DateTime.now().add(expiresIn),
     );
 
 void main() {
@@ -51,6 +65,7 @@ void main() {
         reactToMessage: ReactToMessageUseCase(repository),
         uploadAttachment: UploadAttachmentUseCase(repository),
         refreshAttachment: RefreshAttachmentUseCase(repository),
+        voicePlayer: VoiceNotePlayer(),
         acceptInvite: AcceptGroupInviteUseCase(repository),
         declineInvite: DeclineGroupInviteUseCase(repository),
         markRead: MarkReadUseCase(repository),
@@ -246,6 +261,7 @@ void main() {
       reactToMessage: ReactToMessageUseCase(repository),
       uploadAttachment: UploadAttachmentUseCase(repository),
       refreshAttachment: RefreshAttachmentUseCase(repository),
+      voicePlayer: VoiceNotePlayer(),
       acceptInvite: AcceptGroupInviteUseCase(repository),
       declineInvite: DeclineGroupInviteUseCase(repository),
       markRead: MarkReadUseCase(repository),
@@ -309,6 +325,7 @@ void main() {
       reactToMessage: ReactToMessageUseCase(repository),
       uploadAttachment: UploadAttachmentUseCase(repository),
       refreshAttachment: RefreshAttachmentUseCase(repository),
+      voicePlayer: VoiceNotePlayer(),
       acceptInvite: AcceptGroupInviteUseCase(repository),
       declineInvite: DeclineGroupInviteUseCase(repository),
       markRead: MarkReadUseCase(repository),
@@ -354,6 +371,28 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(cubit.state.isLive, isFalse);
     expect(cubit.state.typingUserIds, isEmpty);
+  });
+
+  test('viewableImageUrls re-signs only the picture whose link has aged out', () async {
+    final current = _image('a1', url: 'https://r2.example/a1.jpg?sig=current', expiresIn: const Duration(minutes: 30));
+    final expired = _image('a2', url: 'https://r2.example/a2.jpg?sig=old', expiresIn: const Duration(minutes: -1));
+    when(() => repository.getMessages('chat')).thenAnswer(
+      (_) async => Right(MessagesPage(messages: [_message('m1', fromMe: false, attachments: [current, expired])])),
+    );
+    when(() => repository.getAttachment('a2')).thenAnswer((_) async => Right(
+          _image('a2', url: 'https://r2.example/a2.jpg?sig=resigned', expiresIn: const Duration(hours: 1)),
+        ));
+    await cubit.load();
+
+    final urls = await cubit.viewableImageUrls([current, expired]);
+
+    // Order matches the attachments handed in, so the viewer opens on the
+    // picture that was tapped.
+    expect(urls, ['https://r2.example/a1.jpg?sig=current', 'https://r2.example/a2.jpg?sig=resigned']);
+    verifyNever(() => repository.getAttachment('a1'));
+    // The fresh link is kept in the transcript too, so the thumbnail behind
+    // the viewer stops 403ing as well.
+    expect(cubit.state.messages.single.attachments.last.url, 'https://r2.example/a2.jpg?sig=resigned');
   });
 
   test('live frames: reactions replace, deletes tombstone, removal flags the screen', () async {

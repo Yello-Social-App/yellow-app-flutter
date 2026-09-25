@@ -90,6 +90,15 @@ abstract interface class ChatRepository {
   /// `sendMessage(attachmentIds:)`. One file per call, up to 10 MiB.
   Future<Either<Failure, AttachmentEntity>> uploadAttachment({required String conversationId, required File file});
 
+  /// Step one of sending a voice note, against the route that transcodes it
+  /// and measures its duration and waveform. Otherwise identical to
+  /// [uploadAttachment]: the attachment comes back pending, and sending it
+  /// is `sendMessage(attachmentIds: [id])`.
+  Future<Either<Failure, AttachmentEntity>> uploadVoiceAttachment({
+    required String conversationId,
+    required File file,
+  });
+
   /// A fresh presigned URL once the one on the message has expired.
   Future<Either<Failure, AttachmentEntity>> getAttachment(String attachmentId);
 
