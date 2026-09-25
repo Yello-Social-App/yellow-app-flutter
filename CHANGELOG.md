@@ -16,6 +16,10 @@ file only when it genuinely helps.
 
 ## [Unreleased]
 
+---
+
+## [0.5.0] — 2026-09-25
+
 ### Added
 
 - **Two more themes to pick from.** Account → Theme now lists four: the
