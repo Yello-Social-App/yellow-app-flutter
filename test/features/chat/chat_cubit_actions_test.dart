@@ -10,11 +10,17 @@ import 'package:yello_social_app/features/chat/domain/entities/conversation_enti
 import 'package:yello_social_app/features/chat/domain/entities/group_invite_entity.dart';
 import 'package:yello_social_app/features/chat/domain/entities/message_entity.dart';
 import 'package:yello_social_app/features/chat/domain/repositories/chat_repository.dart';
+import 'package:yello_social_app/features/chat/domain/repositories/sticker_repository.dart';
 import 'package:yello_social_app/features/chat/domain/usecases/chat_usecases.dart';
+import 'package:yello_social_app/features/chat/domain/usecases/sticker_usecases.dart';
 import 'package:yello_social_app/features/chat/presentation/bloc/chat_cubit.dart';
 import 'package:yello_social_app/features/chat/presentation/bloc/messages_cubit.dart';
 
 class _ChatRepository extends Mock implements ChatRepository {}
+
+/// Stickers live behind their own repository, so the cubit's one sticker
+/// usecase needs one of these even in a test that never touches a sticker.
+class _StickerRepository extends Mock implements StickerRepository {}
 
 MessageEntity _message(
   String id, {
@@ -65,6 +71,7 @@ void main() {
         reactToMessage: ReactToMessageUseCase(repository),
         uploadAttachment: UploadAttachmentUseCase(repository),
         refreshAttachment: RefreshAttachmentUseCase(repository),
+      saveStickerFromMessage: SaveStickerFromMessageUseCase(_StickerRepository()),
         voicePlayer: VoiceNotePlayer(),
         acceptInvite: AcceptGroupInviteUseCase(repository),
         declineInvite: DeclineGroupInviteUseCase(repository),
@@ -76,8 +83,10 @@ void main() {
   setUp(() {
     repository = _ChatRepository();
     events = StreamController<ChatEvent>.broadcast();
-    inbox = MessagesCubit(GetConversationsUseCase(repository));
+    inbox = MessagesCubit(GetConversationsUseCase(repository), repository);
     when(() => repository.watchEvents('chat')).thenAnswer((_) => events.stream);
+    // The chat screen takes a presence lease beside its event subscription.
+    when(repository.watchPresence).thenAnswer((_) => const Stream<Set<String>>.empty());
     when(() => repository.getConversation('chat')).thenAnswer((_) async => const Left(NetworkFailure()));
     when(() => repository.markRead(conversationId: any(named: 'conversationId'), messageId: any(named: 'messageId')))
         .thenAnswer((_) async => const Right(unit));
@@ -261,6 +270,7 @@ void main() {
       reactToMessage: ReactToMessageUseCase(repository),
       uploadAttachment: UploadAttachmentUseCase(repository),
       refreshAttachment: RefreshAttachmentUseCase(repository),
+      saveStickerFromMessage: SaveStickerFromMessageUseCase(_StickerRepository()),
       voicePlayer: VoiceNotePlayer(),
       acceptInvite: AcceptGroupInviteUseCase(repository),
       declineInvite: DeclineGroupInviteUseCase(repository),
@@ -325,6 +335,7 @@ void main() {
       reactToMessage: ReactToMessageUseCase(repository),
       uploadAttachment: UploadAttachmentUseCase(repository),
       refreshAttachment: RefreshAttachmentUseCase(repository),
+      saveStickerFromMessage: SaveStickerFromMessageUseCase(_StickerRepository()),
       voicePlayer: VoiceNotePlayer(),
       acceptInvite: AcceptGroupInviteUseCase(repository),
       declineInvite: DeclineGroupInviteUseCase(repository),

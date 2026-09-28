@@ -3,9 +3,18 @@ import 'dart:convert';
 import '../../domain/entities/conversation_entity.dart';
 import '../../domain/entities/group_invite_entity.dart';
 import '../../domain/entities/message_entity.dart';
+import '../../domain/entities/sticker_entity.dart';
 import '../../domain/repositories/chat_repository.dart';
+import '../../domain/repositories/sticker_repository.dart';
 import '../models/conversation_model.dart';
 import '../models/message_model.dart';
+import '../models/sticker_model.dart';
+
+/// One person's presence, as the `presence` frame reports it. A record
+/// rather than an entity: nothing past [PresenceTracker] needs a user's
+/// presence *as a value* — the tracker folds these into the set of online
+/// ids, and that set is what crosses the repository boundary.
+typedef PresenceUpdate = ({String userId, bool isOnline});
 
 /// Turns one `yello-chat` socket frame — `{ "event": string, "data": object }`
 /// — into the [ChatEvent] the cubit understands.
@@ -74,6 +83,10 @@ abstract final class ChatFrameDecoder {
             conversationId: data['conversationId'] as String? ?? '',
             status: GroupInviteStatus.fromWire(data['status'] as String?),
           ),
+        // `presence` is deliberately absent: it names people, not a
+        // conversation, so it belongs to no single screen.
+        // [PresenceTracker] reads it with [presence] below and keeps the
+        // app's one set of online ids.
         _ => null,
       };
     } on TypeError {
@@ -109,6 +122,130 @@ abstract final class ChatFrameDecoder {
           ? ConversationMapper.changeFromJson(change)
           : const ConversationChange(kind: ConversationChangeKind.unknown, actorId: ''),
     );
+  }
+
+  /// `sticker.added` / `sticker.updated` / `sticker.removed`.
+  ///
+  /// Deliberately outside [decodeFrame], for the same reason `presence` is:
+  /// these name the *owner's library*, not a conversation, so they belong to
+  /// no single chat screen and are not [ChatEvent]s. They also reach **every**
+  /// one of the caller's sockets, the device that made the request included —
+  /// an HTTP request cannot say which socket is the caller's — so a listener
+  /// must be idempotent per [StickerEntity.id] rather than assume a frame is
+  /// news.
+  ///
+  /// `null` for a frame that is not a sticker event, or whose payload is not
+  /// the documented shape.
+  static StickerLibraryEvent? stickerEvent(Map<String, dynamic> frame) {
+    final event = frame['event'];
+    if (event is! String || !event.startsWith('sticker.')) return null;
+    final data = frame['data'];
+    if (data is! Map<String, dynamic>) return null;
+
+    try {
+      return switch (event) {
+        'sticker.added' => _stickerEvent(data, StickerAdded.new),
+        'sticker.updated' => _stickerEvent(data, StickerUpdated.new),
+        'sticker.removed' => StickerRemoved(data['stickerId'] as String),
+        _ => null,
+      };
+    } on TypeError {
+      return null;
+    }
+  }
+
+  /// `sticker.added` and `sticker.updated` both carry `{ sticker }`.
+  static StickerLibraryEvent? _stickerEvent(
+    Map<String, dynamic> data,
+    StickerLibraryEvent Function(StickerEntity) wrap,
+  ) {
+    final sticker = StickerMapper.fromJsonOrNull(data['sticker']);
+    return sticker == null ? null : wrap(sticker);
+  }
+
+  /// `presence` — who is online, as far as `yello-chat` will say.
+  ///
+  /// This is the one frame in the vocabulary whose payload is written down
+  /// nowhere this repo can reach: the service's own OpenAPI summary lists
+  /// `presence` as a server → client event and then says the socket protocol
+  /// "is not expressible in OpenAPI", and the frame reference it points at is
+  /// not in this repository. `Participant` carries no presence field either,
+  /// so there is no HTTP shape to read it off instead. It is therefore read
+  /// tolerantly, exactly as `typing` is, across the shapes a frame like this
+  /// takes in practice:
+  ///
+  /// ```
+  /// { userId, isOnline }                  one person changed
+  /// { userId, online }                      ditto
+  /// { userId, status: "ONLINE" }            ditto
+  /// { users: [ { userId, isOnline }, … ] }  a batch, or the snapshot after auth
+  /// { online: [ userId, … ] }               a bare snapshot of who is up
+  /// ```
+  ///
+  /// `null` for a frame none of them fits, which [PresenceTracker] logs
+  /// verbatim — one logcat line is then the whole fix. Naming a user with no
+  /// state at all reads as *online*, on the same reasoning as `typing`'s
+  /// absent flag: a frame is sent because something happened.
+  static List<PresenceUpdate>? presence(Map<String, dynamic> frame) {
+    if (frame['event'] != 'presence') return null;
+    final data = frame['data'];
+    final updates = <PresenceUpdate>[];
+
+    // Id lists — a roster of who is up rather than one person changing.
+    if (data is Map) {
+      _addPresenceIds(data['online'], isOnline: true, into: updates);
+      _addPresenceIds(data['offline'], isOnline: false, into: updates);
+    }
+
+    for (final entry in _presenceEntries(data)) {
+      final userId = _firstString(entry, const ['userId', 'senderId', 'user', 'id']);
+      if (userId == null) continue;
+      updates.add((userId: userId, isOnline: _isOnlineFlag(entry)));
+    }
+    return updates.isEmpty ? null : updates;
+  }
+
+  /// `{ online: [ id, … ] }`. A `bool` under the same key is a state flag,
+  /// not a roster, and is left to [_isOnlineFlag].
+  static void _addPresenceIds(Object? raw, {required bool isOnline, required List<PresenceUpdate> into}) {
+    if (raw is! List) return;
+    for (final id in raw) {
+      if (id is String && id.isNotEmpty) into.add((userId: id, isOnline: isOnline));
+    }
+  }
+
+  /// The `{ userId, … }` objects in a frame: `data` itself, a bare list, or a
+  /// list under whichever key a batch happens to use.
+  static Iterable<Map<String, dynamic>> _presenceEntries(Object? data) {
+    if (data is List) return data.whereType<Map<String, dynamic>>();
+    if (data is! Map<String, dynamic>) return const [];
+    for (final key in const ['users', 'presence', 'updates', 'participants']) {
+      final nested = data[key];
+      if (nested is List) return nested.whereType<Map<String, dynamic>>();
+    }
+    return [data];
+  }
+
+  /// A boolean flag, else a status word, else "this frame exists because
+  /// they came online".
+  static bool _isOnlineFlag(Map<String, dynamic> entry) {
+    for (final key in const ['isOnline', 'online', 'isActive']) {
+      final value = entry[key];
+      if (value is bool) return value;
+    }
+    final status = _firstString(entry, const ['status', 'state', 'presence'])?.toUpperCase();
+    return switch (status) {
+      'OFFLINE' || 'AWAY' || 'INACTIVE' || 'GONE' => false,
+      _ => true,
+    };
+  }
+
+  static String? _firstString(Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      final value = map[key];
+      if (value is String && value.isNotEmpty) return value;
+    }
+    return null;
   }
 
   static DateTime? _date(dynamic raw) => raw is String ? DateTime.tryParse(raw) : null;

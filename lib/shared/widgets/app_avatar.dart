@@ -44,6 +44,10 @@ class AppAvatar extends StatelessWidget {
   final String initials;
   final int seed;
   final double size;
+  /// Draws the online dot over the avatar's bottom-right: a plain green disc,
+  /// deliberately not the transcript's `checkmark_circle_fill` — a tick states
+  /// that something was *done*, and being online is a state, not an act.
+  /// Presence behind it: ADR-038.
   final bool showOnlineDot;
 
   /// A real uploaded avatar (`AuthorSummary.avatarUrl` /
@@ -123,6 +127,8 @@ class AppAvatar extends StatelessWidget {
         Positioned(
           right: ringColor != null ? 1 : -1,
           bottom: ringColor != null ? 1 : -1,
+          // The `surf` border is what holds the disc apart from whatever is
+          // behind it — a photo avatar, or the dark header slab.
           child: Container(
             width: size * 0.28,
             height: size * 0.28,

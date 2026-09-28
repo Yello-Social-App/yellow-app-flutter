@@ -88,5 +88,18 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Lets `url_launcher` see the installed browser on API 30+, where
+             package visibility is opt-in. Without this, canLaunchUrl() on an
+             http(s) link answers false on a real phone even though a browser
+             is installed, and a tapped link in a post silently does nothing.
+             Scheme-only entries: no host, so every http(s) link is covered. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="http"/>
+        </intent>
     </queries>
 </manifest>

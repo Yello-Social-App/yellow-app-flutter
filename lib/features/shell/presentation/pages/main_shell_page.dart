@@ -33,6 +33,11 @@ class _MainShellPageState extends State<MainShellPage> with WidgetsBindingObserv
   StreamSubscription<void>? _notificationTaps;
   Timer? _inboxRefreshTimer;
 
+  /// Whether this shell currently holds `MessagesCubit`'s presence lease. A
+  /// flag rather than a recomputation, so acquire/release stay balanced no
+  /// matter which of the three callers below runs.
+  bool _presenceLease = false;
+
   /// Router *branch* indexes, as wired in `AppRouter`'s [StatefulShellRoute].
   static const int _feedBranch = 0;
   static const int _inboxBranch = 2;
@@ -61,8 +66,33 @@ class _MainShellPageState extends State<MainShellPage> with WidgetsBindingObserv
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshActivity();
       _openPushDestination();
+      // After the first frame, not in `initState`: the lease is conditional on
+      // the session being authenticated, and a shell built while a session
+      // restore is still settling would otherwise never take one.
+      _syncPresenceLease();
     });
     _startInboxRefreshTimer();
+  }
+
+  /// The green online dot is drawn on the Inbox list, its rail and the chat
+  /// header — all of them under the Inbox branch, including a chat pushed over
+  /// it (the branch index does not change for an overlay, and the chat screen
+  /// takes a lease of its own anyway). Presence exists only on `yello-chat`'s
+  /// socket, so watching it from a tab that can draw no dot would hold a
+  /// WebSocket open for nothing: the same trade as this file's poll tiers
+  /// (ADR-010), applied to a connection instead of a request. See ADR-038.
+  void _syncPresenceLease() {
+    final wanted = mounted &&
+        widget.navigationShell.currentIndex == _inboxBranch &&
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
+        sl<SessionManager>().currentState == SessionState.authenticated;
+    if (wanted == _presenceLease) return;
+    _presenceLease = wanted;
+    if (wanted) {
+      sl<MessagesCubit>().watchPresence();
+    } else {
+      sl<MessagesCubit>().releasePresence();
+    }
   }
 
   /// Follows a tapped push to the screen its `data` names — a conversation,
@@ -149,6 +179,11 @@ class _MainShellPageState extends State<MainShellPage> with WidgetsBindingObserv
     } else {
       _inboxRefreshTimer?.cancel();
     }
+    // `WidgetsBinding.lifecycleState` is already this state by the time the
+    // observer is called, so [_syncPresenceLease] reads it rather than taking
+    // it as an argument. Backgrounded, the lease goes: a socket held open
+    // behind a locked screen reports presence to nobody.
+    _syncPresenceLease();
   }
 
   @override
@@ -157,6 +192,12 @@ class _MainShellPageState extends State<MainShellPage> with WidgetsBindingObserv
     _pushUpdates?.cancel();
     _notificationTaps?.cancel();
     _inboxRefreshTimer?.cancel();
+    // `MessagesCubit` outlives this shell (it is a singleton), so a lease left
+    // behind here would keep a socket open for the rest of the process.
+    if (_presenceLease) {
+      _presenceLease = false;
+      sl<MessagesCubit>().releasePresence();
+    }
     super.dispose();
   }
 
@@ -168,7 +209,10 @@ class _MainShellPageState extends State<MainShellPage> with WidgetsBindingObserv
     if (previous == current) return;
     // The poll cadence is branch-dependent, so re-arm when crossing between
     // the fast (Inbox) and slow (everywhere else) tier.
-    if ((previous == _inboxBranch) != (current == _inboxBranch)) _startInboxRefreshTimer();
+    if ((previous == _inboxBranch) != (current == _inboxBranch)) {
+      _startInboxRefreshTimer();
+      _syncPresenceLease();
+    }
     // Switching tabs lands on a fresh (or differently-scrolled) page — always
     // show the bar again rather than leaving it hidden from the last tab.
     if (!_navVisible) setState(() => _navVisible = true);

@@ -19,6 +19,7 @@ import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/error_view.dart';
 import '../../../../shared/widgets/app_warning_dialog.dart';
 import '../../../../shared/widgets/image_placeholder.dart';
+import '../../../../shared/widgets/linked_text.dart';
 import '../../../chat/domain/usecases/chat_usecases.dart';
 import '../../../feed/domain/entities/post_entity.dart';
 import '../../../feed/presentation/widgets/post_card.dart';
@@ -292,8 +293,8 @@ class _BodyState extends State<_Body> {
                       ),
                       if ((user.bio ?? '').isNotEmpty) ...[
                         const SizedBox(height: 14),
-                        Text(
-                          user.bio!,
+                        LinkedText(
+                          text: user.bio!,
                           textAlign: TextAlign.center,
                           style: AppTextStyles.bodyMd.copyWith(
                             color: colors.ink2,

@@ -66,9 +66,14 @@ abstract final class ConversationMapper {
       senderId: raw['senderId'] as String? ?? '',
       body: body,
       createdAt: _date(raw['createdAt']) ?? DateTime.now(),
-      // The summary carries no attachments/invite/deleted flags, so an empty
-      // body can only be reported as "not text" — see `LastMessageKind`.
-      kind: body.isEmpty ? LastMessageKind.attachment : LastMessageKind.text,
+      // `hasSticker` is the one flag the summary does carry. Beyond it there
+      // are no attachments/invite/deleted flags, so any other empty body can
+      // only be reported as "not text" — see `LastMessageKind`.
+      kind: raw['hasSticker'] == true
+          ? LastMessageKind.sticker
+          : body.isEmpty
+              ? LastMessageKind.attachment
+              : LastMessageKind.text,
     );
   }
 

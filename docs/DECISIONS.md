@@ -1739,3 +1739,351 @@ trade; a genuinely new note reading as heard is not.
 **Cost:** one more DI singleton and one more `ValueListenableBuilder` per
 voice bubble, and the heard set is per-device — reinstalling the app, or
 opening Yello on a second phone, marks every note new again.
+
+---
+
+## ADR-038 — The green online dot is leased socket presence, folded into the inbox row
+
+**Status:** Accepted
+
+`AppAvatar(showOnlineDot:)`, `ConversationEntity.isOnline` and the chat
+header's `ACTIVE NOW` / `OFFLINE` line have all shipped since chat landed,
+and all three were dead: presence only arrives on `yello-chat`'s `presence`
+frame, and nothing decoded it, so every avatar in the app reported offline.
+This wires it.
+
+**Presence is socket-only, and that is a backend fact.** The chat service
+lists `presence` among its server → client events and then says the socket
+protocol "is not expressible in OpenAPI"; `Participant` carries no
+`isOnline`, no `lastSeenAt`, and there is no presence route on any of the
+three services. So there is no polling fallback to build — an open WebSocket
+is the only way to know, which is what makes the rest of this ADR about
+*when* to hold one.
+
+**One set of ids for the whole app**, in `PresenceTracker` beside
+`ChatSocket`. Per-screen subscriptions to the frames were the obvious
+alternative and are wrong: a roster most likely arrives once, just after
+`auth.ok`, so a chat screen opened ten minutes later would see nothing until
+somebody's status happened to flip. The tracker holds what was said, and
+`watchPresence()` hands a new listener the current set before any change —
+the same shape as `watchEvents` yielding `LiveDeliveryChanged` first.
+
+**Absence means "not known to be online", never "offline".** The set is
+emptied when the connection drops and when the last watcher leaves, because
+a green dot is a claim and this client stops being able to make it. That
+asymmetry is why the UI draws a dot for presence and *nothing* for its
+absence — and why `ConversationEntity.isOnline`'s doc says so explicitly.
+
+**The dot is folded into the inbox row, not held in a second state.** The
+chat header already reads the inbox row first and falls back to
+`ChatState.conversation` only for a conversation the inbox has not loaded —
+and `ChatCubit.load` writes its own detail into the inbox anyway. So
+`MessagesCubit` applying presence to its rows lights the list, the header
+rail and the chat header from one place, with no widget touched and no
+chance of the three disagreeing. A `PresenceCubit` would have meant
+threading a second state into three widgets to reach the same pixels.
+
+**A group never gets a dot.** Its avatar is the group's photo; "one of these
+eleven people is around" is not what a dot on a face means.
+
+**The dot is a plain green disc, and the transcript's `checkmark_circle_fill`
+was tried here and rejected.** Reusing the "read" glyph is tempting — both are
+green, and one shape for two ideas is one thing to learn — but it was built,
+looked at on a device, and turned down: **a tick asserts that something was
+done, and being online is a state, not an act.** Read the two side by side and
+the tick reads as "they replied", which is the one thing it does not mean.
+Worth knowing before anyone proposes it again:
+
+- `Icon` paints a single colour, so the tick inside `checkmark_circle_fill` is
+  *knocked out* of the disc rather than drawn (confirmed on-device in the
+  Showcase tech filter, which uses the same glyph). Straight onto a photo
+  avatar the tick shows the photo through it and stops reading as a tick, so
+  the glyph would need a `surf` disc behind it and a footprint grown from
+  `size * 0.28` to `0.34` to stay legible at the 42 pt header size.
+- The plain disc needs none of that. Its 2px `surf` border does the same
+  separating job at the smaller size, which is why it was the original design.
+
+**Watching is leased, not always-on** — `watchPresence()` / `releasePresence()`
+with a count. The dot is drawn on exactly two surfaces, the Inbox (list and
+rail) and the chat header, so a lease is held by `MainShellPage` while the
+Inbox branch is on screen, foregrounded and authenticated, and by `ChatCubit`
+for the life of a chat screen. This is ADR-010's trade applied to a
+connection instead of a request: a socket held open from Feed or Profile
+reports presence to a screen that cannot draw it. The count is what matters
+for the hand-off — walking from the inbox into a conversation overlaps the
+two holders, so the connection survives instead of closing and reconnecting
+between them.
+
+**The frame's payload is read tolerantly, like `typing`.** Its shape is in a
+service README this repo does not have, so `ChatFrameDecoder.presence` accepts
+`{userId, isOnline}`, `{userId, online}`, `{userId, status: "ONLINE"}`, a
+batch under `users`, and a bare `{online: [id, …]}` roster; a user named with
+no state reads as online, since the frame was sent because something
+happened. A frame none of that fits is logged verbatim once per process, so
+the real shape is one `adb logcat` line away rather than a debugging session.
+**Confirm it on-device and delete the guesses that turn out to be dead.**
+
+**The dot itself was checked on a device**, by forcing `showOnlineDot` on in
+the inbox and rail for a throwaway build (reverted): the disc and its ring read
+correctly at all three call sizes, over photo avatars, on the dark header slab
+and on the light list rows alike. Forcing the flag is the *only* way to see it
+today — see the next note for why — so anyone restyling this should expect to
+do the same rather than waiting for a dot to appear on its own.
+
+**Verified on-device, 2026-09-26** (emulator-5554, profile build): opening
+the Inbox tab opens and holds one socket — a TCP connection to the API host
+kept its local port through 48 s of sampling while the 10-second poll's
+connections were recycled around it — and switching to another tab closed it.
+That is the lease, working end to end, and it is the half that could be
+checked with one device. The other half could not: in ~50 s on that live,
+authenticated socket the service sent **no `presence` frame at all** — no
+roster after `auth.ok`, and no frame the decoder failed to read. So the dot
+is client-complete but dark today, and the design's one load-bearing
+assumption — that a client which connects late can still learn who is online
+— has no snapshot behind it. See `docs/BACKEND.md` for the full finding and
+how to re-check it.
+
+**Cost and known gaps:**
+
+- Updates are merged, not replaced, because a delta and a roster cannot be
+  told apart without the frame reference. Someone who goes offline in a way
+  that *only* shows as their omission from a later roster keeps a dot until
+  the connection drops. A single-user `OFFLINE` frame and an `offline: [...]`
+  list both clear correctly.
+- **Nothing renders until the service actually emits the frame** (see the
+  verification note above). That is the honest state of this feature: the
+  client is finished and silent, not broken. If `presence` turns out never
+  to be sent, the fix is server-side and no amount of client work reaches
+  it — which is exactly the kind of gap `docs/BACKEND.md` exists to record
+  rather than paper over.
+- A chat deep-linked from a push while another tab was last on screen takes
+  its own lease, so the header's dot works there; the Inbox rows behind it
+  are lit by the same set.
+- The socket now opens on the Inbox tab, not only inside a conversation. That
+  is one connection while the user is looking at the list, and it closes on
+  the next tab switch or when the app is backgrounded.
+- `ACTIVE NOW` / `OFFLINE` in the chat header is unchanged copy. With presence
+  live, `OFFLINE` is now usually true rather than always — but it still reads
+  as an assertion during the moment before the first frame arrives.
+
+---
+
+## ADR-039 — Links in user text are tappable, and a post's links get Open Graph cards
+
+**Status:** Accepted
+
+A web address written into a post, a comment, a chat message or a bio was
+dead text. Every external link the app *did* know about — a showcase
+project's repo and live URLs, a chat attachment's download link — copied
+itself to the clipboard instead of opening, because the app had no launcher.
+ADR-014 recorded that omission and said an "Open" affordance would need
+`url_launcher` first. This adds it, makes links in user text tappable, and
+draws each link in a post as a preview card.
+
+**`url_launcher` is now a dependency**, with `<queries>` entries for
+`ACTION_VIEW` on `http` and `https` in the Android manifest. Those entries
+are not optional: on API 30+ package visibility is opt-in, and without them
+`canLaunchUrl` answers false on a phone that plainly has a browser, so a
+tapped link does nothing at all. iOS needs no counterpart for `http(s)`.
+
+**One launcher, one scheme check.** `ExternalLink.open` is the only caller of
+`launchUrl` in the app. Everything it opens came out of another user's post,
+and `launchUrl` will hand a `javascript:`, `intent:` or `file:` URL to a
+platform handler without comment, so the check is an allowlist of `http` and
+`https` rather than a list of things to block (OWASP A05/A06). It opens in
+`LaunchMode.externalApplication`: this is someone else's page, and it should
+be obvious that it is not Yello any more.
+
+**Detection is deliberately conservative** (`LinkScanner`). A false positive
+paints part of someone's sentence as tappable, which is worse than missing a
+link, so only `http://`, `https://` and a leading `www.` start a match; the
+host must carry a dot and a two-character last label; and trailing
+punctuation is handed back to the sentence, including a closing bracket the
+link never opened. `(see https://a.co/x).` opens `https://a.co/x`, and
+`https://en.wikipedia.org/wiki/Dart_(language)` keeps its own bracket.
+
+**`LinkedText` owns its recognizers.** Each link needs a
+`TapGestureRecognizer`, recognizers hold resources and must be disposed, and
+one built inside `build` leaks one per link per frame on a scrolling feed —
+so the widget is stateful and rebuilds them only when its text changes. It
+also absorbed the feed's `#hashtag` highlight (formerly `_contentSpans` in
+`post_card.dart`), and looks for hashtags only *outside* the links, so a
+URL's `#fragment` stays part of the URL.
+
+**Hashtags are still not tappable.** `/search` is people-only and takes no
+query parameter, so a tap would have to land somewhere arbitrary. The
+highlight is the whole of the feature until there is a tag search to send it
+to.
+
+**Previews are fetched on the phone, because no service offers them.**
+Neither yello-api, yello-chat nor yello-notify has a link-preview or
+unfurl endpoint, so `features/link_preview` reads the page itself and parses
+its `og:` tags. Four things follow from the URL being untrusted input and
+the fetch running on the reader's device:
+
+- **Its own bare `Dio`, not `ApiClient`'s** — the same reason the update
+  channel has one (ADR-029). `AuthInterceptor` attaches the session's bearer
+  token to every request it sees, and these go to whatever host an author
+  typed into a post.
+- **Every hop is vetted** by `PrivateNetworkGuard`, which is why redirects
+  are followed by hand rather than by Dio. A post containing
+  `http://192.168.0.1/reboot` would otherwise reach an address the *author*
+  could never reach: OWASP A01's SSRF shape with the arrow turned around,
+  the confused deputy being the reader's phone. The `og:image` a page hands
+  back is checked again before it goes near an image widget.
+- **The read is capped at 64 KB** and the socket is then closed. The tags
+  live in the `<head>`; nothing here should pull a 40 MB page down a
+  reader's mobile data.
+- **Every string is entity-decoded, whitespace-collapsed and
+  length-capped.** It is someone else's markup and it ends up in a widget.
+
+**Regex, not a DOM parser.** The whole job is four strings out of the first
+64 KB of a document that is never rendered. The `html` package would be a
+new dependency parsing hostile markup for an `og:title`; nothing here is
+reinserted into a document, so the usual hazard of regex-parsing HTML —
+building a tree — is not in play.
+
+**One cache for the whole app.** `LinkPreviewCubit` is a `registerLazySingleton`
+holding URL → card, because the same link appears in the feed row, in the
+post's own screen and in a repost's embed. Per-card cubits would fetch that
+page once per card and again every time the post scrolled back into view.
+`pending` doubles as the in-flight guard (hard rule 9), failures are
+remembered so a dead link is not retried on every scroll, and the map is
+capped at 120 entries — a singleton with an infinite feed in front of it
+otherwise grows for the life of the process.
+
+**Where the cards go:** under the body text on a text post, *under the
+photos* on a photo post — the post's own pictures are what the card is for,
+and a link card wedged above them reads as the post's main image. Up to
+`kMaxLinkPreviews` (3) per body. Not in a repost's embed or a community-feed
+row: both are already cards inside cards, capped at a few lines, and their
+links still open.
+
+**A failed preview draws nothing**, not an error card. The link is tappable
+in the text above either way, and a card that exists only to say it could not
+load costs a reader more room than it gives them.
+
+**Cost:**
+
+- A new dependency and two manifest entries, reversing part of ADR-014.
+- A fetch per distinct link the reader scrolls past, on their data. Bounded
+  by the 64 KB cap, one attempt per URL per session, and a page that answers
+  nothing useful is never asked twice.
+- The preview quality is whatever a page publishes. Sites that serve `og:`
+  tags only to named crawlers will come back empty, and a page that is not
+  UTF-8 comes back with mangled accents — no charset decoder, because
+  nothing in a `<head>` is load-bearing enough to justify one.
+- A link inside a tappable container (a repost embed, a community row) puts
+  a span recognizer and the container's own tap in the same gesture arena.
+  The innermost should win, which is the behaviour this relies on, and it is
+  **unverified on a device** — there is no emulator in the dev sandbox.
+
+---
+
+## ADR-040 — Stickers are their own resource inside the chat feature, and a sticker is the whole message
+
+**Status:** Accepted
+
+`yello-chat` grew a sticker API: make one from a photo, keep it in a personal
+library, send it, save someone else's out of a message, and pick from operator
+published packs. This records how it is wired, and the four places the
+mobile build reads the contract differently from the desktop design it came
+with.
+
+**Stickers live in `features/chat/`, not a feature of their own.** They are the
+same service behind the same `ApiClient` and the same WebSocket, their paths
+belong in `ChatRoutes` (rule 5 — one route holder per service), the picker is
+only reachable from the composer, and the sticker rides on `MessageEntity`. A
+sibling feature folder would have needed cross-feature imports in both
+directions for no boundary anyone was asking for.
+
+**They do get their own repository.** `StickerRepository` is separate from
+`ChatRepository` because it needs neither of the two things
+`ChatRepositoryImpl` exists to supply: the owner of a sticker is always the
+token's user, so there is no viewer id to prime and no `fromMe` to derive, and
+a sticker names nobody, so there is nothing for `UserDirectory` to hydrate.
+What is left is the network guard and the exception → `Failure` mapping.
+`ChatRepository` also did not need eight more methods. Sending stays on
+`ChatRepository.sendMessage(stickerId:)` — that is a message, not a sticker.
+
+**A sticker is the whole message.** The server rejects a body or
+`attachmentIds` beside a `stickerId`, so `SendMessageUseCase` refuses that
+combination rather than letting it become a 400, and `ChatCubit.sendSticker`
+is its own path beside `sendVoiceNote` for the same reason that one is: there
+is no draft to mix it into and it is sent the instant it is tapped. It follows
+that the **composer's sticker button shares the idle slot with the mic** and
+disappears as soon as there is something to send. That reads as a width
+decision on a 320dp phone, and it is one, but the real reason is that offering
+stickers next to a half-typed message offers something the API cannot do.
+
+**One `StickerEntity` for three shapes.** The library, a pack and a message all
+carry the same wire object with different fields filled — a message's has no
+name and no `isMine`, because the owner's name is never on a message. One type
+with empty defaults beat two near-identical ones; whether a sticker on a
+message is already yours is the server's answer to `…/sticker/save`
+(201 vs 200), not something the message claims.
+
+**The presigned URL is not part of a sticker's identity.** `StickerImage.props`
+leave it out, exactly as `AttachmentEntity.props` do (ADR-015): the history
+poll re-signs every link, and counting that as a change would make the whole
+transcript look new every few seconds. Images cache by sticker **id** and carry
+a `ValueKey(url)` so a link that 403'd can resolve again. The recovery is
+coarser than an attachment's, because **there is no `GET /ws/stickers/{id}`**:
+`ChatCubit.refreshSticker` re-reads the newest history page, takes just the
+sticker out of it and bumps `attachmentRevision` so the emit lands.
+
+**`StickersCubit` is a singleton, and says who refreshes it.** Reopening the
+picker should draw the grid it drew last time rather than a spinner, which per
+`docs/GOTCHAS.md` makes staleness its own problem. Two answers, written on the
+class: the picker calls `load()` on **every** open (the packs route is
+conditional, so that is usually one 304), and it leases the `sticker.*` frames
+while it is on screen. The lease matters — subscribing to `ChatSocket.frames`
+is what opens the connection, so an always-on subscription would hold a
+WebSocket open from the Inbox tab. Everything this device does to the library
+is applied from the response, so neither answer is load-bearing for the device
+that made the change; the frames are for the user's *other* sessions, and
+because they reach the calling socket too, every branch is idempotent on the
+sticker's id.
+
+**Where the mobile build differs from the desktop design:**
+
+- **No drag-and-drop, no paste.** Step one of the creator becomes a tappable
+  box over the photo library, plus a camera button a desktop has no use for.
+- **The picker is a bottom sheet**, height-bounded rather than fixed, so the
+  search keyboard shrinks the grid instead of overflowing a short phone. Tile
+  size falls out of the available width — a hard-coded 80dp tile overflows at
+  320dp, which is also what a 360dp phone becomes at Android's larger Display
+  size setting.
+- **Manage a sticker by long press**, not right-click: Send / Rename / Delete,
+  and only on a sticker that is actually yours (a pack's answers `404` to
+  both).
+- **No drop shadow under a sticker.** The design lifts a framed sticker with a
+  blurred shadow. A blurred `BoxShadow` in a widget that rebuilds on Cubit
+  state crashed this project's renderer, and the transcript rebuilds on every
+  poll, so the white frame carries it alone (rule 8). The frame itself goes in
+  `foregroundDecoration`, or the edge-to-edge picture paints over it.
+
+**Background removal is handled but currently unreachable.** Every draft comes
+back `NO_SUBJECT` with no cut-out because the server has removal switched off
+(300 MB of container). The creator therefore defaults to `Keep`, disables
+`Remove`, and shows the server's own explanation — and the moment a draft
+answers `READY` with a cut-out, the checkerboard preview and the choice appear
+with no client change. `StickerCutoutStatus.fromWire` is deliberately strict
+about this: only a literal `READY` *with* a cut-out picture counts, because
+asking for `REMOVED` without one is a 409.
+
+**Cost:**
+
+- Nine new files in `features/chat/`, and `ChatCubit` gains a ninth usecase.
+- The sticker-pack `ETag` lives in the datasource for the life of the process,
+  so a pack withdrawn mid-session is not noticed until the app restarts —
+  which is the trade the conditional route is for, and withdrawals are rare.
+- `refreshSticker` costs a whole history page to recover one link. Guarded per
+  sticker id, and only reached from an image that actually failed.
+- Search is client-side over the library and the packs, so it only finds
+  stickers whose page has been loaded. A 200-sticker library is two pages and
+  the second is only fetched when the grid is scrolled, so a name on page two
+  is unsearchable until then. No search endpoint exists to do better.
+- Every sticker surface is **unverified on a device** — there is no emulator in
+  the dev sandbox, and the picker sheet, the grid at 320dp, the keyboard inset
+  and the transparent-WebP decode all want a real phone.

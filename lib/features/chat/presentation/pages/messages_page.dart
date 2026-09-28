@@ -155,11 +155,11 @@ class _MessagesViewState extends State<_MessagesView> {
   /// The rail is "browse by person": the most recent conversations, in the
   /// same newest-first order as the list below.
   ///
-  /// It deliberately does **not** read `state.onlineNow`. Presence arrives on
-  /// a `presence` WebSocket frame that isn't wired yet, so
-  /// `ConversationEntity.isOnline` is false for everyone — an active-now rail
-  /// renders empty on every device today. `isOnline` still drives the green
-  /// dot, so the rail gains presence for free when that socket lands.
+  /// It deliberately does **not** read `state.onlineNow`, now that presence is
+  /// live (ADR-038): an online-first rail would reorder itself under the
+  /// user's thumb every time somebody opened or closed the app, and it would
+  /// be empty whenever the socket is down. Recency is stable, and the green
+  /// dot says who is around without moving anyone.
   List<ConversationEntity> _railPeople(List<ConversationEntity> conversations) {
     if (conversations.length <= _railLimit) return conversations;
     return conversations.sublist(0, _railLimit);

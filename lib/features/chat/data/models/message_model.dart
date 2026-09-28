@@ -1,6 +1,7 @@
 import '../../domain/entities/attachment_entity.dart';
 import '../../domain/entities/group_invite_entity.dart';
 import '../../domain/entities/message_entity.dart';
+import 'sticker_model.dart';
 
 /// Wire → domain mapping for `yello-chat`'s message payloads. As with
 /// conversations, responses are bare objects — no `{success, data}` envelope.
@@ -25,6 +26,7 @@ abstract final class MessageMapper {
       reactions: ReactionMapper.fromJsonList(json['reactions'], viewerId: viewerId),
       groupInvite: GroupInviteCardMapper.fromJsonOrNull(json['groupInvite'], viewerId: viewerId),
       storyReply: StoryReplyMapper.fromJsonOrNull(json['storyReply']),
+      sticker: StickerMapper.fromJsonOrNull(json['sticker']),
       editedAt: _date(json['editedAt']),
       deletedAt: _date(json['deletedAt']),
     );
@@ -39,6 +41,7 @@ abstract final class MessageMapper {
       senderId: raw['senderId'] as String? ?? '',
       body: raw['body'] as String? ?? '',
       hasAttachments: raw['hasAttachments'] as bool? ?? false,
+      hasSticker: raw['hasSticker'] as bool? ?? false,
       deleted: raw['deleted'] as bool? ?? false,
     );
   }

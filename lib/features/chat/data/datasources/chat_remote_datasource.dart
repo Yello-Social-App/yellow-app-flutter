@@ -43,6 +43,19 @@ abstract final class ChatRoutes {
   /// back as a plain file with no `voice` block.
   static String voiceAttachments(String id) => '${attachments(id)}/voice';
 
+  // Stickers. `mine` and `recent` are fixed segments rather than ids, so
+  // they cannot collide with [sticker]; `packs` hyphenates because it is its
+  // own resource, not a sub-resource of a sticker.
+  static const String stickers = '$_root/stickers';
+  static const String stickerDrafts = '$stickers/drafts';
+  static const String myStickers = '$stickers/mine';
+  static const String recentStickers = '$stickers/recent';
+  static const String stickerPacks = '$_root/sticker-packs';
+  static String sticker(String stickerId) => '$stickers/$stickerId';
+
+  /// Adds the sticker on a message to the caller's library.
+  static String saveMessageSticker(String id, String messageId) => '${message(id, messageId)}/sticker/save';
+
   // Groups — every one of these is 400 on a DM.
   static String photo(String id) => '$_root/conversations/$id/photo';
   static String members(String id) => '$_root/conversations/$id/members';
@@ -77,6 +90,7 @@ abstract interface class ChatRemoteDataSource {
     required String clientId,
     required String body,
     String? replyToMessageId,
+    String? stickerId,
     List<String> attachmentIds = const [],
   });
   Future<MessageEntity> editMessage({required String conversationId, required String messageId, required String body});
@@ -171,12 +185,18 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
   /// timeout returns the original message instead of creating a duplicate.
   /// `body` is only sent when non-empty — the server accepts its absence
   /// for an attachment-only message but rejects `""` when there are none.
+  ///
+  /// [stickerId] makes this a sticker message, and it goes **alone**: the
+  /// server rejects a body or `attachmentIds` beside it. The sticker must be
+  /// in the caller's library or in a published pack, else `404
+  /// STICKER_NOT_FOUND`.
   @override
   Future<MessageEntity> sendMessage({
     required String conversationId,
     required String clientId,
     required String body,
     String? replyToMessageId,
+    String? stickerId,
     List<String> attachmentIds = const [],
   }) =>
       _guard(() async {
@@ -186,6 +206,7 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
             'clientId': clientId,
             if (body.isNotEmpty) 'body': body,
             'replyToMessageId': ?replyToMessageId,
+            'stickerId': ?stickerId,
             if (attachmentIds.isNotEmpty) 'attachmentIds': attachmentIds,
           },
         );

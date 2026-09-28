@@ -12,8 +12,10 @@ import '../../domain/entities/attachment_entity.dart';
 import '../../domain/entities/conversation_entity.dart';
 import '../../domain/entities/group_invite_entity.dart';
 import '../../domain/entities/message_entity.dart';
+import '../../domain/entities/sticker_entity.dart';
 import '../../domain/repositories/chat_repository.dart';
 import '../../domain/usecases/chat_usecases.dart';
+import '../../domain/usecases/sticker_usecases.dart';
 import 'messages_cubit.dart';
 
 enum ChatStatus { loading, loaded, error }
@@ -89,14 +91,15 @@ class ChatState extends Equatable {
   /// The viewer was removed from, or left, this group: the page pops.
   final bool wasRemoved;
 
-  /// Bumped once every time a presigned attachment link is re-signed.
+  /// Bumped once every time a presigned link on a message is re-signed —
+  /// an attachment's or a sticker's.
   ///
-  /// [AttachmentEntity.props] deliberately leave the URL out — the history
-  /// poll re-signs every link, and counting that as a change would make the
-  /// whole transcript look different every few seconds. The cost is that
-  /// swapping a fresh link into a message yields a state that is `==` the
-  /// old one, and `emit` drops those: the re-signed URL would never reach
-  /// the screen. This counter is what makes that one emit land.
+  /// [AttachmentEntity.props] and [StickerImage.props] deliberately leave the
+  /// URL out — the history poll re-signs every link, and counting that as a
+  /// change would make the whole transcript look different every few seconds.
+  /// The cost is that swapping a fresh link into a message yields a state that
+  /// is `==` the old one, and `emit` drops those: the re-signed URL would
+  /// never reach the screen. This counter is what makes that one emit land.
   final int attachmentRevision;
 
   bool get hasMore => nextCursor != null;
@@ -184,6 +187,7 @@ class ChatCubit extends Cubit<ChatState> {
     required ReactToMessageUseCase reactToMessage,
     required UploadAttachmentUseCase uploadAttachment,
     required RefreshAttachmentUseCase refreshAttachment,
+    required SaveStickerFromMessageUseCase saveStickerFromMessage,
     required VoiceNotePlayer voicePlayer,
     required AcceptGroupInviteUseCase acceptInvite,
     required DeclineGroupInviteUseCase declineInvite,
@@ -199,6 +203,7 @@ class ChatCubit extends Cubit<ChatState> {
        _reactToMessage = reactToMessage,
        _uploadAttachment = uploadAttachment,
        _refreshAttachment = refreshAttachment,
+       _saveStickerFromMessage = saveStickerFromMessage,
        _voicePlayer = voicePlayer,
        _acceptInvite = acceptInvite,
        _declineInvite = declineInvite,
@@ -217,6 +222,7 @@ class ChatCubit extends Cubit<ChatState> {
   final ReactToMessageUseCase _reactToMessage;
   final UploadAttachmentUseCase _uploadAttachment;
   final RefreshAttachmentUseCase _refreshAttachment;
+  final SaveStickerFromMessageUseCase _saveStickerFromMessage;
   final VoiceNotePlayer _voicePlayer;
   final AcceptGroupInviteUseCase _acceptInvite;
   final DeclineGroupInviteUseCase _declineInvite;
@@ -264,6 +270,7 @@ class ChatCubit extends Cubit<ChatState> {
   final Set<String> _pendingMessageIds = {};
   final Set<String> _pendingInviteIds = {};
   final Set<String> _pendingAttachmentRefreshes = {};
+  final Set<String> _pendingStickerRefreshes = {};
 
   /// Fetches new messages without clearing history or optimistic drafts.
   /// Server copies replace local ones by id, which is also how edits,
@@ -362,7 +369,15 @@ class ChatCubit extends Cubit<ChatState> {
       },
     );
 
-    _sub ??= _repository.watchEvents(conversationId).listen(_onEvent);
+    if (_sub == null) {
+      // A presence lease for as long as this screen lives, so the header's
+      // green dot works for a conversation reached from outside the Inbox tab
+      // (a push deep link) — and so the socket is not closed and reopened
+      // while walking between the inbox and a chat. The dot itself is read
+      // off the inbox row, which is where presence is folded in; see ADR-038.
+      _inbox.watchPresence();
+      _sub = _repository.watchEvents(conversationId).listen(_onEvent);
+    }
   }
 
   /// Re-fetches the detail alone — the group screen calls this after a
@@ -510,6 +525,7 @@ class ChatCubit extends Cubit<ChatState> {
         text: optimistic.body,
         clientId: optimistic.clientId,
         replyToMessageId: optimistic.replyTo?.id,
+        stickerId: optimistic.sticker?.id,
         attachmentIds: [for (final a in optimistic.attachments) a.id],
       ),
     );
@@ -649,6 +665,95 @@ class ChatCubit extends Cubit<ChatState> {
     emit(state.copyWith(replyingTo: null));
     _upsert(optimistic);
     await _deliver(optimistic);
+  }
+
+  // --- stickers ---
+
+  /// Sends a sticker the picker handed back.
+  ///
+  /// Deliberately not folded into [send], for the same reasons
+  /// [sendVoiceNote] is not: a sticker travels alone (the server rejects text
+  /// or attachments beside a `stickerId`), so there is no draft to mix it
+  /// into, and it is sent the moment it is tapped rather than composed.
+  /// Everything after the optimistic bubble is [_deliver], so a sticker
+  /// retries, de-duplicates on `clientId` and updates the inbox preview
+  /// exactly like every other message.
+  Future<void> sendSticker(StickerEntity sticker) async {
+    final replyTo = state.replyingTo;
+    final clientId = newClientId();
+    final optimistic = MessageEntity(
+      id: 'local-$clientId',
+      conversationId: conversationId,
+      senderId: state.conversation?.viewerId ?? '',
+      clientId: clientId,
+      body: '',
+      createdAt: DateTime.now(),
+      fromMe: true,
+      status: MessageDeliveryStatus.sending,
+      replyTo: replyTo?.toReplyPreview(),
+      sticker: sticker,
+    );
+    emit(state.copyWith(replyingTo: null));
+    _upsert(optimistic);
+    await _deliver(optimistic);
+  }
+
+  /// Adds the sticker on [message] to the viewer's library.
+  ///
+  /// Answers the saved sticker and whether it was already there — the two
+  /// want different words on screen — or null when the call failed, in which
+  /// case the failure is already on its way out as [ChatState.actionError].
+  /// Guarded by the same per-message in-flight set as edit, delete and
+  /// react, so a double-tap cannot fire it twice.
+  Future<SavedSticker?> saveSticker(MessageEntity message) async {
+    if (!message.isSticker || message.isDeleted) return null;
+    if (!_pendingMessageIds.add(message.id)) return null;
+    emit(state.copyWith(busyMessageIds: {...state.busyMessageIds, message.id}));
+    try {
+      final result = await _saveStickerFromMessage(
+        MessageRefParams(conversationId: conversationId, messageId: message.id),
+      );
+      if (isClosed) return null;
+      return result.fold((failure) {
+        emit(state.copyWith(actionError: failure.message));
+        return null;
+      }, (saved) => saved);
+    } finally {
+      _pendingMessageIds.remove(message.id);
+      if (!isClosed) emit(state.copyWith(busyMessageIds: {...state.busyMessageIds}..remove(message.id)));
+    }
+  }
+
+  /// A sticker's presigned link expired (or failed to load): fetch the newest
+  /// history page and swap the fresh copy into every message carrying that
+  /// sticker.
+  ///
+  /// There is no `GET /ws/stickers/{id}` to re-sign one on its own — the
+  /// service's answer for an expired sticker URL on a message is "load the
+  /// page again" — so the whole page is what gets fetched, and only the
+  /// sticker is taken from it. Guarded per sticker id so an image widget
+  /// erroring repeatedly cannot loop on the endpoint, and the revision is
+  /// bumped for the reason [ChatState.attachmentRevision] explains.
+  Future<void> refreshSticker(String stickerId) async {
+    if (!_pendingStickerRefreshes.add(stickerId)) return;
+    try {
+      final result = await _getMessages(GetMessagesParams(conversationId: conversationId));
+      if (isClosed) return;
+      result.fold((failure) => appLogger.w('refreshSticker($stickerId) failed — ${failure.message}'), (page) {
+        StickerEntity? fresh;
+        for (final message in page.messages) {
+          if (message.sticker?.id == stickerId) fresh = message.sticker;
+        }
+        if (fresh == null) return;
+        final next = [
+          for (final m in state.messages)
+            if (m.sticker?.id == stickerId) m.copyWith(sticker: fresh) else m,
+        ];
+        emit(state.copyWith(messages: next, attachmentRevision: state.attachmentRevision + 1));
+      });
+    } finally {
+      _pendingStickerRefreshes.remove(stickerId);
+    }
   }
 
   /// A link that will actually stream.
@@ -928,6 +1033,10 @@ class ChatCubit extends Cubit<ChatState> {
   Future<void> close() {
     _stopTyping();
     _clearPeerTyping();
+    // Balanced with the lease taken beside this subscription, so a chat
+    // opened and closed without ever loading never releases one it did not
+    // take.
+    if (_sub != null) _inbox.releasePresence();
     _sub?.cancel();
     return super.close();
   }

@@ -15,8 +15,10 @@ import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/error_view.dart';
+import '../../../../shared/widgets/linked_text.dart';
 import '../../../../shared/widgets/shimmer_loading.dart';
 import '../../../feed/domain/entities/comment_entity.dart';
+import '../../../link_preview/presentation/widgets/link_preview_card.dart';
 import '../../../feed/domain/entities/post_entity.dart' show ReactionType;
 import '../../domain/entities/community_post_entity.dart';
 import '../bloc/community_post_cubit.dart';
@@ -421,7 +423,8 @@ class _ThreadHeader extends StatelessWidget {
           Text(post.title, style: AppTextStyles.quote.copyWith(color: colors.ink, fontSize: 20)),
           if (post.hasBody) ...[
             const SizedBox(height: 10),
-            Text(post.body, style: AppTextStyles.body.copyWith(color: colors.ink2)),
+            LinkedText(text: post.body, style: AppTextStyles.body.copyWith(color: colors.ink2)),
+            LinkPreviewList(text: post.body, padding: const EdgeInsets.only(top: 12)),
           ],
           const SizedBox(height: 16),
           Row(
@@ -639,7 +642,7 @@ class _CommentTile extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 5),
-                  Text(comment.content, style: AppTextStyles.bodySm.copyWith(color: colors.ink)),
+                  LinkedText(text: comment.content, style: AppTextStyles.bodySm.copyWith(color: colors.ink)),
                   const SizedBox(height: 6),
                   Row(
                     children: [

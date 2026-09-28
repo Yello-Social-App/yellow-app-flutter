@@ -16,11 +16,12 @@ enum ConversationType {
 
 /// What an inbox row says about a message whose text is empty. The summary
 /// `yello-chat` embeds in a conversation (`lastMessage`) carries only
-/// `{id, senderId, body, createdAt}`, so a server-supplied row can only tell
-/// text from "no text" — [attachment] is the honest default for the latter.
-/// When this client applies a full [MessageEntity] itself
-/// (`MessagesCubit.applyIncomingMessage`) it knows better and says so.
-enum LastMessageKind { text, attachment, voice, invite, deleted }
+/// `{id, senderId, body, createdAt, hasSticker}`, so a server-supplied row
+/// can tell text from a sticker from "no text" — [attachment] is the honest
+/// default for the last of those. When this client applies a full
+/// [MessageEntity] itself (`MessagesCubit.applyIncomingMessage`) it knows
+/// better and says so.
+enum LastMessageKind { text, sticker, attachment, voice, invite, deleted }
 
 /// The trimmed message `yello-chat` embeds in a conversation summary — just
 /// enough to render an inbox row without fetching history.
@@ -44,11 +45,13 @@ class LastMessageEntity extends Equatable {
             ? LastMessageKind.deleted
             : message.isInviteCard
                 ? LastMessageKind.invite
-                : message.hasText
-                    ? LastMessageKind.text
-                    : message.attachments.any((a) => a.isVoice)
-                        ? LastMessageKind.voice
-                        : LastMessageKind.attachment,
+                : message.isSticker
+                    ? LastMessageKind.sticker
+                    : message.hasText
+                        ? LastMessageKind.text
+                        : message.attachments.any((a) => a.isVoice)
+                            ? LastMessageKind.voice
+                            : LastMessageKind.attachment,
       );
 
   final String id;
@@ -61,6 +64,9 @@ class LastMessageEntity extends Equatable {
   String get preview {
     if (kind == LastMessageKind.deleted) return 'Message deleted';
     if (kind == LastMessageKind.invite) return 'Sent a group invite';
+    // Before the body: a sticker message has none, but reading the kind first
+    // keeps the row honest if the server ever sends both.
+    if (kind == LastMessageKind.sticker) return 'Sent a sticker';
     if (body.isNotEmpty) return body;
     // Same words the push notification uses for one, so the row and the
     // alert that announced it do not describe the same message differently.
@@ -165,8 +171,14 @@ class ConversationEntity extends Equatable {
   /// in which case DIRECT conversations fall back to the first participant.
   final String? viewerId;
 
-  /// Presence is delivered by the `presence` WebSocket frame. Until that
-  /// socket is wired this is always false — do not read it as "offline".
+  /// The other side of a DM is online — the green dot on the avatar.
+  ///
+  /// Not a wire field: no endpoint on any of the three services reports
+  /// presence, so this is folded in by `MessagesCubit` from the `presence`
+  /// frames on `yello-chat`'s socket (ADR-038). False therefore means *not
+  /// known to be online* — nobody has said, nothing is watching, or the
+  /// socket is down — and never "this person is offline". Always false for a
+  /// group: its avatar is the group's photo, not a person's.
   final bool isOnline;
 
   /// Group photo — a presigned link that expires at [photoUrlExpiresAt] and

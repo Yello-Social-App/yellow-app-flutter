@@ -104,6 +104,51 @@ void main() {
       expect((event! as ConversationRemoved).reason, 'LEFT');
     });
 
+    test('presence is read across every shape the frame might take', () {
+      // One person, flagged three different ways.
+      expect(ChatFrameDecoder.presence({'event': 'presence', 'data': {'userId': 'u2', 'isOnline': true}}),
+          [(userId: 'u2', isOnline: true)]);
+      expect(ChatFrameDecoder.presence({'event': 'presence', 'data': {'userId': 'u2', 'online': false}}),
+          [(userId: 'u2', isOnline: false)]);
+      expect(ChatFrameDecoder.presence({'event': 'presence', 'data': {'userId': 'u2', 'status': 'OFFLINE'}}),
+          [(userId: 'u2', isOnline: false)]);
+      // A flag the frame does not carry reads as online — it was sent
+      // because something happened, the same reasoning as `typing`'s.
+      expect(ChatFrameDecoder.presence({'event': 'presence', 'data': {'userId': 'u2'}}),
+          [(userId: 'u2', isOnline: true)]);
+
+      // A batch, and a bare roster of ids.
+      expect(
+        ChatFrameDecoder.presence({
+          'event': 'presence',
+          'data': {
+            'users': [
+              {'userId': 'u2', 'status': 'ONLINE'},
+              {'senderId': 'u3', 'isOnline': false},
+            ],
+          },
+        }),
+        [(userId: 'u2', isOnline: true), (userId: 'u3', isOnline: false)],
+      );
+      expect(
+        ChatFrameDecoder.presence({
+          'event': 'presence',
+          'data': {
+            'online': ['u2', 'u3'],
+            'offline': ['u4'],
+          },
+        }),
+        [(userId: 'u2', isOnline: true), (userId: 'u3', isOnline: true), (userId: 'u4', isOnline: false)],
+      );
+
+      // `presence` never reaches the per-conversation stream: it names people,
+      // not a conversation, and `PresenceTracker` owns it.
+      expect(ChatFrameDecoder.decodeFrame({'event': 'presence', 'data': {'userId': 'u2', 'isOnline': true}}), isNull);
+      // Nothing usable in it, which is what gets the frame logged verbatim.
+      expect(ChatFrameDecoder.presence({'event': 'presence', 'data': {'ref': 'p1'}}), isNull);
+      expect(ChatFrameDecoder.presence({'event': 'typing', 'data': {'userId': 'u2'}}), isNull);
+    });
+
     test('unknown, malformed and non-object frames decode to null', () {
       expect(ChatFrameDecoder.decode('not json'), isNull);
       expect(ChatFrameDecoder.decode('[1,2]'), isNull);

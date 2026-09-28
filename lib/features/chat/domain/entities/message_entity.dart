@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 
 import 'attachment_entity.dart';
 import 'group_invite_entity.dart';
+import 'sticker_entity.dart';
 
 /// Where an outgoing message is in its lifecycle. Incoming messages are
 /// always [sent]; [sending] and [failed] only ever describe the optimistic
@@ -17,15 +18,21 @@ class ReplyPreviewEntity extends Equatable {
     required this.senderId,
     required this.body,
     this.hasAttachments = false,
+    this.hasSticker = false,
     this.deleted = false,
   });
 
   final String id;
   final String senderId;
 
-  /// First 200 characters; empty when the original was unsent or file-only.
+  /// First 200 characters; empty when the original was unsent, file-only or
+  /// a sticker.
   final String body;
   final bool hasAttachments;
+
+  /// The quoted message is a sticker. Its [body] is empty, so without this
+  /// the quote would be a blank box — the reply says "Sticker" instead.
+  final bool hasSticker;
 
   /// The quoted message has since been deleted — render "Message deleted"
   /// in the quote rather than an empty box.
@@ -36,11 +43,14 @@ class ReplyPreviewEntity extends Equatable {
         senderId: senderId,
         body: deleted == true ? '' : body,
         hasAttachments: hasAttachments,
+        // A tombstone keeps nothing: the server drops the sticker with the
+        // text, so a quote of one reads "Message deleted", not "Sticker".
+        hasSticker: deleted == true ? false : hasSticker,
         deleted: deleted ?? this.deleted,
       );
 
   @override
-  List<Object?> get props => [id, senderId, body, hasAttachments, deleted];
+  List<Object?> get props => [id, senderId, body, hasAttachments, hasSticker, deleted];
 }
 
 /// One emoji's tally on a message (`Reaction`). A user appears at most once
@@ -108,10 +118,10 @@ class StoryReplyEntity extends Equatable {
 /// optimistic bubble is matched to its confirmed version instead of being
 /// rendered twice. It is also what makes a retry safe.
 ///
-/// [body] is `""` for three different things — an attachment-only message,
-/// an invite card, and a deleted one — so nothing may render on the text
-/// alone: check [isDeleted], [groupInvite] and [attachments] first (in that
-/// order — a tombstone has none of the others).
+/// [body] is `""` for four different things — an attachment-only message, a
+/// sticker, an invite card, and a deleted one — so nothing may render on the
+/// text alone: check [isDeleted], [groupInvite], [sticker] and [attachments]
+/// first (in that order — a tombstone has none of the others).
 class MessageEntity extends Equatable {
   const MessageEntity({
     required this.id,
@@ -127,6 +137,7 @@ class MessageEntity extends Equatable {
     this.reactions = const [],
     this.groupInvite,
     this.storyReply,
+    this.sticker,
     this.editedAt,
     this.deletedAt,
   });
@@ -159,6 +170,16 @@ class MessageEntity extends Equatable {
   /// see [StoryReplyEntity].
   final StoryReplyEntity? storyReply;
 
+  /// The sticker this message *is*. A sticker message carries nothing else:
+  /// empty [body], no [attachments] — the server refuses either alongside a
+  /// `stickerId`. Null on every other message, and on a tombstone (the
+  /// server drops it with the text).
+  ///
+  /// What arrives here is the picture only; the owner's name is never on a
+  /// message, so [StickerEntity.name] is empty and [StickerEntity.isMine] is
+  /// false regardless of whose library it is in.
+  final StickerEntity? sticker;
+
   /// Set once the sender has edited the text — show an "edited" label.
   final DateTime? editedAt;
 
@@ -172,6 +193,7 @@ class MessageEntity extends Equatable {
   bool get isStoryReply => storyReply != null;
   bool get hasAttachments => attachments.isNotEmpty;
   bool get hasText => body.isNotEmpty;
+  bool get isSticker => sticker != null;
 
   /// The viewer's own reaction, if any — reacting again replaces it, so
   /// there is at most one.
@@ -183,8 +205,10 @@ class MessageEntity extends Equatable {
   }
 
   /// What may be edited: the sender's own live text message. Attachments and
-  /// the reply target are fixed at send time, and a card has no text.
-  bool get canEdit => fromMe && !isDeleted && !isInviteCard && status == MessageDeliveryStatus.sent;
+  /// the reply target are fixed at send time, a card has no text, and a
+  /// sticker is refused outright (`400 STICKER_NOT_EDITABLE`).
+  bool get canEdit =>
+      fromMe && !isDeleted && !isInviteCard && !isSticker && status == MessageDeliveryStatus.sent;
   bool get canDelete => fromMe && !isDeleted && status == MessageDeliveryStatus.sent;
 
   /// Anything sent can be reacted to, replied to and quoted — except a
@@ -204,6 +228,7 @@ class MessageEntity extends Equatable {
         senderId: senderId,
         body: isDeleted ? '' : (body.length > 200 ? body.substring(0, 200) : body),
         hasAttachments: hasAttachments,
+        hasSticker: !isDeleted && isSticker,
         deleted: isDeleted,
       );
 
@@ -224,9 +249,11 @@ class MessageEntity extends Equatable {
         attachments: const [],
         reactions: const [],
         groupInvite: groupInvite,
-        // The server's tombstone drops `storyReply` along with the text —
-        // mirror that, or a deleted reply keeps trying to draw a preview.
+        // The server's tombstone drops `storyReply` and `sticker` along with
+        // the text — mirror that, or a deleted reply keeps trying to draw a
+        // preview and a deleted sticker keeps drawing its picture.
         storyReply: null,
+        sticker: null,
         editedAt: editedAt,
         deletedAt: at,
       );
@@ -241,6 +268,7 @@ class MessageEntity extends Equatable {
     List<ReactionEntity>? reactions,
     GroupInviteCardEntity? groupInvite,
     StoryReplyEntity? storyReply,
+    StickerEntity? sticker,
     DateTime? editedAt,
   }) {
     return MessageEntity(
@@ -257,6 +285,7 @@ class MessageEntity extends Equatable {
       reactions: reactions ?? this.reactions,
       groupInvite: groupInvite ?? this.groupInvite,
       storyReply: storyReply ?? this.storyReply,
+      sticker: sticker ?? this.sticker,
       editedAt: editedAt ?? this.editedAt,
       deletedAt: deletedAt,
     );
@@ -276,6 +305,7 @@ class MessageEntity extends Equatable {
         reactions,
         groupInvite,
         storyReply,
+        sticker,
         editedAt,
         deletedAt,
       ];

@@ -16,6 +16,69 @@ file only when it genuinely helps.
 
 ## [Unreleased]
 
+### Added
+
+- **Stickers in chat.** The smiley beside the mic opens a sticker picker:
+  **Recent** (what you sent last, kept by the server, so it is the same list on
+  your phone and anywhere else you sign in), **My stickers**, and whatever
+  packs Yello has published. Tap one and it sends straight away, like a voice
+  message — no draft, no send button. A sticker can reply to a message, be
+  reacted to, and be unsent, like anything else you send; it just cannot be
+  edited, because there is no text in it to change.
+
+- **Make a sticker out of any photo.** Tap **Create** in the picker, choose a
+  picture from your library or take one, name it if you like, and Yello turns it
+  into a sticker in your library. **Save and send** does both at once. Your
+  library holds 200.
+
+- **Keep someone else's sticker.** Long-press a sticker they sent and choose
+  **Add to My stickers** — it lands in your picker, ready to send back. Yello
+  tells you if it is already there.
+
+- **Rename or delete your own stickers.** Long-press one in the picker. A
+  deleted sticker leaves your picker and your Recent; messages you already sent
+  keep showing it. Packs are Yello's, so those cannot be renamed or removed.
+
+- **Inbox and replies say what a sticker is.** A conversation whose last
+  message is a sticker reads **Sent a sticker**, and a reply to one quotes it as
+  **Sticker** rather than an empty box.
+
+- **A green dot on people who are online.** Open Inbox and the avatars of
+  everyone currently in Yello carry a small green circle — in the list, in the
+  row of faces across the top, and at the top of the conversation itself,
+  where the line under their name reads `ACTIVE NOW` instead of `OFFLINE`. It
+  updates as people come and go while you're looking at it. A dot means
+  they're around right now; no dot means nothing is claimed either way, so
+  nobody is ever shown as offline on a guess. Group chats don't get one — the
+  picture there is the group's, not a person's.
+
+- **Links you can actually tap.** A web address written in a post, a comment,
+  a chat message, a community post or someone's bio is now drawn as a link —
+  underlined, in Yello's yellow — and tapping it opens the page in your
+  browser. `www.` on its own counts; a full address is not required. A link
+  that ends a sentence leaves the full stop behind where it belongs.
+
+- **A preview card under a linked post.** Share a link in a post and Yello
+  reads the page for its picture, headline and site name, and draws them as a
+  card under your text — up to three cards for a post with several links.
+  A link straight to a picture shows that picture. Pages that publish nothing
+  to preview simply get no card, and neither does a link that won't load.
+
+### Changed
+
+- **Repository, live-site and chat-attachment links open on a tap.** They used
+  to copy themselves to the clipboard and leave you to paste them somewhere.
+  Long-press still copies, which is still the only way to get an attachment's
+  download link off the phone.
+
+### Security
+
+- A preview never fetches an address inside your own network. A post
+  containing a link to a home router or an office server — or a page that
+  redirects to one, or that offers a picture hosted on one — is refused before
+  anything is dialled, on every redirect along the way. Previews also travel
+  without your session: they carry no Yello sign-in of any kind.
+
 ---
 
 ## [0.5.0] — 2026-09-25

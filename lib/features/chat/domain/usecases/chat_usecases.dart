@@ -84,6 +84,7 @@ class SendMessageParams extends Equatable {
     required this.text,
     required this.clientId,
     this.replyToMessageId,
+    this.stickerId,
     this.attachmentIds = const [],
   });
 
@@ -95,11 +96,15 @@ class SendMessageParams extends Equatable {
 
   final String? replyToMessageId;
 
+  /// Makes this a sticker message. It goes alone: [text] must be empty and
+  /// [attachmentIds] empty, which is what the server enforces too.
+  final String? stickerId;
+
   /// Ids from `UploadAttachmentUseCase`, in display order.
   final List<String> attachmentIds;
 
   @override
-  List<Object?> get props => [conversationId, text, clientId, replyToMessageId, attachmentIds];
+  List<Object?> get props => [conversationId, text, clientId, replyToMessageId, stickerId, attachmentIds];
 }
 
 class SendMessageUseCase implements UseCase<MessageEntity, SendMessageParams> {
@@ -112,6 +117,21 @@ class SendMessageUseCase implements UseCase<MessageEntity, SendMessageParams> {
   @override
   Future<Either<Failure, MessageEntity>> call(SendMessageParams params) {
     final clean = InputSanitizer.sanitizeText(params.text, maxLength: maxBodyLength);
+    // A sticker is the whole message. Caught here rather than left to the
+    // 400, because the only way to reach it is a caller bug — the composer
+    // hides the sticker button as soon as there is a draft to send.
+    if (params.stickerId != null) {
+      if (clean.isNotEmpty || params.attachmentIds.isNotEmpty) {
+        return Future.value(const Left(ValidationFailure('A sticker is sent on its own.')));
+      }
+      return _repository.sendMessage(
+        conversationId: params.conversationId,
+        body: '',
+        clientId: params.clientId,
+        replyToMessageId: params.replyToMessageId,
+        stickerId: params.stickerId,
+      );
+    }
     // An empty body is only a message when it carries files.
     if (clean.isEmpty && params.attachmentIds.isEmpty) {
       return Future.value(const Left(ValidationFailure('Message cannot be empty.')));

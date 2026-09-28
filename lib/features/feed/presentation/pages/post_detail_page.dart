@@ -10,6 +10,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../link_preview/presentation/widgets/link_preview_card.dart';
 import '../../../safety/presentation/bloc/report_post_cubit.dart';
 import '../../../safety/presentation/widgets/report_post_sheet.dart';
 import '../../../../shared/extensions/string_extension.dart';
@@ -17,6 +18,7 @@ import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/error_view.dart';
+import '../../../../shared/widgets/linked_text.dart';
 import '../../../../shared/widgets/yello_wordmark.dart';
 import '../../domain/entities/comment_entity.dart';
 import '../../domain/entities/post_entity.dart';
@@ -558,14 +560,16 @@ class _PostHeaderCard extends StatelessWidget {
               ),
             ),
           ),
-          if (post.content.isNotEmpty)
+          if (post.content.isNotEmpty) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-              child: Text(
-                post.content,
+              child: LinkedText(
+                text: post.content,
                 style: AppTextStyles.body.copyWith(color: colors.ink),
               ),
             ),
+            LinkPreviewList(text: post.content),
+          ],
           if (post.hasImages)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -770,8 +774,8 @@ class _CommentRow extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    comment.content,
+                  LinkedText(
+                    text: comment.content,
                     style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
                   ),
                   const SizedBox(height: 8),
