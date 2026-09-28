@@ -16,6 +16,10 @@ file only when it genuinely helps.
 
 ## [Unreleased]
 
+---
+
+## [0.6.0] — 2026-09-28
+
 ### Added
 
 - **Stickers in chat.** The smiley beside the mic opens a sticker picker:
