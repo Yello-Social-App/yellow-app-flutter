@@ -5,8 +5,8 @@
 Index of every meaningful file in `lib/`, so you can jump straight to the
 right one instead of searching. **Read this before opening source files.**
 
-- Generated from commit `25e7d66`
-- `lib/`: 297 Dart files · `test/`: 37 test files
+- Generated from commit `de67e7d`
+- `lib/`: 321 Dart files · `test/`: 48 test files
 - Regenerate: `bash tool/codemap.sh` · Staleness check: `bash tool/codemap.sh --check`
 
 Layer rule (see [ARCHITECTURE.md](ARCHITECTURE.md)): `presentation` → `domain/usecases`
@@ -104,6 +104,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `Connectivity`
 - `CreateCommunityPostUseCase`
 - `CreatePostUseCase`
+- `CreateStickerDraftUseCase`
 - `CreateStoryUseCase`
 - `DeclineFriendRequestUseCase`
 - `DeclineGroupInviteUseCase`
@@ -111,6 +112,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `DeleteMessageUseCase`
 - `DeleteNotificationUseCase`
 - `DeletePostUseCase`
+- `DeleteStickerUseCase`
 - `DeleteStoryUseCase`
 - `DownloadUpdateUseCase`
 - `EditCommentUseCase`
@@ -129,27 +131,31 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `GetCommunityFeedUseCase`
 - `GetCommunityPostsUseCase`
 - `GetCommunityUseCase`
-- `GetConversationsUseCase`
 - `GetConversationUseCase`
+- `GetConversationsUseCase`
 - `GetFeedUseCase`
 - `GetFriendRequestsUseCase`
 - `GetFriendsUseCase`
 - `GetInboxUseCase`
-- `GetMessagesUseCase`
+- `GetLinkPreviewUseCase`
 - `GetMeUseCase`
+- `GetMessagesUseCase`
 - `GetMutedUsersUseCase`
 - `GetMyFeedbackUseCase`
 - `GetMyReportsUseCase`
+- `GetMyStickersUseCase`
 - `GetNotificationPreferencesUseCase`
 - `GetPostDetailUseCase`
 - `GetPostUseCase`
-- `GetProjectsUseCase`
 - `GetProjectTechUseCase`
 - `GetProjectUseCase`
+- `GetProjectsUseCase`
 - `GetReactionSummaryUseCase`
 - `GetReactorsUseCase`
+- `GetRecentStickersUseCase`
 - `GetSavedPostIdsUseCase`
 - `GetShareLinkUseCase`
+- `GetStickerPacksUseCase`
 - `GetStoryArchiveUseCase`
 - `GetStoryRailUseCase`
 - `GetStoryUseCase`
@@ -166,6 +172,9 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `LeaveCommunityUseCase`
 - `LeaveGroupUseCase`
 - `LikePostUseCase`
+- `LinkPreviewCubit`
+- `LinkPreviewRemoteDataSource`
+- `LinkPreviewRepository`
 - `LoginUseCase`
 - `LogoutUseCase`
 - `MarkAllNotificationsReadUseCase`
@@ -179,6 +188,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `NotificationRepository`
 - `NotificationsCubit`
 - `OpenInstallSettingsUseCase`
+- `PresenceTracker`
 - `ProfileRemoteDataSource`
 - `ProfileRepository`
 - `PublishProjectUseCase`
@@ -194,6 +204,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `RemoveGroupMemberUseCase`
 - `RemoveGroupPhotoUseCase`
 - `RenameGroupUseCase`
+- `RenameStickerUseCase`
 - `ReplyToStoryUseCase`
 - `ReportPostUseCase`
 - `RepostUseCase`
@@ -203,6 +214,8 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `RouteGuards`
 - `SafetyRemoteDataSource`
 - `SafetyRepository`
+- `SaveStickerFromMessageUseCase`
+- `SaveStickerUseCase`
 - `SearchRemoteDataSource`
 - `SearchRepository`
 - `SearchUsersUseCase`
@@ -215,6 +228,9 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `ShowcaseRepository`
 - `StartDirectConversationUseCase`
 - `StartGroupConversationUseCase`
+- `StickerRemoteDataSource`
+- `StickerRepository`
+- `StickersCubit`
 - `StoryPreviewCubit`
 - `StoryRemoteDataSource`
 - `StoryRepository`
@@ -259,6 +275,7 @@ on re-entry.
 - `SearchCubit`
 - `SharedPostsCubit`
 - `ShowcaseCubit`
+- `StickerCreatorCubit`
 - `StoryArchiveCubit`
 - `StoryComposeCubit`
 - `StoryCubit`
@@ -323,6 +340,8 @@ on re-entry.
 - `lib/features/chat/presentation/bloc/chat_cubit.dart` — ChatState, ChatCubit
 - `lib/features/chat/presentation/bloc/group_info_cubit.dart` — GroupInfoState, GroupInfoCubit
 - `lib/features/chat/presentation/bloc/messages_cubit.dart` — MessagesState, MessagesCubit
+- `lib/features/chat/presentation/bloc/sticker_creator_cubit.dart` — StickerCreatorState, StickerCreatorCubit
+- `lib/features/chat/presentation/bloc/stickers_cubit.dart` — StickersState, StickersCubit
 - `lib/features/chat/presentation/bloc/voice_recorder_cubit.dart` — VoiceRecorderState, VoiceRecorderCubit
 
 **Pages**
@@ -333,6 +352,9 @@ on re-entry.
 
 **Widgets**
 
+- `lib/features/chat/presentation/widgets/sticker_creator_sheet.dart` — showStickerCreator()
+- `lib/features/chat/presentation/widgets/sticker_image.dart` — StickerImageView
+- `lib/features/chat/presentation/widgets/sticker_picker_sheet.dart` — showStickerPicker()
 - `lib/features/chat/presentation/widgets/story_reply_preview.dart` — StoryReplyPreview
 - `lib/features/chat/presentation/widgets/voice_note_bubble.dart` — VoiceNoteBubble
 - `lib/features/chat/presentation/widgets/voice_recorder_sheet.dart` — showVoiceRecorder()
@@ -340,6 +362,7 @@ on re-entry.
 **Usecases**
 
 - `lib/features/chat/domain/usecases/chat_usecases.dart` — CursorParams, GetConversationsUseCase, GetConversationUseCase, GetMessagesParams, GetMessagesUseCase, SendMessageParams, SendMessageUseCase, EditMessageParams, EditMessageUseCase, MessageRefParams, DeleteMessageUseCase, ReactToMessageParams, ReactToMessageUseCase, UploadAttachmentParams, UploadAttachmentUseCase, UploadVoiceAttachmentUseCase, RefreshAttachmentUseCase, MarkReadParams, MarkReadUseCase, StartDirectConversationUseCase, StartGroupParams, StartGroupConversationUseCase, RenameGroupParams, RenameGroupUseCase, SetGroupPhotoParams, SetGroupPhotoUseCase, RemoveGroupPhotoUseCase, GroupMembersParams, AddGroupMembersUseCase, GroupMemberParams, RemoveGroupMemberUseCase, ChangeMemberRoleParams, ChangeMemberRoleUseCase, LeaveGroupUseCase, InviteToGroupUseCase, AcceptGroupInviteUseCase, DeclineGroupInviteUseCase, newChatClientId()
+- `lib/features/chat/domain/usecases/sticker_usecases.dart` — GetMyStickersUseCase, GetRecentStickersUseCase, GetStickerPacksUseCase, CreateStickerDraftUseCase, SaveStickerParams, SaveStickerUseCase, RenameStickerParams, RenameStickerUseCase, DeleteStickerUseCase, SaveStickerFromMessageUseCase
 
 **Entities**
 
@@ -348,20 +371,24 @@ on re-entry.
 - `lib/features/chat/domain/entities/group_invite_entity.dart` — GroupInviteCardEntity, GroupInviteEntity, GroupInviteResult
 - `lib/features/chat/domain/entities/message_entity.dart` — ReplyPreviewEntity, ReactionEntity, StoryReplyEntity, MessageEntity
 - `lib/features/chat/domain/entities/participant_entity.dart` — ParticipantEntity
+- `lib/features/chat/domain/entities/sticker_entity.dart` — StickerImage, StickerEntity, StickerPackEntity, StickerDraftEntity, StickerLibraryPage
 
 **Repository interfaces**
 
 - `lib/features/chat/domain/repositories/chat_repository.dart` — ConversationsPage, MessagesPage, TypingChanged, LiveDeliveryChanged, MessageArrived, MessageUpdated, MessageDeleted, MessageReactionsChanged, MessagesRead, ConversationUpdated, ConversationRemoved, GroupInviteUpdated
+- `lib/features/chat/domain/repositories/sticker_repository.dart` — StickerAdded, StickerUpdated, StickerRemoved
 
 **Repository implementations**
 
 - `lib/features/chat/data/repositories/chat_repository_impl.dart` — ChatRepositoryImpl
+- `lib/features/chat/data/repositories/sticker_repository_impl.dart` — StickerRepositoryImpl
 
 **Models (JSON ⇄ entity)**
 
 - `lib/features/chat/data/models/conversation_model.dart` — ConversationPage
 - `lib/features/chat/data/models/group_invite_model.dart`
 - `lib/features/chat/data/models/message_model.dart` — MessagePage
+- `lib/features/chat/data/models/sticker_model.dart`
 
 **Data sources**
 
@@ -369,6 +396,8 @@ on re-entry.
 - `lib/features/chat/data/datasources/chat_local_datasource.dart`
 - `lib/features/chat/data/datasources/chat_remote_datasource.dart` — ChatRemoteDataSourceImpl
 - `lib/features/chat/data/datasources/chat_socket.dart` — ChatSocket
+- `lib/features/chat/data/datasources/presence_tracker.dart` — PresenceTracker
+- `lib/features/chat/data/datasources/sticker_remote_datasource.dart` — StickerRemoteDataSourceImpl
 - `lib/features/chat/data/datasources/user_directory.dart` — UserDirectory
 
 ### Communities — `lib/features/communities`
@@ -540,6 +569,40 @@ on re-entry.
 **Data sources**
 
 - `lib/features/friends/data/datasources/friends_remote_datasource.dart` — FriendsRemoteDataSourceImpl
+
+### Link_preview — `lib/features/link_preview`
+
+**Cubits + States**
+
+- `lib/features/link_preview/presentation/bloc/link_preview_cubit.dart` — LinkPreviewState, LinkPreviewCubit
+
+**Widgets**
+
+- `lib/features/link_preview/presentation/widgets/link_preview_card.dart` — LinkPreviewList, LinkPreviewCard
+
+**Usecases**
+
+- `lib/features/link_preview/domain/usecases/get_link_preview_usecase.dart` — GetLinkPreviewUseCase
+
+**Entities**
+
+- `lib/features/link_preview/domain/entities/link_preview_entity.dart` — LinkPreviewEntity
+
+**Repository interfaces**
+
+- `lib/features/link_preview/domain/repositories/link_preview_repository.dart`
+
+**Repository implementations**
+
+- `lib/features/link_preview/data/repositories/link_preview_repository_impl.dart` — LinkPreviewRepositoryImpl
+
+**Models (JSON ⇄ entity)**
+
+- `lib/features/link_preview/data/models/link_preview_model.dart` — LinkPreviewModel
+
+**Data sources**
+
+- `lib/features/link_preview/data/datasources/link_preview_remote_datasource.dart` — LinkPreviewRemoteDataSourceImpl
 
 ### Notification — `lib/features/notification`
 
@@ -876,6 +939,7 @@ on re-entry.
 - `lib/core/security/certificate_pinning.dart`
 - `lib/core/security/input_sanitizer.dart`
 - `lib/core/security/jwt_manager.dart` — JwtManagerImpl
+- `lib/core/security/private_network_guard.dart`
 - `lib/core/security/root_jailbreak_detector.dart` — DeviceIntegrityReport, RootJailbreakDetectorImpl
 - `lib/core/security/secure_storage_service.dart` — SecureStorageServiceImpl
 - `lib/core/security/session_manager.dart` — SessionManagerImpl
@@ -893,7 +957,9 @@ on re-entry.
 
 **`lib/core/utils`**
 
+- `lib/core/utils/external_link.dart`
 - `lib/core/utils/formatters.dart`
+- `lib/core/utils/link_scanner.dart` — LinkMatch
 - `lib/core/utils/logger.dart`
 - `lib/core/utils/presigned_url.dart` — presignedObjectKey()
 - `lib/core/utils/responsive.dart`
@@ -925,6 +991,7 @@ on re-entry.
 - `lib/shared/widgets/filter_chip_pill.dart` — FilterChipPill
 - `lib/shared/widgets/filter_dropdown_pill.dart` — FilterDropdownPill
 - `lib/shared/widgets/image_placeholder.dart` — ImagePlaceholder
+- `lib/shared/widgets/linked_text.dart` — LinkedText
 - `lib/shared/widgets/paged_list_view.dart` — PagedListView
 - `lib/shared/widgets/photo_viewer_page.dart` — PhotoViewerArgs, PhotoViewerPage, openPhotoViewer()
 - `lib/shared/widgets/responsive_content.dart` — ResponsiveContent
@@ -941,7 +1008,9 @@ on re-entry.
 - `test/core/notifications/push_destination_test.dart`
 - `test/core/security/input_sanitizer_test.dart`
 - `test/core/security/jwt_manager_test.dart`
+- `test/core/security/private_network_guard_test.dart`
 - `test/core/security/session_manager_test.dart`
+- `test/core/utils/link_scanner_test.dart`
 - `test/core/utils/presigned_url_test.dart`
 - `test/features/auth/domain/login_usecase_test.dart`
 - `test/features/chat/chat_cubit_actions_test.dart`
@@ -949,6 +1018,11 @@ on re-entry.
 - `test/features/chat/chat_socket_test.dart`
 - `test/features/chat/loading_test.dart`
 - `test/features/chat/message_mapper_test.dart`
+- `test/features/chat/presence_test.dart`
+- `test/features/chat/sticker_image_test.dart`
+- `test/features/chat/sticker_mapper_test.dart`
+- `test/features/chat/sticker_send_test.dart`
+- `test/features/chat/stickers_cubit_test.dart`
 - `test/features/chat/voice_message_test.dart`
 - `test/features/chat/voice_note_bubble_test.dart`
 - `test/features/chat/voice_recorder_cubit_test.dart`
@@ -961,6 +1035,9 @@ on re-entry.
 - `test/features/feed/story_compose_page_test.dart`
 - `test/features/feed/story_cubit_test.dart`
 - `test/features/feed/story_mapper_test.dart`
+- `test/features/link_preview/link_preview_card_test.dart`
+- `test/features/link_preview/link_preview_cubit_test.dart`
+- `test/features/link_preview/link_preview_model_test.dart`
 - `test/features/profile/profile_cubit_test.dart`
 - `test/features/profile/profile_details_card_test.dart`
 - `test/features/profile/profile_header_test.dart`
@@ -972,6 +1049,7 @@ on re-entry.
 - `test/features/showcase/showcase_widgets_test.dart`
 - `test/helpers/mock_data.dart`
 - `test/shared/widgets/date_label_test.dart`
+- `test/shared/widgets/linked_text_test.dart`
 - `test/shared/widgets/photo_viewer_test.dart`
 - `test/shared/widgets/shimmer_skeletons_test.dart`
 

@@ -214,11 +214,55 @@ Routes, as declared in `ChatRoutes`:
   inviter's DM with the invitee (`groupInvite` set, `body: ""`);
   `POST /ws/invites/{id}/accept` (answers the joined conversation) /
   `…/decline`. Only the invitee answers; a second answer is 409.
+- **Stickers** — a resource of their own, not attachments. Make one with
+  `POST /ws/stickers/drafts` (multipart, field **`image`** — *not* `file`;
+  PNG/JPEG/WebP by content, ≤ 5 MB, ≤ 4096 px a side and ≤ 16 MP), then
+  `POST /ws/stickers` (`{ draftId, background, name }`). The server crops a
+  centred square, applies the EXIF orientation, scales to **512 × 512 WebP**,
+  drops EXIF/GPS/XMP, keeps only the first frame of an animation, and never
+  stores the uploaded bytes. A draft lives an hour, saves **once** (a second
+  save is `404` / `DRAFT_NOT_FOUND`), and there are 30 per user per hour
+  (`429 RATE_LIMITED`, `Retry-After` plus `details.retryAfterSeconds`).
+  Read them with `GET /ws/stickers/mine?limit=&cursor=` (keyset, `limit`
+  clamped to 100 — a full library is two pages), `GET /ws/stickers/recent?size=`
+  (1–50, default 24; **server-side**, so the app keeps no local Recent, and
+  deleted stickers and withdrawn packs drop out on their own) and
+  `GET /ws/sticker-packs` (a bare array, no paging, packs in display order).
+  Manage them with `PATCH /ws/stickers/{id}` (`{ name }`, ≤ 40 chars, may be
+  empty) and `DELETE /ws/stickers/{id}` (204). `POST
+  /ws/conversations/{cid}/messages/{mid}/sticker/save` adds someone else's to
+  your library — the *same* image, not a copy — answering **201** for a new
+  entry and **200** for one already there, which is the only reason the status
+  code reaches the UI (`SavedSticker`). Library ceiling 200 (saved-from-message
+  ones included); the 201st is `409` / `STICKER_LIMIT_REACHED`.
+  `/ws/sticker-packs` is the one conditional route on the service: it sends an
+  `ETag` with `Cache-Control: private, no-cache`, and a `304` to a matching
+  `If-None-Match` means the cached packs **including their URLs** are still
+  good — the same URL is handed out for a whole hour-long window and stays
+  valid for at least an hour after you get it. Every other sticker URL is
+  re-signed on each read. `StickerRemoteDataSourceImpl` holds that ETag for the
+  process, which is why it is a singleton.
+- **Sending a sticker** — `stickerId` on the ordinary send (socket or HTTP).
+  It goes **alone**: `body` must be empty or absent and `attachmentIds` must be
+  absent, and the sticker must be in the caller's library or in a published
+  pack (else `404 STICKER_NOT_FOUND`). `clientId` is still the idempotency key.
+  Every `Message` gains `sticker` (null unless it is a sticker message, and on
+  tombstones — the server drops it with the text); replies gain
+  `replyTo.hasSticker` and the conversation list `lastMessage.hasSticker`, so a
+  quote can say "Sticker" and a row "Sent a sticker" without fetching anything.
+  Editing one is refused (`400 STICKER_NOT_EDITABLE`); reactions, replies and
+  unsend work as on any message. An expired sticker URL on a message is fixed
+  by re-reading the page — **there is no `GET /ws/stickers/{id}`** to re-sign
+  one on its own (`ChatCubit.refreshSticker`). Sticker events
+  (`sticker.added` / `updated` / `removed`) reach **all** of the owner's
+  sockets, the one that made the request included, so a listener de-duplicates
+  on `sticker.id`.
 
 Limits: message text ≤ 4 000 chars (`CHAT_MESSAGE_MAX_LENGTH`), ≤ 10
 attachments per message, ≤ 64-char `clientId` (the idempotency key). A voice
 note is ≤ 5 minutes (`VOICE_MAX_DURATION_MS`, fixed) and goes **alone** in
-its message. Deleting the message deletes the audio from storage with it, so
+its message, as does a sticker. A sticker library holds 200; a sticker name is
+≤ 40 characters and may be empty. Deleting the message deletes the audio from storage with it, so
 a note still playing out of a bubble that becomes a tombstone is playing a
 link that has gone (`ChatCubit._applyDeleted` stops it).
 
@@ -240,8 +284,13 @@ established against the live service with `tool/ws_probe.dart` on
 
 Server → client: `message.new/sent/updated/deleted/reactions`,
 `message.read`, `typing`, `presence`, `conversation.new/updated/removed`,
-`group.invite.updated`, `error`, `pong` — `ChatFrameDecoder` maps each to a
-`ChatEvent`. Client → server used by this app: `auth`, `typing`
+`group.invite.updated`, `sticker.added/updated/removed`, `error`, `pong` —
+`ChatFrameDecoder` maps each to a `ChatEvent`, except `presence`, which names
+people rather than a conversation and so goes to `PresenceTracker` instead of
+to any one screen (ADR-038), and the `sticker.*` family, which names the
+owner's library rather than a conversation and is read by
+`ChatFrameDecoder.stickerEvent` into a `StickerLibraryEvent` for
+`StickersCubit` (ADR-040). Client → server used by this app: `auth`, `typing`
 (`{ conversationId, isTyping }` — **the relayed frame's field names are the
 one thing the probe could not confirm without a real token**; run
 `dart run tool/ws_probe.dart <token>` and the server's validation error
@@ -312,8 +361,24 @@ foregrounded, and closing that gap is entirely on `yello-notify`:
 Nothing else changes: the deep-link keys, the `chat:<conversationId>` tag and
 `CHAT_MESSAGE_DELETED` stay exactly as they are, and the app already reads
 its copy from `data` when the notification block is absent, so both payload
-shapes work today. Verified on-device: **not yet** — no emulator in this
-sandbox.
+shapes work today.
+
+**Confirmed still unsent, on-device 2026-09-26** (Galaxy S24, Yello 0.5.0).
+Two live `CHAT_MESSAGE` pushes landed on the same phone minutes apart, and
+`dumpsys notification` separates them exactly as this section predicts:
+
+| Yello when it arrived | `id` | `template` | `actions` |
+|---|---|---|---|
+| in the foreground | `433677888` (`tag.hashCode`) | `MessagingStyle`, `category=msg` | **1** — the Reply action |
+| on the home screen | `0` | `BigTextStyle` | **none**, no `RemoteInput` |
+
+The backgrounded one also carried FCM's own launcher `contentIntent`
+(`act=MAIN cat=LAUNCHER cmp=.MainActivity`), the signature of an alert the
+**OS** drew from a `notification` block. So the client half works and
+neither payload change above has landed: Reply exists only while the user is
+already looking at the app, which is the one moment they do not need it.
+`id` and `template` alone say who drew a given alert — re-check that way
+rather than by eye, since a phone may collapse either one to a pill.
 
 An iOS reply to an alert *the system* drew may additionally need a
 Notification Service Extension; unverified, and irrelevant until the
@@ -384,6 +449,7 @@ close-friends lists, an archive on/off setting, and any live
 |---|---|---|
 | **Saved posts / bookmarks** | No endpoint. Persisted on-device via `shared_preferences`; not synced across devices. | `feed/data/datasources/bookmarks_local_datasource.dart` |
 | **Chat** | *Does* have a backend (`yello-chat`, `/ws`, with a socket upgrade on the same path for live delivery). | `chat/data/datasources/chat_remote_datasource.dart` |
+| **Link previews / unfurls** | No preview or unfurl endpoint on any of the three services, and no `og:` metadata on any response. The app reads the linked page itself on the device (ADR-039): a bare Dio with no interceptors, redirects followed by hand so every hop can be checked against `PrivateNetworkGuard`, and the read capped at 64 KB. A server-side unfurler would be strictly better — one fetch per link for everyone instead of one per reader — so if one ever lands, this becomes a data-source swap. | `link_preview/data/datasources/link_preview_remote_datasource.dart` |
 | **App updates / version check** | Still no version resource on any of the three services. The app does not ask one: since it is sideloaded rather than installed from a store, the Updates group reads a `latest.json` published beside each release's APK (`AppConfig.updateManifestUrl`, ADR-029). Don't route that through `ApiClient` — it is off-host, and `AuthInterceptor` would attach the session token to it. | `settings/data/datasources/app_update_remote_datasource.dart` |
 
 ## Known backend limitations (not solvable in this repo)
@@ -400,14 +466,65 @@ close-friends lists, an archive on/off setting, and any live
   reached without `extra`.
 - **Feed-list vs. single-post** endpoints can briefly disagree on reaction
   counts before self-correcting.
+- **Sticker background removal is switched off server-side.** The route and
+  the response shape are final, but every draft currently answers
+  `cutoutStatus: "NO_SUBJECT"`, `cutout: null` — the chat container has 300 MB
+  and a usable model needs more. There is nothing to do client-side but handle
+  both branches, which the creator does: `READY` with a cut-out offers the
+  Remove/Keep choice, anything else leaves it on Keep with the server's own
+  explanation. It will be switched on with no client change (ADR-040).
+- **A sticker URL cannot be re-signed on its own** — there is no
+  `GET /ws/stickers/{id}`, so an expired link on a message is recovered by
+  re-reading that conversation's history page.
 - **`yello-chat` `typing` / `presence` payloads** — the frame reference in
-  the service README is not in this repo. The `auth` handshake was
-  recovered from the server's own validation errors (see above); `typing`
-  is sent as `{ conversationId, isTyping }` and read tolerantly
-  (`userId` + `isTyping`/`typing`), and `presence` is not decoded at all.
-  A wrong guess shows up as an `error` frame in the device log
+  the service README is not in this repo, and neither shape is expressible
+  in OpenAPI, so the served spec lists the event names and stops. The `auth`
+  handshake was recovered from the server's own validation errors (see
+  above); `typing` is sent as `{ conversationId, isTyping }` and read
+  tolerantly (`userId` + `isTyping`/`typing`). A wrong guess on a frame this
+  client *sends* shows up as an `error` frame in the device log
   (`ChatRepositoryImpl.watchEvents` logs them) and is a one-line fix in
   `ChatFrameDecoder` / `sendTyping`.
+
+  **`presence` is now decoded**, as of ADR-038 — tolerantly, over
+  `{userId, isOnline}`, `{userId, online}`, `{userId, status: "ONLINE"}`, a
+  batch under `users`, and a bare `{online: [id, …]}` roster. Every presence
+  frame is logged verbatim the first time one arrives in a process
+  (`PresenceTracker._onFrame`), so `adb logcat -s flutter | grep presence`
+  on a phone with a friend online is the whole investigation. Confirm the
+  real shape there and delete the guesses that turn out to be dead.
+
+  **No `presence` frame has ever been observed, on-device 2026-09-26**
+  (emulator-5554, Android 17, Yello 0.5.0 profile build, signed in with
+  seven conversations). The socket connects and authenticates from the Inbox
+  tab and stays up — one TCP connection to the API host held its local port
+  across 48 s of sampling while the HTTP poll's connections were recycled
+  around it, and it disappeared on switching tabs — and in ~50 s on that
+  socket the server sent **nothing** on `presence`: no roster after
+  `auth.ok`, no change events, and no frame the decoder failed to read (that
+  would have logged). So as of today:
+
+  - **There is no presence snapshot on connect.** Whatever the service does
+    send, it does not hand a newly authenticated client the list of who is
+    already online. The tracker's set can therefore only ever be built from
+    changes seen while connected, which is why a lease held from the Inbox
+    (rather than only inside a conversation) is what makes the dot possible
+    at all.
+  - Whether the service emits presence on *change* is still unknown — it
+    needs a second account going online while the log is attached, which no
+    single-device check can arrange. Until one is observed, **the green dot
+    is client-complete but dark**: nothing renders it, and nothing breaks.
+  - Re-run that check the same way (`ss -tn state established` for the
+    socket, `logcat -s flutter | grep presence` for the frame) rather than
+    by looking at the screen, since an absent dot and an unsent frame look
+    identical there.
+- **Presence has no HTTP surface.** No route reports who is online, and
+  `Participant` carries neither `isOnline` nor `lastSeenAt` (re-checked
+  against the served `yello-chat` spec, 2026-09-26). The green online dot is
+  therefore only as live as the socket: an open connection is the only way
+  to know, so the app leases one while a screen that draws a dot is up
+  (ADR-038) and shows nothing — not "offline" — the rest of the time. There
+  is no "last seen 5m ago" to build without a server-side field.
 - **Group changes are live only** — `conversation.updated` frames are not
   stored as lines in message history, so a rename or member change made
   while the viewer was away leaves no trace in the transcript.

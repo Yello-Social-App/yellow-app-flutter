@@ -167,6 +167,26 @@ worse and loud enough to notice.
 
 ---
 
+### A tapped link does nothing on API 30+ without a `<queries>` entry
+
+`url_launcher` asks the OS which app handles a URL, and on Android 11 (API 30)
+and up an app can only see packages it declares an interest in. With no
+declaration, `canLaunchUrl` answers **false** on a phone that plainly has
+Chrome installed, and `launchUrl` throws — so a tap on a link in a post is
+silently dead, on a device, with nothing in the analyzer and nothing in the
+log that names the cause.
+
+- `android/app/src/main/AndroidManifest.xml` carries `<intent>` entries for
+  `ACTION_VIEW` on `https` and on `http`, scheme-only so every web link is
+  covered. Don't remove them when tidying the manifest.
+- iOS needs no counterpart for `http(s)`. A *custom* scheme would need
+  `LSApplicationQueriesSchemes` in `Info.plist` — but `ExternalLink` refuses
+  every scheme but `http`/`https`, so that case cannot arise here.
+- `ExternalLink.open` returns `false` rather than throwing, and each caller
+  decides what to do with that (the showcase and chat link rows fall back to
+  copying). A link that does nothing *and* says nothing is the bug this
+  replaces.
+
 ## Framework / package versions
 
 ### An FCM push with a `notification` block runs **no Dart** on Android
@@ -367,6 +387,58 @@ have to be cleared or the refresh is a no-op:
    in its error state forever. The widget needs a `key: ValueKey(url)` to be
    rebuilt from scratch — the `cacheKey` still keeps the file cached by
    attachment id, which is the point of having it.
+
+### A presigned sticker link cannot be re-signed on its own
+
+`GET /ws/attachments/{id}` hands back a fresh link for one attachment. There
+is **no `GET /ws/stickers/{id}`** — the sticker API's answer for an expired
+URL on a message is "load the page again". So the same two equality traps as
+a re-signed attachment apply, plus a third:
+
+1. `StickerImage.props` leave `url` out, for the reason ADR-015 gives, so a
+   message holding a re-signed sticker is `==` the old one and `emit` drops
+   the state. `ChatState.attachmentRevision` is what makes that emit land —
+   it counts *both* kinds of link now, not just attachments.
+2. `CachedNetworkImageProvider` compares equal on `cacheKey ?? url`, so
+   `StickerImageView` needs its `key: ValueKey(url)` to be rebuilt from
+   scratch once a link has 403'd. The `cacheKey` still keeps the file cached
+   by sticker id, which is the point of having it.
+3. Because there is no single-sticker route, `ChatCubit.refreshSticker` has
+   to re-read the whole newest history page and pick the one sticker out of
+   it. Guarded per sticker id like `refreshAttachment` — without that, an
+   image erroring on every frame would hammer the messages endpoint rather
+   than a cheap per-id one.
+
+### Clearing the busy set drops `actionError` with it
+
+`ChatState.copyWith` deliberately does not carry `actionError` forward, so
+any emit that does not set it clears it. A `finally` that removes the id from
+`busyMessageIds` therefore lands *after* the failure emit and wipes the
+message — which is fine on screen, because `BlocListener` sees the
+intermediate state and shows the snackbar, but means a test asserting on the
+final `state.actionError` reads `null`.
+
+- Assert on the stream, the way
+  `test/features/chat/chat_cubit_actions_test.dart` does ("a failed action
+  surfaces once as actionError, then clears").
+- `StickersCubit` clears its busy set *before* folding the result, so there
+  the failure is what the last emit carries. Both shapes behave the same for
+  a user; only the test differs.
+
+### A non-raw Dart string silently eats a regex's backslashes
+
+`RegExp('''([a-zA-Z][\w:.-]*)\s*=...''')` — triple-quoted, because the
+pattern needs both quote characters in it — compiles, runs, and matches the
+wrong thing: in a non-raw string `\w` is just `w` and `\s` is `s`, so the
+character class became `[w:.-]` and `\s*` became `s*`.
+
+- `flutter analyze` does flag it, as **`unnecessary_string_escapes`, an
+  `info`** — which reads like a cosmetic nit and is exactly the kind of line
+  that gets skimmed past on a clean-ish run. It is not cosmetic; it means the
+  pattern is not the pattern you wrote.
+- Every `RegExp` literal in this repo is `r'…'` or `r'''…'''`. Keep it that
+  way, and treat that particular `info` as an error.
+- Hit writing `LinkPreviewModel._attribute` (ADR-039).
 
 ### `flutter analyze` is a floor, not a ceiling
 

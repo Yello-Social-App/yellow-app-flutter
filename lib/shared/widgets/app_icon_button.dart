@@ -39,7 +39,10 @@ class AppIconButton extends StatelessWidget {
           width: size,
           height: size,
           child: IconTheme(
-            data: IconThemeData(color: iconColor ?? colors.ink, size: size * 0.4),
+            data: IconThemeData(
+              color: iconColor ?? colors.ink,
+              size: size * 0.4,
+            ),
             child: Center(child: icon),
           ),
         ),

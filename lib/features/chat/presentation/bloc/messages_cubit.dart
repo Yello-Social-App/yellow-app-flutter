@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/entities/conversation_entity.dart';
 import '../../domain/entities/message_entity.dart';
+import '../../domain/repositories/chat_repository.dart';
 import '../../domain/usecases/chat_usecases.dart';
 
 enum MessagesStatus { initial, loading, loaded, error }
@@ -26,9 +29,9 @@ class MessagesState extends Equatable {
 
   int get unreadTotal => conversations.fold(0, (a, c) => a + c.unreadCount);
 
-  /// Presence arrives on the `presence` WebSocket frame; with no socket
-  /// connected yet every conversation reports offline, so this is empty
-  /// rather than wrong.
+  /// The people whose dot is currently green. Empty whenever nothing holds a
+  /// presence lease (see [MessagesCubit.watchPresence]) or the socket is
+  /// down — presence is live-only, and silence is not the same as offline.
   List<ConversationEntity> get onlineNow => conversations.where((c) => c.isOnline).toList();
 
   /// See `ChatState._unset` — `nextCursor: null` has to mean "no more
@@ -64,12 +67,33 @@ class MessagesState extends Equatable {
 /// [removeConversation] — so opening, receiving, unsending, renaming or
 /// leaving updates this list in place instead of forcing a refetch.
 class MessagesCubit extends Cubit<MessagesState> {
-  MessagesCubit(this._getConversations) : super(const MessagesState());
+  MessagesCubit(this._getConversations, this._repository) : super(const MessagesState());
 
   final GetConversationsUseCase _getConversations;
+
+  /// For [watchPresence] alone. A socket stream has no result for a `UseCase`
+  /// to carry, so it comes through the repository — the same call `ChatCubit`
+  /// makes for `watchEvents`.
+  final ChatRepository _repository;
+
   Future<void>? _refreshTask;
   bool _refreshAgain = false;
   int _generation = 0;
+
+  /// Who is online, as last reported. Cubit-private rather than a state
+  /// field: what the UI reads is [ConversationEntity.isOnline] on the rows
+  /// themselves, and keeping the set here means presence cannot drift out of
+  /// step with the rows it was applied to.
+  Set<String> _onlineUserIds = const {};
+
+  StreamSubscription<Set<String>>? _presenceSub;
+
+  /// How many screens currently want live presence. Leases rather than a
+  /// plain start/stop because two holders overlap by design: the Inbox
+  /// branch, and a chat screen pushed over it (or deep-linked from another
+  /// tab). Counting them means the socket survives the hand-off instead of
+  /// closing and reconnecting between the two — see ADR-038.
+  int _presenceLeases = 0;
 
   Future<void> load() async {
     if (state.status != MessagesStatus.initial) return;
@@ -124,6 +148,56 @@ class MessagesCubit extends Cubit<MessagesState> {
         isLoadingMore: false,
       )),
     );
+  }
+
+  /// Takes a lease on live presence, opening the chat socket if it is not
+  /// already up. Balanced by [releasePresence] — the holder that acquires is
+  /// the holder that releases.
+  ///
+  /// This is what turns the green dot on. It is leased rather than always-on
+  /// because presence has no endpoint: the only way to know is an open
+  /// WebSocket, and holding one from a tab that draws no dot would cost a
+  /// connection for nothing (ADR-038, and ADR-010's reasoning about paying
+  /// for signals nothing on screen can show).
+  void watchPresence() {
+    if (isClosed) return;
+    if (++_presenceLeases > 1) return;
+    _presenceSub = _repository.watchPresence().listen(_applyPresence);
+  }
+
+  /// Drops one lease; the last one out closes the watch and clears every dot,
+  /// because with nothing listening this client no longer knows.
+  void releasePresence() {
+    if (_presenceLeases == 0 || --_presenceLeases > 0) return;
+    unawaited(_presenceSub?.cancel());
+    _presenceSub = null;
+    _applyPresence(const {});
+  }
+
+  void _applyPresence(Set<String> onlineUserIds) {
+    if (isClosed) return;
+    _onlineUserIds = onlineUserIds;
+    if (state.conversations.isEmpty) return;
+    // Rows whose dot did not move come back as the same instance, so an
+    // update about somebody the viewer has no conversation with is `==` the
+    // current state and `emit` drops it.
+    emit(state.copyWith(conversations: _withPresence(state.conversations)));
+  }
+
+  /// Folds the current presence set into the rows. A DM's dot is its peer's;
+  /// a group has none — its avatar is the group's photo, so a dot there would
+  /// claim something about a person that presence never said.
+  List<ConversationEntity> _withPresence(List<ConversationEntity> conversations) {
+    if (_onlineUserIds.isEmpty && conversations.every((c) => !c.isOnline)) return conversations;
+    return [
+      for (final conversation in conversations) _withPeerPresence(conversation),
+    ];
+  }
+
+  ConversationEntity _withPeerPresence(ConversationEntity conversation) {
+    final peerId = conversation.isGroup ? null : conversation.peer?.userId;
+    final isOnline = peerId != null && _onlineUserIds.contains(peerId);
+    return conversation.isOnline == isOnline ? conversation : conversation.copyWith(isOnline: isOnline);
   }
 
   /// Clears one row's unread badge — called when its chat screen opens, so
@@ -190,19 +264,33 @@ class MessagesCubit extends Cubit<MessagesState> {
     emit(state.copyWith(conversations: state.conversations.where((c) => c.id != conversationId).toList()));
   }
 
-  /// Newest activity first. Applied on every write so an arriving message
-  /// reorders the inbox the way the server would have.
+  /// Newest activity first, with presence applied. Both on every write, so an
+  /// arriving message reorders the inbox the way the server would have and a
+  /// row the server just handed back keeps the dot it should have — a fetched
+  /// conversation carries no presence of its own (the wire has no such field).
   List<ConversationEntity> _sorted(List<ConversationEntity> conversations) {
-    final next = [...conversations];
+    final next = _withPresence([...conversations]);
     next.sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
     return next;
   }
 
   /// Same reasoning as `FeedCubit.reset()` — drops this long-lived
   /// singleton back to its initial state on a signed-in-identity change.
+  /// Presence goes with it: the ids belonged to the socket the previous
+  /// session authenticated. The leases do not — whoever holds one still has
+  /// its screen open — so the watch itself is left running and simply
+  /// repopulates once the new session's socket comes up.
   void reset() {
     _generation++;
     _refreshAgain = false;
+    _onlineUserIds = const {};
     emit(const MessagesState());
+  }
+
+  @override
+  Future<void> close() {
+    unawaited(_presenceSub?.cancel());
+    _presenceSub = null;
+    return super.close();
   }
 }

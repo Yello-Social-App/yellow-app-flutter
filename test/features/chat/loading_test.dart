@@ -8,7 +8,9 @@ import 'package:yello_social_app/core/error/failures.dart';
 import 'package:yello_social_app/features/chat/data/datasources/user_directory.dart';
 import 'package:yello_social_app/features/chat/domain/entities/participant_entity.dart';
 import 'package:yello_social_app/features/chat/domain/repositories/chat_repository.dart';
+import 'package:yello_social_app/features/chat/domain/repositories/sticker_repository.dart';
 import 'package:yello_social_app/features/chat/domain/usecases/chat_usecases.dart';
+import 'package:yello_social_app/features/chat/domain/usecases/sticker_usecases.dart';
 import 'package:yello_social_app/features/chat/presentation/bloc/chat_cubit.dart';
 import 'package:yello_social_app/features/chat/presentation/bloc/messages_cubit.dart';
 import 'package:yello_social_app/features/profile/domain/entities/public_user_entity.dart';
@@ -17,6 +19,10 @@ import 'package:yello_social_app/features/profile/domain/usecases/profile_usecas
 class _GetUser extends Mock implements GetUserUseCase {}
 
 class _ChatRepository extends Mock implements ChatRepository {}
+
+/// Stickers live behind their own repository, so the cubit's one sticker
+/// usecase needs one of these even in a test that never touches a sticker.
+class _StickerRepository extends Mock implements StickerRepository {}
 
 void main() {
   final user = PublicUserEntity(
@@ -78,7 +84,7 @@ void main() {
     when(
       () => repository.getConversations(),
     ).thenAnswer((_) => response.future);
-    final cubit = MessagesCubit(GetConversationsUseCase(repository));
+    final cubit = MessagesCubit(GetConversationsUseCase(repository), repository);
     addTearDown(cubit.close);
     final pending = cubit.load();
     await cubit.load();
@@ -94,7 +100,7 @@ void main() {
     when(
       () => repository.getConversations(),
     ).thenAnswer((_) async => const Left(NetworkFailure()));
-    final cubit = MessagesCubit(GetConversationsUseCase(repository));
+    final cubit = MessagesCubit(GetConversationsUseCase(repository), repository);
     addTearDown(cubit.close);
     await cubit.load();
     await cubit.load();
@@ -118,9 +124,12 @@ void main() {
         () => repository.watchEvents('chat'),
       ).thenAnswer((_) => const Stream.empty());
       when(
+        repository.watchPresence,
+      ).thenAnswer((_) => const Stream<Set<String>>.empty());
+      when(
         () => repository.getConversation('chat'),
       ).thenAnswer((_) async => const Left(NetworkFailure()));
-      final inbox = MessagesCubit(GetConversationsUseCase(repository));
+      final inbox = MessagesCubit(GetConversationsUseCase(repository), repository);
       final cubit = ChatCubit(
         conversationId: 'chat',
         getConversation: GetConversationUseCase(repository),
@@ -131,6 +140,7 @@ void main() {
         reactToMessage: ReactToMessageUseCase(repository),
         uploadAttachment: UploadAttachmentUseCase(repository),
         refreshAttachment: RefreshAttachmentUseCase(repository),
+      saveStickerFromMessage: SaveStickerFromMessageUseCase(_StickerRepository()),
         voicePlayer: VoiceNotePlayer(),
         acceptInvite: AcceptGroupInviteUseCase(repository),
         declineInvite: DeclineGroupInviteUseCase(repository),

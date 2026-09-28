@@ -7,6 +7,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
+import '../../../../shared/widgets/linked_text.dart';
 import '../../../feed/domain/entities/post_entity.dart' show ReactionType;
 import '../../../feed/presentation/widgets/reaction_glyph.dart';
 import '../../../feed/presentation/widgets/reaction_picker.dart';
@@ -111,8 +112,11 @@ class CommunityPostCard extends StatelessWidget {
                     ),
                     if (post.hasBody) ...[
                       const SizedBox(height: 6),
-                      Text(
-                        post.body,
+                      // Links open; no preview card on the row itself, which
+                      // is a three-line teaser inside a list. The post's own
+                      // screen carries the cards.
+                      LinkedText(
+                        text: post.body,
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                         style: AppTextStyles.body.copyWith(color: colors.ink2),

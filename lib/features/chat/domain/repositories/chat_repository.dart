@@ -49,13 +49,19 @@ abstract interface class ChatRepository {
   /// composed message and reuse it on retry so a timeout cannot duplicate
   /// the message. See [MessageEntity.clientId].
   ///
-  /// [body] may be empty only when [attachmentIds] is not; [replyToMessageId]
-  /// must be a live message of the same conversation (else `404`).
+  /// [body] may be empty only when [attachmentIds] or [stickerId] is not;
+  /// [replyToMessageId] must be a live message of the same conversation (else
+  /// `404`).
+  ///
+  /// [stickerId] travels **alone** — the server rejects text or attachments
+  /// beside it — and must name a sticker in the viewer's library or in a
+  /// published pack.
   Future<Either<Failure, MessageEntity>> sendMessage({
     required String conversationId,
     required String body,
     required String clientId,
     String? replyToMessageId,
+    String? stickerId,
     List<String> attachmentIds = const [],
   });
 
@@ -146,10 +152,21 @@ abstract interface class ChatRepository {
   ///
   /// Subscribing is what opens the socket (and the last unsubscribe closes
   /// it). Frames for other conversations are filtered out; frames without a
-  /// conversation (`pong`, `presence`) are dropped. The stream also carries
+  /// conversation (`pong`, `presence` — the latter belongs to
+  /// [watchPresence]) are dropped. The stream also carries
   /// [LiveDeliveryChanged] so the screen knows when it can ease its
   /// history poll. See [ChatEvent] and `ChatFrameDecoder`.
   Stream<ChatEvent> watchEvents(String conversationId);
+
+  /// Who is online right now, then every change — by user id.
+  ///
+  /// Presence rides the same socket as [watchEvents] and exists on no
+  /// endpoint at all, so subscribing here is also what keeps a connection
+  /// open for it. A set that does not contain someone means *not known to be
+  /// online* (nobody has said, or the connection is down) rather than
+  /// "offline", which is why the UI draws a dot for presence and nothing for
+  /// its absence. Empty while the socket is down.
+  Stream<Set<String>> watchPresence();
 
   /// Tells the other participants the viewer started or stopped typing.
   /// Socket-only and best-effort: a no-op when the socket is not live,

@@ -9,6 +9,8 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
+import '../../../../shared/widgets/linked_text.dart';
+import '../../../link_preview/presentation/widgets/link_preview_card.dart';
 import '../../domain/entities/post_entity.dart';
 import 'post_image_carousel.dart';
 import 'reaction_glyph.dart';
@@ -20,8 +22,11 @@ import 'reaction_picker.dart';
 /// `#hashtag` words inside it (there's no distinct tags field on the real
 /// backend; a hashtag is just plain text a user typed/picked at compose
 /// time, see `CreatePostCubit.pickedTags`) get an individual yellow
-/// highlight behind just that word, via [_contentSpans]. Posts with
+/// highlight behind just that word, via [LinkedText]. Posts with
 /// `images` get the mockup's photo-card treatment instead.
+///
+/// Links in the body are tappable and open in the phone's browser, and each
+/// one gets an Open Graph card under the text — [LinkPreviewList], ADR-039.
 class PostCard extends StatelessWidget {
   const PostCard({
     super.key,
@@ -274,14 +279,13 @@ class RepostedPostPreview extends StatelessWidget {
                 ),
                 if (original.content.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  Text.rich(
-                    TextSpan(
-                      children: _contentSpans(
-                        original.content,
-                        AppTextStyles.body.copyWith(color: colors.ink),
-                        colors.yel,
-                      ),
-                    ),
+                  // No link cards inside the embed — it is already a card
+                  // inside a card, and the text is capped at six lines. The
+                  // links themselves still open.
+                  LinkedText(
+                    text: original.content,
+                    style: AppTextStyles.body.copyWith(color: colors.ink),
+                    tagBackground: colors.yel,
                     maxLines: 6,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -305,39 +309,6 @@ class RepostedPostPreview extends StatelessWidget {
   }
 }
 
-/// Matches a `#hashtag` run in post content — see [_contentSpans].
-final RegExp _hashtagPattern = RegExp(r'#\w+');
-
-/// Splits [text] on `#hashtag` runs: everything else keeps [style] as-is
-/// (no background at all), each hashtag gets that same [style] plus
-/// [tagBackground] painted behind just that word.
-List<InlineSpan> _contentSpans(
-  String text,
-  TextStyle style,
-  Color tagBackground,
-) {
-  final spans = <InlineSpan>[];
-  var last = 0;
-  for (final match in _hashtagPattern.allMatches(text)) {
-    if (match.start > last) {
-      spans.add(
-        TextSpan(text: text.substring(last, match.start), style: style),
-      );
-    }
-    spans.add(
-      TextSpan(
-        text: match.group(0),
-        style: style.copyWith(backgroundColor: tagBackground),
-      ),
-    );
-    last = match.end;
-  }
-  if (last < text.length) {
-    spans.add(TextSpan(text: text.substring(last), style: style));
-  }
-  return spans;
-}
-
 class _TextBody extends StatelessWidget {
   const _TextBody({required this.post});
   final PostEntity post;
@@ -345,17 +316,19 @@ class _TextBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-      child: Text.rich(
-        TextSpan(
-          children: _contentSpans(
-            post.content,
-            AppTextStyles.body.copyWith(color: colors.ink),
-            colors.yel,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+          child: LinkedText(
+            text: post.content,
+            style: AppTextStyles.body.copyWith(color: colors.ink),
+            tagBackground: colors.yel,
           ),
         ),
-      ),
+        LinkPreviewList(text: post.content),
+      ],
     );
   }
 }
@@ -373,14 +346,10 @@ class _PhotoBody extends StatelessWidget {
         if (post.content.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-            child: Text.rich(
-              TextSpan(
-                children: _contentSpans(
-                  post.content,
-                  AppTextStyles.body.copyWith(color: colors.ink),
-                  colors.yel,
-                ),
-              ),
+            child: LinkedText(
+              text: post.content,
+              style: AppTextStyles.body.copyWith(color: colors.ink),
+              tagBackground: colors.yel,
             ),
           ),
         Padding(
@@ -414,6 +383,12 @@ class _PhotoBody extends StatelessWidget {
             child: PostImageCarousel(imageUrls: post.imageUrls),
           ),
         ),
+        // Under the photo, not between it and the text: the post's own
+        // pictures are what this card is for, and a link card wedged above
+        // them reads as the post's main image. The gap above belongs to
+        // [LinkPreviewList]'s own padding — wrapping it in a `Padding` would
+        // leave 12px of nothing under every photo post that has no links.
+        LinkPreviewList(text: post.content, padding: const EdgeInsets.fromLTRB(14, 12, 14, 12)),
       ],
     );
   }

@@ -19,6 +19,7 @@ import '../../domain/repositories/chat_repository.dart';
 import '../datasources/chat_frame_decoder.dart';
 import '../datasources/chat_remote_datasource.dart';
 import '../datasources/chat_socket.dart';
+import '../datasources/presence_tracker.dart';
 import '../datasources/user_directory.dart';
 
 /// Backs the chat feature with the real `yello-chat` service.
@@ -35,13 +36,14 @@ import '../datasources/user_directory.dart';
 ///    answers with a conversation or a member list is hydrated here, so no
 ///    caller ever sees an unhydrated group.
 class ChatRepositoryImpl implements ChatRepository {
-  ChatRepositoryImpl(this._remote, this._directory, this._getMe, this._networkInfo, this._socket);
+  ChatRepositoryImpl(this._remote, this._directory, this._getMe, this._networkInfo, this._socket, this._presence);
 
   final ChatRemoteDataSource _remote;
   final UserDirectory _directory;
   final GetMeUseCase _getMe;
   final NetworkInfo _networkInfo;
   final ChatSocket _socket;
+  final PresenceTracker _presence;
 
   String? _viewerId;
 
@@ -115,6 +117,7 @@ class ChatRepositoryImpl implements ChatRepository {
     required String body,
     required String clientId,
     String? replyToMessageId,
+    String? stickerId,
     List<String> attachmentIds = const [],
   }) =>
       _run(() async {
@@ -124,6 +127,7 @@ class ChatRepositoryImpl implements ChatRepository {
           clientId: clientId,
           body: body,
           replyToMessageId: replyToMessageId,
+          stickerId: stickerId,
           attachmentIds: attachmentIds,
         );
       });
@@ -316,6 +320,14 @@ class ChatRepositoryImpl implements ChatRepository {
       };
     return controller.stream;
   }
+
+  /// Straight through to [PresenceTracker], which is where the app's one set
+  /// of online ids lives. Presence frames name people, not conversations, so
+  /// there is nothing to filter per screen — and holding the *set* in one
+  /// place is what lets a chat opened later see who was already online, which
+  /// a per-screen subscription to the frames could not.
+  @override
+  Stream<Set<String>> watchPresence() => _presence.watch();
 
   @override
   void sendTyping({required String conversationId, required bool isTyping}) =>

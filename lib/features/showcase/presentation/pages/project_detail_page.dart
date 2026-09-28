@@ -9,6 +9,7 @@ import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/external_link.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
@@ -16,6 +17,7 @@ import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/error_view.dart';
+import '../../../../shared/widgets/linked_text.dart';
 import '../../../../shared/widgets/shimmer_loading.dart';
 import '../../domain/entities/project_entity.dart';
 import '../bloc/project_detail_cubit.dart';
@@ -234,16 +236,14 @@ class _Body extends StatelessWidget {
           const SizedBox(height: 18),
           Text('ABOUT', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
           const SizedBox(height: 8),
-          Text(project.description, style: AppTextStyles.body.copyWith(color: colors.ink2)),
+          LinkedText(text: project.description, style: AppTextStyles.body.copyWith(color: colors.ink2)),
         ],
         if (project.hasRepo || project.hasLive) ...[
           const SizedBox(height: 18),
           Text('LINKS', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
           const SizedBox(height: 8),
-          // Copy-to-clipboard rather than launching: this app has no
-          // `url_launcher` dependency, and adding one for two links is a bigger
-          // change than the feature warrants. Same affordance the feed already
-          // uses for a post's share link.
+          // These launch now (ADR-039 added `url_launcher`, which ADR-014 said
+          // an "Open" affordance was waiting on). Long-press still copies.
           if (project.hasRepo)
             _LinkRow(label: 'REPOSITORY', url: project.repoUrl!, icon: CupertinoIcons.chevron_left_slash_chevron_right),
           if (project.hasLive)
@@ -325,7 +325,11 @@ class _LinkRow extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => _copy(context),
+        // Tap opens it now that the app has a launcher; long-press keeps the
+        // old copy affordance, which is still the only way to get the URL
+        // onto the clipboard.
+        onTap: () => _open(context),
+        onLongPress: () => _copy(context),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(
@@ -347,7 +351,7 @@ class _LinkRow extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(CupertinoIcons.doc_on_doc, size: 15, color: colors.ink3),
+              Icon(CupertinoIcons.arrow_up_right_square, size: 15, color: colors.ink3),
             ],
           ),
         ),
@@ -355,9 +359,17 @@ class _LinkRow extends StatelessWidget {
     );
   }
 
-  Future<void> _copy(BuildContext context) async {
+  Future<void> _open(BuildContext context) async {
+    if (await ExternalLink.open(url)) return;
+    if (!context.mounted) return;
+    // Nothing could open it — fall back to what this row used to do, so the
+    // tap is never a dead end.
+    await _copy(context, message: 'Nothing could open that link, so it was copied instead.');
+  }
+
+  Future<void> _copy(BuildContext context, {String message = 'Link copied to clipboard.'}) async {
     await Clipboard.setData(ClipboardData(text: url));
     if (!context.mounted) return;
-    AppStatusSnackbar.showSuccess(context, message: 'Link copied to clipboard.');
+    AppStatusSnackbar.showSuccess(context, message: message);
   }
 }

@@ -20,6 +20,7 @@ import '../../../../core/security/session_manager.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/external_link.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_button.dart';
@@ -27,6 +28,7 @@ import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/app_warning_dialog.dart';
 import '../../../../shared/widgets/error_view.dart';
+import '../../../../shared/widgets/linked_text.dart';
 import '../../../../shared/widgets/photo_viewer_page.dart';
 import '../../domain/entities/attachment_entity.dart';
 import '../../domain/entities/conversation_entity.dart';
@@ -35,6 +37,9 @@ import '../../domain/entities/message_entity.dart';
 import '../../domain/entities/participant_entity.dart';
 import '../bloc/chat_cubit.dart';
 import '../bloc/messages_cubit.dart';
+import '../bloc/stickers_cubit.dart';
+import '../widgets/sticker_image.dart';
+import '../widgets/sticker_picker_sheet.dart';
 import '../widgets/story_reply_preview.dart';
 import '../widgets/voice_note_bubble.dart';
 import '../widgets/voice_recorder_sheet.dart';
@@ -53,6 +58,13 @@ const double _senderColumnWidth = _senderAvatarSize + 8;
 /// Consecutive messages from one sender read as a run — one name above, one
 /// avatar below — unless this much time passed between two of them.
 const Duration _runGap = Duration(minutes: 5);
+
+/// How large a sticker is drawn in the transcript — about a third of a phone's
+/// width, the design's proportion at desktop size. A framed one is smaller
+/// because it draws to its own edges, while a cut-out's whitespace is part of
+/// the picture. Both are clamped to the bubble's own max width.
+const double _stickerSize = 124;
+const double _framedStickerSize = 112;
 
 class ChatPage extends StatelessWidget {
   const ChatPage({super.key, required this.conversationId});
@@ -100,7 +112,9 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _pushUpdates = sl<PushNotificationService>().updates.listen((_) => _refreshLatest());
+    _pushUpdates = sl<PushNotificationService>().updates.listen(
+      (_) => _refreshLatest(),
+    );
     _startRefreshTimer();
   }
 
@@ -123,7 +137,10 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
 
   void _startRefreshTimer() {
     _refreshTimer?.cancel();
-    _refreshTimer = Timer.periodic(_isLive ? _pollLive : _pollFallback, (_) => _refreshLatest());
+    _refreshTimer = Timer.periodic(
+      _isLive ? _pollLive : _pollFallback,
+      (_) => _refreshLatest(),
+    );
   }
 
   @override
@@ -189,6 +206,35 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
     unawaited(cubit.attachFile(File(picked.path)));
   }
 
+  /// Opens the picker and sends whatever comes back from it.
+  ///
+  /// A sticker is sent the moment it is tapped — no draft, no confirm — which
+  /// is why the picker hands one back rather than composing anything: from
+  /// here it is the same optimistic-bubble path as a voice note.
+  Future<void> _pickSticker() async {
+    final cubit = context.read<ChatCubit>();
+    final sticker = await showStickerPicker(context);
+    if (sticker == null || !mounted) return;
+    await cubit.sendSticker(sticker);
+  }
+
+  /// Adds someone else's sticker to the viewer's own library.
+  Future<void> _saveSticker(MessageEntity message) async {
+    final saved = await context.read<ChatCubit>().saveSticker(message);
+    if (saved == null || !mounted) return;
+    // Straight into the picker's library so it is there without a refetch;
+    // the `sticker.added` frame would say the same thing, and `applySaved`
+    // replaces by id, so the two cannot double up.
+    sl<StickersCubit>().applySaved(saved.sticker);
+    AppStatusSnackbar.showSuccess(
+      context,
+      title: saved.alreadyMine ? 'Already saved' : 'Saved',
+      message: saved.alreadyMine
+          ? "It's already in My stickers."
+          : 'Added to My stickers.',
+    );
+  }
+
   Future<void> _showMessageActions(MessageEntity message) async {
     final cubit = context.read<ChatCubit>();
     final action = await showModalBottomSheet<_MessageAction>(
@@ -200,6 +246,8 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
     switch (action) {
       case _ReactAction(:final emoji):
         unawaited(cubit.toggleReaction(message, emoji));
+      case _SaveStickerAction():
+        await _saveSticker(message);
       case _ReplyAction():
         cubit.startReply(message);
         _draftFocus.requestFocus();
@@ -235,7 +283,11 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
     final cubit = context.read<ChatCubit>();
     final group = await cubit.acceptInvite(card);
     if (group == null || !mounted) return;
-    AppStatusSnackbar.showSuccess(context, message: 'You joined ${group.name}.', title: 'Welcome!');
+    AppStatusSnackbar.showSuccess(
+      context,
+      message: 'You joined ${group.name}.',
+      title: 'Welcome!',
+    );
   }
 
   /// Most pages of history a quote tap will pull in looking for its
@@ -254,7 +306,12 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
       var pagesLoaded = 0;
       while (!cubit.state.messages.any((m) => m.id == messageId)) {
         if (!cubit.state.hasMore || pagesLoaded >= _jumpMaxOlderPages) {
-          if (mounted) AppStatusSnackbar.showError(context, message: 'That message is too far back to jump to.');
+          if (mounted) {
+            AppStatusSnackbar.showError(
+              context,
+              message: 'That message is too far back to jump to.',
+            );
+          }
           return;
         }
         await cubit.loadOlder();
@@ -299,13 +356,19 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
       final url = await context.read<ChatCubit>().playableVoiceUrl(attachment);
       if (!mounted) return;
       if (url == null) {
-        AppStatusSnackbar.showError(context, message: "That voice message isn't available.");
+        AppStatusSnackbar.showError(
+          context,
+          message: "That voice message isn't available.",
+        );
         return;
       }
       final ok = await player.toggle(noteId: attachment.id, url: url);
       if (!ok) {
         if (mounted) {
-          AppStatusSnackbar.showError(context, message: "Couldn't play that voice message.");
+          AppStatusSnackbar.showError(
+            context,
+            message: "Couldn't play that voice message.",
+          );
         }
         return;
       }
@@ -330,7 +393,12 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
   Future<void> _openImages(List<AttachmentEntity> images, int index) async {
     final urls = await context.read<ChatCubit>().viewableImageUrls(images);
     if (!mounted) return;
-    openPhotoViewer(context, imageUrls: urls, initialIndex: index, cacheKeys: [for (final image in images) image.id]);
+    openPhotoViewer(
+      context,
+      imageUrls: urls,
+      initialIndex: index,
+      cacheKeys: [for (final image in images) image.id],
+    );
   }
 
   /// Whether the transcript has already been pinned to its newest message
@@ -404,7 +472,12 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
       if (!_scrollController.hasClients) return;
       final position = _scrollController.position;
       if (position.pixels <= position.minScrollExtent) return;
-      _scrollController.jumpTo(math.max(position.minScrollExtent, position.pixels - position.viewportDimension));
+      _scrollController.jumpTo(
+        math.max(
+          position.minScrollExtent,
+          position.pixels - position.viewportDimension,
+        ),
+      );
       // Let the builder lay out the newly exposed rows before checking again.
       await WidgetsBinding.instance.endOfFrame;
       if (!mounted) return;
@@ -428,7 +501,11 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
           if (_isLive) _refreshLatest();
         }
         if (state.wasRemoved) {
-          AppStatusSnackbar.showError(context, message: 'You are no longer in this group.', title: 'Removed');
+          AppStatusSnackbar.showError(
+            context,
+            message: 'You are no longer in this group.',
+            title: 'Removed',
+          );
           Navigator.of(context).maybePop();
           return;
         }
@@ -445,8 +522,10 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
               BlocBuilder<MessagesCubit, MessagesState>(
                 bloc: sl<MessagesCubit>(),
                 builder: (context, _) => BlocBuilder<ChatCubit, ChatState>(
-                  buildWhen: (previous, current) => previous.conversation != current.conversation,
-                  builder: (context, state) => _Header(conversation: _conversation(state)),
+                  buildWhen: (previous, current) =>
+                      previous.conversation != current.conversation,
+                  builder: (context, state) =>
+                      _Header(conversation: _conversation(state)),
                 ),
               ),
               Expanded(
@@ -456,7 +535,8 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                   // pulling history in), which must not yank the view back
                   // to the bottom.
                   listenWhen: (previous, current) =>
-                      previous.messages.lastOrNull?.id != current.messages.lastOrNull?.id,
+                      previous.messages.lastOrNull?.id !=
+                      current.messages.lastOrNull?.id,
                   listener: (context, state) {
                     // First one in is the conversation opening — land on the
                     // last message with no visible travel. After that a new
@@ -482,7 +562,9 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                       return SingleChildScrollView(
                         padding: const EdgeInsets.all(14),
                         child: ErrorView(
-                          message: state.errorMessage ?? 'Could not load this conversation.',
+                          message:
+                              state.errorMessage ??
+                              'Could not load this conversation.',
                           onRetry: context.read<ChatCubit>().load,
                         ),
                       );
@@ -494,12 +576,16 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                         return ListView.builder(
                           controller: _scrollController,
                           padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
-                          itemCount: state.messages.length + (state.isTyping ? 1 : 0),
+                          itemCount:
+                              state.messages.length + (state.isTyping ? 1 : 0),
                           itemBuilder: (context, index) {
                             final messages = state.messages;
                             if (index == messages.length) {
                               return _TypingBubble(
-                                typists: _typists(state.typingUserIds, conversation),
+                                typists: _typists(
+                                  state.typingUserIds,
+                                  conversation,
+                                ),
                                 isGroup: conversation?.isGroup ?? false,
                               );
                             }
@@ -512,31 +598,63 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                                 card: card,
                                 busy: state.busyInviteIds.contains(card.id),
                                 onAccept: () => _acceptInvite(card),
-                                onDecline: () => context.read<ChatCubit>().declineInvite(card),
+                                onDecline: () => context
+                                    .read<ChatCubit>()
+                                    .declineInvite(card),
                               );
                             } else {
                               final reply = message.replyTo;
                               bubble = _MessageBubble(
                                 message: message,
-                                sender: _participant(message.senderId, conversation),
+                                sender: _participant(
+                                  message.senderId,
+                                  conversation,
+                                ),
                                 isGroup: conversation?.isGroup ?? false,
-                                firstInRun: index == 0 || !_sameRun(messages[index - 1], message),
-                                lastInRun: index == messages.length - 1 || !_sameRun(message, messages[index + 1]),
-                                isRead: _isReadByPeers(message, messages, conversation),
+                                firstInRun:
+                                    index == 0 ||
+                                    !_sameRun(messages[index - 1], message),
+                                lastInRun:
+                                    index == messages.length - 1 ||
+                                    !_sameRun(message, messages[index + 1]),
+                                isRead: _isReadByPeers(
+                                  message,
+                                  messages,
+                                  conversation,
+                                ),
                                 busy: state.busyMessageIds.contains(message.id),
                                 viewerId: conversation?.viewerId,
-                                quotedAuthor: reply == null ? null : _authorName(reply.senderId, conversation),
-                                onLongPress: message.canInteract ? () => _showMessageActions(message) : null,
-                                onToggleReaction: (emoji) => context.read<ChatCubit>().toggleReaction(message, emoji),
-                                onAttachmentExpired: context.read<ChatCubit>().refreshAttachment,
+                                quotedAuthor: reply == null
+                                    ? null
+                                    : _authorName(reply.senderId, conversation),
+                                onLongPress: message.canInteract
+                                    ? () => _showMessageActions(message)
+                                    : null,
+                                onToggleReaction: (emoji) => context
+                                    .read<ChatCubit>()
+                                    .toggleReaction(message, emoji),
+                                onAttachmentExpired: context
+                                    .read<ChatCubit>()
+                                    .refreshAttachment,
+                                onStickerExpired: context
+                                    .read<ChatCubit>()
+                                    .refreshSticker,
                                 onOpenImages: _openImages,
                                 onPlayVoice: _playVoice,
-                                onQuoteTap: reply == null ? null : () => _jumpToMessage(reply.id),
+                                onQuoteTap: reply == null
+                                    ? null
+                                    : () => _jumpToMessage(reply.id),
                               );
                             }
                             return KeyedSubtree(
-                              key: _messageKeys.putIfAbsent(message.id, GlobalKey.new),
-                              child: _JumpHighlight(active: message.id == _highlightedMessageId, child: bubble),
+                              key: _messageKeys.putIfAbsent(
+                                message.id,
+                                GlobalKey.new,
+                              ),
+                              child: _JumpHighlight(
+                                active: message.id == _highlightedMessageId,
+                                child: bubble,
+                              ),
                             );
                           },
                         );
@@ -550,9 +668,13 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                 focusNode: _draftFocus,
                 onSend: _send,
                 onAttach: _pickAttachment,
+                onStickers: _pickSticker,
                 onRecordVoice: _recordVoice,
                 onCancelCompose: _cancelCompose,
-                authorName: (message) => _authorName(message.senderId, _conversation(context.read<ChatCubit>().state)),
+                authorName: (message) => _authorName(
+                  message.senderId,
+                  _conversation(context.read<ChatCubit>().state),
+                ),
               ),
             ],
           ),
@@ -563,7 +685,10 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
 
   /// The participant row for [userId] — null while the list is unhydrated,
   /// or once they have left the group.
-  ParticipantEntity? _participant(String userId, ConversationEntity? conversation) {
+  ParticipantEntity? _participant(
+    String userId,
+    ConversationEntity? conversation,
+  ) {
     if (conversation == null) return null;
     for (final p in conversation.participants) {
       if (p.userId == userId) return p;
@@ -574,10 +699,17 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
   /// The participants behind `typingUserIds`, in the order they started.
   /// An id with no participant row (a member added since the detail was
   /// fetched) still counts — it renders with a placeholder avatar.
-  List<ParticipantEntity> _typists(Set<String> userIds, ConversationEntity? conversation) => [
+  List<ParticipantEntity> _typists(
+    Set<String> userIds,
+    ConversationEntity? conversation,
+  ) => [
     for (final id in userIds)
       _participant(id, conversation) ??
-          ParticipantEntity(userId: id, role: ParticipantRole.member, joinedAt: DateTime(1970)),
+          ParticipantEntity(
+            userId: id,
+            role: ParticipantRole.member,
+            joinedAt: DateTime(1970),
+          ),
   ];
 
   /// How a reply names the message it quotes: the viewer is "You", anyone
@@ -598,11 +730,19 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
 
 /// Only an actual read-message marker proves a read. `lastReadAt` is the
 /// time of the read action, not the timestamp of the message read.
-bool _isReadByPeers(MessageEntity message, List<MessageEntity> messages, ConversationEntity? conversation) {
-  if (!message.fromMe || message.status != MessageDeliveryStatus.sent || conversation == null) {
+bool _isReadByPeers(
+  MessageEntity message,
+  List<MessageEntity> messages,
+  ConversationEntity? conversation,
+) {
+  if (!message.fromMe ||
+      message.status != MessageDeliveryStatus.sent ||
+      conversation == null) {
     return false;
   }
-  final peers = conversation.participants.where((peer) => peer.userId != message.senderId).toList();
+  final peers = conversation.participants
+      .where((peer) => peer.userId != message.senderId)
+      .toList();
   if (peers.isEmpty) return false;
   final messageIndex = messages.indexWhere((item) => item.id == message.id);
   return peers.every((peer) {
@@ -652,7 +792,10 @@ class _Header extends StatelessWidget {
               child: InkWell(
                 borderRadius: BorderRadius.circular(AppRadii.sm),
                 onTap: isGroup
-                    ? () => context.pushNamed(RouteNames.groupInfo, pathParameters: {'conversationId': conversation.id})
+                    ? () => context.pushNamed(
+                        RouteNames.groupInfo,
+                        pathParameters: {'conversationId': conversation.id},
+                      )
                     : null,
                 child: Row(
                   children: [
@@ -673,7 +816,9 @@ class _Header extends StatelessWidget {
                             conversation.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.titleRow.copyWith(color: colors.ink),
+                            style: AppTextStyles.titleRow.copyWith(
+                              color: colors.ink,
+                            ),
                           ),
                           const SizedBox(height: 5),
                           Row(
@@ -682,11 +827,19 @@ class _Header extends StatelessWidget {
                                 Container(
                                   width: 7,
                                   height: 7,
-                                  decoration: BoxDecoration(shape: BoxShape.circle, color: colors.grn),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: colors.grn,
+                                  ),
                                 ),
                                 const SizedBox(width: 6),
                               ],
-                              Text(subtitle, style: AppTextStyles.metaMono.copyWith(color: colors.ink2)),
+                              Text(
+                                subtitle,
+                                style: AppTextStyles.metaMono.copyWith(
+                                  color: colors.ink2,
+                                ),
+                              ),
                             ],
                           ),
                         ],
@@ -700,8 +853,10 @@ class _Header extends StatelessWidget {
               AppIconButton(
                 icon: const Icon(CupertinoIcons.info_circle),
                 size: 36,
-                onPressed: () =>
-                    context.pushNamed(RouteNames.groupInfo, pathParameters: {'conversationId': conversation.id}),
+                onPressed: () => context.pushNamed(
+                  RouteNames.groupInfo,
+                  pathParameters: {'conversationId': conversation.id},
+                ),
               ),
           ] else
             const Spacer(),
@@ -721,6 +876,7 @@ class _Composer extends StatelessWidget {
     required this.focusNode,
     required this.onSend,
     required this.onAttach,
+    required this.onStickers,
     required this.onRecordVoice,
     required this.onCancelCompose,
     required this.authorName,
@@ -730,6 +886,7 @@ class _Composer extends StatelessWidget {
   final FocusNode focusNode;
   final VoidCallback onSend;
   final VoidCallback onAttach;
+  final VoidCallback onStickers;
   final VoidCallback onRecordVoice;
   final void Function(ChatCubit cubit, ChatState state) onCancelCompose;
 
@@ -750,7 +907,7 @@ class _Composer extends StatelessWidget {
         final editing = state.editing;
         final replyingTo = state.replyingTo;
         return Container(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 14),
           decoration: BoxDecoration(
             border: Border(top: BorderSide(color: colors.line, width: 1.5)),
           ),
@@ -767,7 +924,8 @@ class _Composer extends StatelessWidget {
               else if (replyingTo != null)
                 _ComposeBanner(
                   icon: CupertinoIcons.reply,
-                  label: 'REPLYING TO ${replyingTo.fromMe ? 'YOURSELF' : authorName(replyingTo).toUpperCase()}',
+                  label:
+                      'REPLYING TO ${replyingTo.fromMe ? 'YOURSELF' : authorName(replyingTo).toUpperCase()}',
                   preview: _previewText(replyingTo),
                   onCancel: () => onCancelCompose(cubit, state),
                 ),
@@ -781,11 +939,13 @@ class _Composer extends StatelessWidget {
                 children: [
                   AppIconButton(
                     icon: const Icon(CupertinoIcons.add),
-                    size: 42,
+                    size: 46,
                     // No files on an edit: the server only changes text.
-                    onPressed: editing == null && !state.isUploading ? onAttach : null,
+                    onPressed: editing == null && !state.isUploading
+                        ? onAttach
+                        : null,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -804,14 +964,18 @@ class _Composer extends StatelessWidget {
                         textInputAction: TextInputAction.send,
                         style: AppTextStyles.hint.copyWith(color: colors.ink),
                         decoration: InputDecoration(
-                          hintText: editing != null ? 'Edit message' : 'Message',
-                          hintStyle: AppTextStyles.hint.copyWith(color: colors.ink3),
+                          hintText: editing != null
+                              ? 'Edit message'
+                              : 'Message',
+                          hintStyle: AppTextStyles.hint.copyWith(
+                            color: colors.ink3,
+                          ),
                           border: InputBorder.none,
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
                   // One slot, two jobs: with nothing to send it records,
                   // with something to send it sends. Keeping it to one
                   // button is what lets a 320dp composer hold an attach
@@ -826,24 +990,48 @@ class _Composer extends StatelessWidget {
                   ValueListenableBuilder<TextEditingValue>(
                     valueListenable: controller,
                     builder: (context, value, _) {
-                      final hasSomethingToSend = value.text.trim().isNotEmpty || state.pendingAttachments.isNotEmpty;
-                      // No voice note on an edit: the server only changes
-                      // text, and there is nothing to attach a recording to.
+                      final hasSomethingToSend =
+                          value.text.trim().isNotEmpty ||
+                          state.pendingAttachments.isNotEmpty;
+                      // No voice note and no sticker on an edit: the server
+                      // only changes text, and there is nothing to attach a
+                      // recording or a sticker to.
                       if (hasSomethingToSend || editing != null) {
                         return AppIconButton(
-                          icon: Icon(editing != null ? CupertinoIcons.checkmark : CupertinoIcons.arrow_up),
+                          icon: Icon(
+                            editing != null
+                                ? CupertinoIcons.checkmark
+                                : CupertinoIcons.arrow_up,
+                          ),
                           filled: true,
                           borderColor: colors.ink,
                           size: 46,
                           onPressed: state.isUploading ? null : onSend,
                         );
                       }
-                      return AppIconButton(
-                        icon: const Icon(CupertinoIcons.mic),
-                        filled: true,
-                        borderColor: colors.ink,
-                        size: 46,
-                        onPressed: state.isUploading ? null : onRecordVoice,
+                      // Stickers share the idle slot with the mic rather than
+                      // taking a fourth seat in the row. Not only for width:
+                      // a sticker *is* the whole message — the server rejects
+                      // text or files beside one — so offering it while there
+                      // is a draft to send would offer something that cannot
+                      // be done.
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AppIconButton(
+                            icon: const Icon(CupertinoIcons.smiley),
+                            size: 46,
+                            onPressed: state.isUploading ? null : onStickers,
+                          ),
+                          const SizedBox(width: 4),
+                          AppIconButton(
+                            icon: const Icon(CupertinoIcons.mic),
+                            filled: true,
+                            borderColor: colors.ink,
+                            size: 46,
+                            onPressed: state.isUploading ? null : onRecordVoice,
+                          ),
+                        ],
                       );
                     },
                   ),
@@ -865,6 +1053,7 @@ String _timeLabel(DateTime t) {
 
 String _previewText(MessageEntity message) {
   if (message.isDeleted) return 'Message deleted';
+  if (message.isSticker) return 'Sticker';
   if (message.hasText) return message.body;
   if (message.hasAttachments) {
     final first = message.attachments.first;
@@ -880,7 +1069,12 @@ String _previewText(MessageEntity message) {
 }
 
 class _ComposeBanner extends StatelessWidget {
-  const _ComposeBanner({required this.icon, required this.label, required this.preview, required this.onCancel});
+  const _ComposeBanner({
+    required this.icon,
+    required this.label,
+    required this.preview,
+    required this.onCancel,
+  });
 
   final IconData icon;
   final String label;
@@ -907,7 +1101,10 @@ class _ComposeBanner extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
+                  Text(
+                    label,
+                    style: AppTextStyles.eyebrow.copyWith(color: colors.ink2),
+                  ),
                   const SizedBox(height: 2),
                   Text(
                     preview,
@@ -931,7 +1128,11 @@ class _ComposeBanner extends StatelessWidget {
 }
 
 class _PendingAttachmentsStrip extends StatelessWidget {
-  const _PendingAttachmentsStrip({required this.attachments, required this.isUploading, required this.onRemove});
+  const _PendingAttachmentsStrip({
+    required this.attachments,
+    required this.isUploading,
+    required this.onRemove,
+  });
 
   final List<AttachmentEntity> attachments;
   final bool isUploading;
@@ -961,7 +1162,11 @@ class _PendingAttachmentsStrip extends StatelessWidget {
                   border: Border.all(color: colors.line, width: 1.5),
                 ),
                 child: const Center(
-                  child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
                 ),
               );
             }
@@ -972,7 +1177,10 @@ class _PendingAttachmentsStrip extends StatelessWidget {
                 SizedBox(
                   width: 64,
                   height: 64,
-                  child: _AttachmentThumb(attachment: attachment, borderRadius: BorderRadius.circular(AppRadii.xs)),
+                  child: _AttachmentThumb(
+                    attachment: attachment,
+                    borderRadius: BorderRadius.circular(AppRadii.xs),
+                  ),
                 ),
                 Positioned(
                   top: -6,
@@ -985,7 +1193,11 @@ class _PendingAttachmentsStrip extends StatelessWidget {
                       onTap: () => onRemove(attachment.id),
                       child: Padding(
                         padding: const EdgeInsets.all(3),
-                        child: Icon(CupertinoIcons.xmark, size: 12, color: colors.bg),
+                        child: Icon(
+                          CupertinoIcons.xmark,
+                          size: 12,
+                          color: colors.bg,
+                        ),
                       ),
                     ),
                   ),
@@ -1046,6 +1258,11 @@ class _ReplyAction extends _MessageAction {
   const _ReplyAction();
 }
 
+/// Add the sticker on this message to My stickers.
+class _SaveStickerAction extends _MessageAction {
+  const _SaveStickerAction();
+}
+
 class _EditAction extends _MessageAction {
   const _EditAction();
 }
@@ -1072,14 +1289,24 @@ class _MessageActionsSheet extends StatelessWidget {
               for (final emoji in _quickReactions)
                 Material(
                   color: mine == emoji ? colors.yel : colors.surf2,
-                  shape: CircleBorder(side: BorderSide(color: mine == emoji ? colors.ink : colors.line, width: 1.5)),
+                  shape: CircleBorder(
+                    side: BorderSide(
+                      color: mine == emoji ? colors.ink : colors.line,
+                      width: 1.5,
+                    ),
+                  ),
                   child: InkWell(
                     customBorder: const CircleBorder(),
                     onTap: () => Navigator.of(context).pop(_ReactAction(emoji)),
                     child: SizedBox(
                       width: 44,
                       height: 44,
-                      child: Center(child: Text(emoji, style: const TextStyle(fontSize: 22))),
+                      child: Center(
+                        child: Text(
+                          emoji,
+                          style: const TextStyle(fontSize: 22),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -1092,6 +1319,17 @@ class _MessageActionsSheet extends StatelessWidget {
           label: 'Reply',
           onTap: () => Navigator.of(context).pop(const _ReplyAction()),
         ),
+        // Only someone else's own sticker: your own is already in your
+        // library, and a pack's is already in the picker (the server answers
+        // `409 ALREADY_AVAILABLE` for it).
+        if (message.isSticker &&
+            !message.fromMe &&
+            message.sticker?.packId == null)
+          _SheetRow(
+            icon: CupertinoIcons.bookmark,
+            label: 'Add to My stickers',
+            onTap: () => Navigator.of(context).pop(const _SaveStickerAction()),
+          ),
         if (message.hasText)
           _SheetRow(
             icon: CupertinoIcons.doc_on_doc,
@@ -1144,7 +1382,12 @@ class _SheetCard extends StatelessWidget {
 }
 
 class _SheetRow extends StatelessWidget {
-  const _SheetRow({required this.icon, required this.label, required this.onTap, this.destructive = false});
+  const _SheetRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.destructive = false,
+  });
 
   final IconData icon;
   final String label;
@@ -1165,7 +1408,10 @@ class _SheetRow extends StatelessWidget {
             const SizedBox(width: 14),
             Text(
               label,
-              style: AppTextStyles.bodyMd.copyWith(color: ink, fontWeight: FontWeight.w600),
+              style: AppTextStyles.bodyMd.copyWith(
+                color: ink,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -1181,12 +1427,13 @@ class _SheetRow extends StatelessWidget {
 /// A bubble's corners: 20 all round, with the bottom corner on the sender's
 /// side pulled in to 6 as the tail. A lone picture uses the same shape so an
 /// image-only message still reads as a bubble without a frame around it.
-BorderRadius _bubbleRadius({required bool mine, required bool tailed}) => BorderRadius.only(
-  topLeft: const Radius.circular(20),
-  topRight: const Radius.circular(20),
-  bottomLeft: Radius.circular(!mine && tailed ? 6 : 20),
-  bottomRight: Radius.circular(mine && tailed ? 6 : 20),
-);
+BorderRadius _bubbleRadius({required bool mine, required bool tailed}) =>
+    BorderRadius.only(
+      topLeft: const Radius.circular(20),
+      topRight: const Radius.circular(20),
+      bottomLeft: Radius.circular(!mine && tailed ? 6 : 20),
+      bottomRight: Radius.circular(mine && tailed ? 6 : 20),
+    );
 
 /// One message row. Text, a quote and file chips sit in the bubble; pictures
 /// stand below it on their own with no frame (see [_ImageBlock]), so a
@@ -1206,6 +1453,7 @@ class _MessageBubble extends StatelessWidget {
     required this.onLongPress,
     required this.onToggleReaction,
     required this.onAttachmentExpired,
+    required this.onStickerExpired,
     required this.onOpenImages,
     required this.onPlayVoice,
     this.quotedAuthor,
@@ -1233,6 +1481,11 @@ class _MessageBubble extends StatelessWidget {
   final VoidCallback? onLongPress;
   final ValueChanged<String> onToggleReaction;
   final ValueChanged<String> onAttachmentExpired;
+
+  /// A sticker's presigned link 403'd. Handled by the cubit, which has to
+  /// re-read the history page to get a fresh one — there is no route that
+  /// re-signs a single sticker.
+  final ValueChanged<String> onStickerExpired;
 
   /// Opens this bubble's pictures full screen, starting on the one at the
   /// given index. Handled by the page, like [onPlayVoice], because a stale
@@ -1262,15 +1515,28 @@ class _MessageBubble extends StatelessWidget {
     final maxWidth = MediaQuery.sizeOf(context).width * 0.78 - indent;
     final showName = !mine && isGroup && firstInRun;
 
-    final images = deleted ? const <AttachmentEntity>[] : message.attachments.where((a) => a.isImage).toList();
-    final voices = deleted ? const <AttachmentEntity>[] : message.attachments.where((a) => a.isVoice).toList();
+    // Drawn below the bubble with nothing around it, like a picture: a
+    // sticker is the message, not something inside it. A sticker *reply* still
+    // gets a bubble, because the quote needs one.
+    final sticker = deleted ? null : message.sticker;
+    final images = deleted
+        ? const <AttachmentEntity>[]
+        : message.attachments.where((a) => a.isImage).toList();
+    final voices = deleted
+        ? const <AttachmentEntity>[]
+        : message.attachments.where((a) => a.isVoice).toList();
     // Whatever is left: a real file, or a VOICE attachment the server sent
     // without the `voice` block to draw a player from.
     final files = deleted
         ? const <AttachmentEntity>[]
         : message.attachments.where((a) => !a.isImage && !a.isVoice).toList();
     final hasBubble =
-        deleted || reply != null || storyReply != null || message.hasText || files.isNotEmpty || voices.isNotEmpty;
+        deleted ||
+        reply != null ||
+        storyReply != null ||
+        message.hasText ||
+        files.isNotEmpty ||
+        voices.isNotEmpty;
 
     Widget? bubble;
     if (hasBubble) {
@@ -1282,29 +1548,63 @@ class _MessageBubble extends StatelessWidget {
           // A quote spans the bubble's width; the bubble is still only as
           // wide as its widest line — that is what `IntrinsicWidth` below
           // buys, and why it is only paid for on a reply.
-          crossAxisAlignment: reply != null ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
+          crossAxisAlignment: reply != null
+              ? CrossAxisAlignment.stretch
+              : CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
             if (storyReply != null) ...[
-              StoryReplyPreview(storyReply: storyReply, fromMe: mine, viewerId: viewerId, onYellow: mine),
+              StoryReplyPreview(
+                storyReply: storyReply,
+                fromMe: mine,
+                viewerId: viewerId,
+                onYellow: mine,
+              ),
               const SizedBox(height: 8),
             ],
             if (reply != null) ...[
-              _ReplyQuote(reply: reply, author: quotedAuthor ?? 'Unknown', onYellow: mine, onTap: onQuoteTap),
+              _ReplyQuote(
+                reply: reply,
+                author: quotedAuthor ?? 'Unknown',
+                onYellow: mine,
+                onTap: onQuoteTap,
+              ),
               const SizedBox(height: 8),
             ],
             for (final voice in voices)
               Padding(
-                padding: EdgeInsets.only(bottom: message.hasText || files.isNotEmpty || voice != voices.last ? 8 : 0),
-                child: VoiceNoteBubble(attachment: voice, onYellow: mine, onPlay: onPlayVoice),
+                padding: EdgeInsets.only(
+                  bottom:
+                      message.hasText ||
+                          files.isNotEmpty ||
+                          voice != voices.last
+                      ? 8
+                      : 0,
+                ),
+                child: VoiceNoteBubble(
+                  attachment: voice,
+                  onYellow: mine,
+                  onPlay: onPlayVoice,
+                ),
               ),
             for (final file in files)
               Padding(
-                padding: EdgeInsets.only(bottom: message.hasText || file != files.last ? 6 : 0),
+                padding: EdgeInsets.only(
+                  bottom: message.hasText || file != files.last ? 6 : 0,
+                ),
                 child: _FileChip(attachment: file),
               ),
             if (message.hasText)
-              Text(message.text, style: AppTextStyles.body.copyWith(color: mine ? colors.onYel : colors.ink)),
+              LinkedText(
+                text: message.text,
+                style: AppTextStyles.body.copyWith(
+                  color: mine ? colors.onYel : colors.ink,
+                ),
+                // Your own bubble is filled with `yel`, so the palette's link
+                // yellow would sit on top of itself — the bubble's own ink
+                // plus the underline carries it there instead.
+                linkColor: mine ? colors.onYel : null,
+              ),
           ],
         );
         if (reply != null) body = IntrinsicWidth(child: body);
@@ -1313,10 +1613,16 @@ class _MessageBubble extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
         decoration: BoxDecoration(
           color: deleted ? colors.surf2 : (mine ? colors.yel : colors.surf),
-          border: Border.all(color: mine && !deleted ? colors.ink : colors.line, width: 1.5),
-          // The tail goes on whatever is lowest: the bubble, or the
-          // pictures under it.
-          borderRadius: _bubbleRadius(mine: mine, tailed: images.isEmpty),
+          border: Border.all(
+            color: mine && !deleted ? colors.ink : colors.line,
+            width: 1.5,
+          ),
+          // The tail goes on whatever is lowest: the bubble, the sticker, or
+          // the pictures under it.
+          borderRadius: _bubbleRadius(
+            mine: mine,
+            tailed: images.isEmpty && sticker == null,
+          ),
         ),
         child: body,
       );
@@ -1325,7 +1631,9 @@ class _MessageBubble extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.only(top: firstInRun ? 10 : 4, bottom: 3),
       child: Column(
-        crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: mine
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
         children: [
           if (showName)
             Padding(
@@ -1344,7 +1652,12 @@ class _MessageBubble extends StatelessWidget {
               if (!mine) ...[
                 SizedBox(
                   width: _senderAvatarSize,
-                  child: lastInRun ? _SenderAvatar(sender: sender, senderId: message.senderId) : null,
+                  child: lastInRun
+                      ? _SenderAvatar(
+                          sender: sender,
+                          senderId: message.senderId,
+                        )
+                      : null,
                 ),
                 const SizedBox(width: _senderColumnWidth - _senderAvatarSize),
               ],
@@ -1355,10 +1668,27 @@ class _MessageBubble extends StatelessWidget {
                   child: GestureDetector(
                     onLongPress: busy ? null : onLongPress,
                     child: Column(
-                      crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                      crossAxisAlignment: mine
+                          ? CrossAxisAlignment.end
+                          : CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         ?bubble,
+                        if (sticker != null) ...[
+                          if (bubble != null) const SizedBox(height: 4),
+                          StickerImageView(
+                            sticker: sticker,
+                            size: math.min(
+                              maxWidth,
+                              sticker.needsFrame
+                                  ? _framedStickerSize
+                                  : _stickerSize,
+                            ),
+                            frameWidth: 4,
+                            radius: AppRadii.lg,
+                            onExpired: onStickerExpired,
+                          ),
+                        ],
                         if (images.isNotEmpty) ...[
                           if (bubble != null) const SizedBox(height: 4),
                           _ImageBlock(
@@ -1390,12 +1720,21 @@ class _MessageBubble extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(_timeLabel(message.sentAt.toLocal()), style: AppTextStyles.metaMono.copyWith(color: colors.ink2)),
+                Text(
+                  _timeLabel(message.sentAt.toLocal()),
+                  style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
+                ),
                 if (message.isEdited && !deleted) ...[
                   const SizedBox(width: 6),
-                  Text('· EDITED', style: AppTextStyles.metaMono.copyWith(color: colors.ink3)),
+                  Text(
+                    '· EDITED',
+                    style: AppTextStyles.metaMono.copyWith(color: colors.ink3),
+                  ),
                 ],
-                if (mine && !deleted) ...[const SizedBox(width: 8), _DeliveryMark(message: message, isRead: isRead)],
+                if (mine && !deleted) ...[
+                  const SizedBox(width: 8),
+                  _DeliveryMark(message: message, isRead: isRead),
+                ],
               ],
             ),
           ),
@@ -1438,7 +1777,10 @@ class _Tombstone extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           'Message deleted',
-          style: AppTextStyles.body.copyWith(color: ink, fontStyle: FontStyle.italic),
+          style: AppTextStyles.body.copyWith(
+            color: ink,
+            fontStyle: FontStyle.italic,
+          ),
         ),
       ],
     );
@@ -1449,7 +1791,12 @@ class _Tombstone extends StatelessWidget {
 /// said, behind an accent bar — the same shape as the composer's reply
 /// banner, so the quote in the transcript matches the one being written.
 class _ReplyQuote extends StatelessWidget {
-  const _ReplyQuote({required this.reply, required this.author, required this.onYellow, this.onTap});
+  const _ReplyQuote({
+    required this.reply,
+    required this.author,
+    required this.onYellow,
+    this.onTap,
+  });
 
   final ReplyPreviewEntity reply;
 
@@ -1475,6 +1822,8 @@ class _ReplyQuote extends StatelessWidget {
       text = 'Message deleted';
     } else if (reply.body.isNotEmpty) {
       text = reply.body;
+    } else if (reply.hasSticker) {
+      text = 'Sticker';
     } else if (reply.hasAttachments) {
       text = 'Attachment';
     } else {
@@ -1482,6 +1831,8 @@ class _ReplyQuote extends StatelessWidget {
     }
     final IconData? icon = reply.deleted
         ? CupertinoIcons.nosign
+        : reply.hasSticker
+        ? CupertinoIcons.smiley
         : (reply.hasAttachments ? CupertinoIcons.paperclip : null);
     return Semantics(
       button: onTap != null,
@@ -1507,7 +1858,10 @@ class _ReplyQuote extends StatelessWidget {
                   author,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.bodySm.copyWith(color: ink, fontWeight: FontWeight.w700),
+                  style: AppTextStyles.bodySm.copyWith(
+                    color: ink,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Row(
@@ -1516,7 +1870,11 @@ class _ReplyQuote extends StatelessWidget {
                     if (icon != null) ...[
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
-                        child: Icon(icon, size: 14, color: ink.withValues(alpha: 0.6)),
+                        child: Icon(
+                          icon,
+                          size: 14,
+                          color: ink.withValues(alpha: 0.6),
+                        ),
                       ),
                       const SizedBox(width: 4),
                     ],
@@ -1527,7 +1885,9 @@ class _ReplyQuote extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: AppTextStyles.bodySm.copyWith(
                           color: ink.withValues(alpha: 0.72),
-                          fontStyle: reply.deleted ? FontStyle.italic : FontStyle.normal,
+                          fontStyle: reply.deleted
+                              ? FontStyle.italic
+                              : FontStyle.normal,
                         ),
                       ),
                     ),
@@ -1630,7 +1990,12 @@ class _ImageBlock extends StatelessWidget {
 /// URL: every history fetch re-signs the URL, and without a stable key the
 /// 5-second poll would re-download every photo in the transcript each tick.
 class _AttachmentThumb extends StatelessWidget {
-  const _AttachmentThumb({required this.attachment, required this.borderRadius, this.onExpired, this.onTap});
+  const _AttachmentThumb({
+    required this.attachment,
+    required this.borderRadius,
+    this.onExpired,
+    this.onTap,
+  });
 
   final AttachmentEntity attachment;
   final BorderRadius borderRadius;
@@ -1647,7 +2012,10 @@ class _AttachmentThumb extends StatelessWidget {
     final placeholder = Container(
       color: colors.surf2,
       alignment: Alignment.center,
-      child: Icon(attachment.isImage ? CupertinoIcons.photo : CupertinoIcons.doc, color: colors.ink3),
+      child: Icon(
+        attachment.isImage ? CupertinoIcons.photo : CupertinoIcons.doc,
+        color: colors.ink3,
+      ),
     );
     final thumb = ClipRRect(
       borderRadius: borderRadius,
@@ -1670,7 +2038,9 @@ class _AttachmentThumb extends StatelessWidget {
                 // cubit, so a genuinely broken file cannot loop; deferred a
                 // frame so the cubit never emits from inside a build.
                 if (attachment.isUrlExpired && onExpired != null) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) => onExpired!(attachment.id));
+                  WidgetsBinding.instance.addPostFrameCallback(
+                    (_) => onExpired!(attachment.id),
+                  );
                 }
                 return placeholder;
               },
@@ -1681,13 +2051,16 @@ class _AttachmentThumb extends StatelessWidget {
     // a picture that has not arrived yet draws. A long press still belongs to
     // the bubble's own detector above: its recognizer claims the pointer at
     // the long-press timeout, before a tap could be reported on lift.
-    return GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: thumb);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: thumb,
+    );
   }
 }
 
-/// A non-image attachment. Tapping copies the download link — the same
-/// affordance every other external link in this app uses (no
-/// `url_launcher`; see `project_detail_page.dart`).
+/// A non-image attachment. Tapping opens the download in the browser;
+/// long-pressing copies the link, which is what the tap used to do.
 class _FileChip extends StatelessWidget {
   const _FileChip({required this.attachment});
   final AttachmentEntity attachment;
@@ -1701,12 +2074,11 @@ class _FileChip extends StatelessWidget {
       borderRadius: BorderRadius.circular(AppRadii.xs),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadii.xs),
-        onTap: url == null
-            ? null
-            : () {
-                Clipboard.setData(ClipboardData(text: url));
-                AppStatusSnackbar.showSuccess(context, message: 'Download link copied.', title: 'Copied');
-              },
+        // Opens the download now (ADR-039); long-press still copies, which is
+        // the only way to get a presigned link off the phone. That link
+        // expires in an hour — a copy kept longer than that reaches a 403.
+        onTap: url == null ? null : () => _openAttachment(context, url),
+        onLongPress: url == null ? null : () => _copyAttachment(context, url),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Row(
@@ -1720,12 +2092,22 @@ class _FileChip extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      attachment.fileName.isEmpty ? 'File' : attachment.fileName,
+                      attachment.fileName.isEmpty
+                          ? 'File'
+                          : attachment.fileName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.bodySm.copyWith(color: colors.ink, fontWeight: FontWeight.w600),
+                      style: AppTextStyles.bodySm.copyWith(
+                        color: colors.ink,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    Text(attachment.sizeLabel, style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink3)),
+                    Text(
+                      attachment.sizeLabel,
+                      style: AppTextStyles.metaMonoSm.copyWith(
+                        color: colors.ink3,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1735,10 +2117,34 @@ class _FileChip extends StatelessWidget {
       ),
     );
   }
+
+  Future<void> _openAttachment(BuildContext context, String url) async {
+    if (await ExternalLink.open(url)) return;
+    if (!context.mounted) return;
+    await _copyAttachment(
+      context,
+      url,
+      message: 'Nothing could open that file, so the link was copied instead.',
+    );
+  }
+
+  Future<void> _copyAttachment(
+    BuildContext context,
+    String url, {
+    String message = 'Download link copied.',
+  }) async {
+    await Clipboard.setData(ClipboardData(text: url));
+    if (!context.mounted) return;
+    AppStatusSnackbar.showSuccess(context, message: message, title: 'Copied');
+  }
 }
 
 class _ReactionsRow extends StatelessWidget {
-  const _ReactionsRow({required this.reactions, required this.enabled, required this.onTap});
+  const _ReactionsRow({
+    required this.reactions,
+    required this.enabled,
+    required this.onTap,
+  });
 
   final List<ReactionEntity> reactions;
   final bool enabled;
@@ -1754,7 +2160,12 @@ class _ReactionsRow extends StatelessWidget {
         for (final reaction in reactions)
           Material(
             color: colors.surf,
-            shape: StadiumBorder(side: BorderSide(color: reaction.reactedByMe ? colors.yel : colors.line, width: 1.5)),
+            shape: StadiumBorder(
+              side: BorderSide(
+                color: reaction.reactedByMe ? colors.yel : colors.line,
+                width: 1.5,
+              ),
+            ),
             child: InkWell(
               customBorder: const StadiumBorder(),
               onTap: enabled ? () => onTap(reaction.emoji) : null,
@@ -1762,7 +2173,9 @@ class _ReactionsRow extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 child: Text(
                   '${reaction.emoji} ${reaction.count}',
-                  style: AppTextStyles.metaMono.copyWith(color: reaction.reactedByMe ? colors.onYel : colors.ink),
+                  style: AppTextStyles.metaMono.copyWith(
+                    color: reaction.reactedByMe ? colors.onYel : colors.ink,
+                  ),
                 ),
               ),
             ),
@@ -1800,10 +2213,14 @@ class _InviteCardBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 3),
       child: Column(
-        crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: mine
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
         children: [
           ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.78),
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.sizeOf(context).width * 0.78,
+            ),
             child: Container(
               margin: const EdgeInsets.only(top: 10),
               padding: const EdgeInsets.all(12),
@@ -1816,7 +2233,10 @@ class _InviteCardBubble extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('GROUP INVITE', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
+                  Text(
+                    'GROUP INVITE',
+                    style: AppTextStyles.eyebrow.copyWith(color: colors.ink2),
+                  ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -1836,12 +2256,16 @@ class _InviteCardBubble extends StatelessWidget {
                               card.displayTitle,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.titleRow.copyWith(color: colors.ink),
+                              style: AppTextStyles.titleRow.copyWith(
+                                color: colors.ink,
+                              ),
                             ),
                             const SizedBox(height: 3),
                             Text(
                               '${card.memberCount} ${card.memberCount == 1 ? 'MEMBER' : 'MEMBERS'} · ${status.toUpperCase()}',
-                              style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink2),
+                              style: AppTextStyles.metaMonoSm.copyWith(
+                                color: colors.ink2,
+                              ),
                             ),
                           ],
                         ),
@@ -1900,16 +2324,21 @@ class _DeliveryMark extends StatelessWidget {
     final colors = AppColors.of(context);
     final (icon, label) = switch (message.status) {
       MessageDeliveryStatus.sending => (CupertinoIcons.clock, 'Sending'),
-      MessageDeliveryStatus.failed => (CupertinoIcons.exclamationmark_circle, 'Failed to send. Tap to retry'),
+      MessageDeliveryStatus.failed => (
+        CupertinoIcons.exclamationmark_circle,
+        'Failed to send. Tap to retry',
+      ),
       MessageDeliveryStatus.sent =>
-        isRead ? (CupertinoIcons.checkmark_circle_fill, 'Read') : (CupertinoIcons.checkmark, 'Sent'),
+        isRead ? (Icons.done_all, 'Read') : (Icons.check, 'Sent'),
     };
     return Semantics(
       label: label,
       child: Tooltip(
         message: label,
         child: InkWell(
-          onTap: message.status == MessageDeliveryStatus.failed ? () => context.read<ChatCubit>().retry(message) : null,
+          onTap: message.status == MessageDeliveryStatus.failed
+              ? () => context.read<ChatCubit>().retry(message)
+              : null,
           child: Padding(
             padding: const EdgeInsets.all(3),
             child: Icon(
@@ -1962,8 +2391,14 @@ class _TypingBubble extends StatelessWidget {
         children: [
           if (isGroup && typists.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(left: _senderColumnWidth + 6, bottom: 4),
-              child: Text(_label, style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink2)),
+              padding: const EdgeInsets.only(
+                left: _senderColumnWidth + 6,
+                bottom: 4,
+              ),
+              child: Text(
+                _label,
+                style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink2),
+              ),
             ),
           Row(
             mainAxisSize: MainAxisSize.min,
@@ -1971,13 +2406,18 @@ class _TypingBubble extends StatelessWidget {
             children: [
               SizedBox(
                 width: _senderAvatarSize,
-                child: sender == null ? null : _SenderAvatar(sender: sender, senderId: sender.userId),
+                child: sender == null
+                    ? null
+                    : _SenderAvatar(sender: sender, senderId: sender.userId),
               ),
               const SizedBox(width: _senderColumnWidth - _senderAvatarSize),
               Semantics(
                 label: typists.isEmpty ? 'Typing' : _label,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
                     color: colors.surf,
                     border: Border.all(color: colors.line, width: 1.5),
@@ -2006,7 +2446,8 @@ class _TypingDots extends StatefulWidget {
   State<_TypingDots> createState() => _TypingDotsState();
 }
 
-class _TypingDotsState extends State<_TypingDots> with SingleTickerProviderStateMixin {
+class _TypingDotsState extends State<_TypingDots>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1100),
@@ -2036,7 +2477,10 @@ class _TypingDotsState extends State<_TypingDots> with SingleTickerProviderState
                 child: Container(
                   width: 6,
                   height: 6,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: widget.color),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: widget.color,
+                  ),
                 ),
               ),
             );

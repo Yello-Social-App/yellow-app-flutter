@@ -13,13 +13,20 @@ import '../../features/auth/domain/usecases/verify_otp_usecase.dart';
 import '../../features/auth/presentation/bloc/auth_cubit.dart';
 import '../../features/chat/data/datasources/chat_remote_datasource.dart';
 import '../../features/chat/data/datasources/chat_socket.dart';
+import '../../features/chat/data/datasources/presence_tracker.dart';
 import '../../features/chat/data/datasources/user_directory.dart';
+import '../../features/chat/data/datasources/sticker_remote_datasource.dart';
 import '../../features/chat/data/repositories/chat_repository_impl.dart';
+import '../../features/chat/data/repositories/sticker_repository_impl.dart';
 import '../../features/chat/domain/repositories/chat_repository.dart';
+import '../../features/chat/domain/repositories/sticker_repository.dart';
 import '../../features/chat/domain/usecases/chat_usecases.dart';
+import '../../features/chat/domain/usecases/sticker_usecases.dart';
 import '../../features/chat/presentation/bloc/chat_cubit.dart';
 import '../../features/chat/presentation/bloc/group_info_cubit.dart';
 import '../../features/chat/presentation/bloc/messages_cubit.dart';
+import '../../features/chat/presentation/bloc/sticker_creator_cubit.dart';
+import '../../features/chat/presentation/bloc/stickers_cubit.dart';
 import '../../features/communities/data/datasources/communities_remote_datasource.dart';
 import '../../features/communities/data/repositories/communities_repository_impl.dart';
 import '../../features/communities/domain/entities/community_post_entity.dart';
@@ -67,6 +74,11 @@ import '../../features/friends/data/repositories/friends_repository_impl.dart';
 import '../../features/friends/domain/repositories/friends_repository.dart';
 import '../../features/friends/domain/usecases/friends_usecases.dart';
 import '../../features/friends/presentation/bloc/friends_cubit.dart';
+import '../../features/link_preview/data/datasources/link_preview_remote_datasource.dart';
+import '../../features/link_preview/data/repositories/link_preview_repository_impl.dart';
+import '../../features/link_preview/domain/repositories/link_preview_repository.dart';
+import '../../features/link_preview/domain/usecases/get_link_preview_usecase.dart';
+import '../../features/link_preview/presentation/bloc/link_preview_cubit.dart';
 import '../../features/notification/data/datasources/notification_remote_datasource.dart';
 import '../../features/notification/data/repositories/notification_repository_impl.dart';
 import '../../features/notification/domain/repositories/notification_repository.dart';
@@ -154,6 +166,7 @@ Future<void> configureDependencies() async {
   _registerProfile();
   _registerChat();
   _registerSearch();
+  _registerLinkPreview();
   _registerCommunities();
   _registerShowcase();
   _registerSettings();
@@ -365,8 +378,14 @@ void _registerChat() {
   // stored access token and refreshes it once on rejection.
   sl.registerLazySingleton(() => ChatSocket(secureStorage: sl(), tokenRefresh: sl()));
 
-  // (remote, directory, getMe, networkInfo, socket)
-  sl.registerLazySingleton<ChatRepository>(() => ChatRepositoryImpl(sl(), sl(), sl(), sl(), sl()));
+  // Who is online, folded from the socket's `presence` frames — the app's
+  // only source for it, since no endpoint reports presence at all. One
+  // instance, so a chat screen opened after the connection came up sees the
+  // ids it already collected instead of waiting for the next change.
+  sl.registerLazySingleton(() => PresenceTracker(sl()));
+
+  // (remote, directory, getMe, networkInfo, socket, presence)
+  sl.registerLazySingleton<ChatRepository>(() => ChatRepositoryImpl(sl(), sl(), sl(), sl(), sl(), sl()));
 
   sl.registerLazySingleton(() => GetConversationsUseCase(sl()));
   sl.registerLazySingleton(() => GetConversationUseCase(sl()));
@@ -397,6 +416,45 @@ void _registerChat() {
   sl.registerLazySingleton(() => AcceptGroupInviteUseCase(sl()));
   sl.registerLazySingleton(() => DeclineGroupInviteUseCase(sl()));
 
+  // Stickers — the same `/ws` service and the same `ApiClient`, but their own
+  // resource: the owner is always the token's user, so nothing here needs the
+  // viewer id or `UserDirectory` that `ChatRepositoryImpl` supplies. The
+  // datasource is a singleton because it holds the sticker-pack `ETag`, which
+  // is what makes reopening the picker cost one 304 instead of a re-read of
+  // the whole catalogue.
+  sl.registerLazySingleton<StickerRemoteDataSource>(() => StickerRemoteDataSourceImpl(sl()));
+  // (remote, networkInfo, socket)
+  sl.registerLazySingleton<StickerRepository>(() => StickerRepositoryImpl(sl(), sl(), sl()));
+
+  sl.registerLazySingleton(() => GetMyStickersUseCase(sl()));
+  sl.registerLazySingleton(() => GetRecentStickersUseCase(sl()));
+  sl.registerLazySingleton(() => GetStickerPacksUseCase(sl()));
+  sl.registerLazySingleton(() => CreateStickerDraftUseCase(sl()));
+  sl.registerLazySingleton(() => SaveStickerUseCase(sl()));
+  sl.registerLazySingleton(() => RenameStickerUseCase(sl()));
+  sl.registerLazySingleton(() => DeleteStickerUseCase(sl()));
+  sl.registerLazySingleton(() => SaveStickerFromMessageUseCase(sl()));
+
+  // Long-lived: reopening the picker draws the grid it drew last time instead
+  // of a spinner. Staleness is answered by the picker calling `load()` on
+  // every open and by the `sticker.*` frames it leases while it is up — both
+  // written down on `StickersCubit` itself, as any new long-lived cubit must
+  // (`docs/GOTCHAS.md`).
+  sl.registerLazySingleton(
+    () => StickersCubit(
+      getMine: sl(),
+      getRecent: sl(),
+      getPacks: sl(),
+      renameSticker: sl(),
+      deleteSticker: sl(),
+      repository: sl<StickerRepository>(),
+    ),
+  );
+
+  // Fresh per creator: a draft is single-use and expires in an hour, so there
+  // is nothing worth outliving the sheet.
+  sl.registerFactory(() => StickerCreatorCubit(createDraft: sl(), saveSticker: sl()));
+
   // One platform audio player for the whole app, which is what makes "only
   // one voice note plays at a time" true rather than a rule each bubble has
   // to remember. Lazy: nothing is constructed until a note is played, so a
@@ -410,7 +468,9 @@ void _registerChat() {
   sl.registerLazySingleton(() => VoiceNotePlaysStore()..restore());
 
   // Long-lived: the Inbox list (and unread counts) survives tab switches.
-  sl.registerLazySingleton(() => MessagesCubit(sl()));
+  // It also owns the green online dot for every surface that draws one — the
+  // repository is injected for that one stream (ADR-038).
+  sl.registerLazySingleton(() => MessagesCubit(sl(), sl()));
 
   sl.registerFactoryParam<ChatCubit, String, void>(
     (conversationId, _) => ChatCubit(
@@ -423,6 +483,7 @@ void _registerChat() {
       reactToMessage: sl(),
       uploadAttachment: sl(),
       refreshAttachment: sl(),
+      saveStickerFromMessage: sl(),
       voicePlayer: sl(),
       acceptInvite: sl(),
       declineInvite: sl(),
@@ -608,6 +669,23 @@ void _registerSearch() {
   // Factory: a search screen's query and results have no reason to outlive the
   // screen, and the cubit owns a debounce timer it cancels in `close()`.
   sl.registerFactory(() => SearchCubit(searchUsers: sl(), sendFriendRequest: sl()));
+}
+
+void _registerLinkPreview() {
+  // Its own bare Dio, deliberately not `ApiClient`'s — the same reason the
+  // update channel has one (ADR-029): these requests go to whatever host an
+  // author typed into a post, and `AuthInterceptor` would attach the
+  // session's bearer token to every one of them.
+  sl.registerLazySingleton<LinkPreviewRemoteDataSource>(() => LinkPreviewRemoteDataSourceImpl());
+  sl.registerLazySingleton<LinkPreviewRepository>(() => LinkPreviewRepositoryImpl(sl(), sl()));
+
+  sl.registerLazySingleton(() => GetLinkPreviewUseCase(sl()));
+
+  // Singleton, and the point of the feature: one cache of link cards for the
+  // whole app. The same link shows up in the feed, in the post's own screen
+  // and in a repost's embed — a factory would fetch that page once per card,
+  // and re-fetch every time a post scrolled back into view.
+  sl.registerLazySingleton(() => LinkPreviewCubit(getLinkPreview: sl()));
 }
 
 void _registerCommunities() {
