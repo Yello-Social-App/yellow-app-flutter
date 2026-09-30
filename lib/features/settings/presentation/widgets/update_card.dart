@@ -59,7 +59,7 @@ class _Body extends StatelessWidget {
         icon: _Badge(icon: CupertinoIcons.checkmark, color: colors.grn),
         title: 'You are on the newest build',
         body: 'Nothing newer has been published yet.',
-        action: AppButton(label: 'Check again', variant: AppButtonVariant.outline, dense: true, onPressed: cubit.check),
+        action: AppButton(label: 'Check again', variant: AppButtonVariant.secondary, dense: true, onPressed: cubit.check),
       ),
 
       AppUpdateStatus.available when update != null => _Row(
@@ -96,7 +96,7 @@ class _Body extends StatelessWidget {
         icon: _Badge(icon: CupertinoIcons.exclamationmark_circle, color: colors.red),
         title: 'The update check failed',
         body: state.errorMessage ?? 'Could not reach the update channel.',
-        action: AppButton(label: 'Try again', variant: AppButtonVariant.outline, dense: true, onPressed: cubit.check),
+        action: AppButton(label: 'Try again', variant: AppButtonVariant.secondary, dense: true, onPressed: cubit.check),
       ),
 
       // `idle`, plus the `available` case with no update attached — which
@@ -105,7 +105,7 @@ class _Body extends StatelessWidget {
         icon: _Badge(icon: CupertinoIcons.refresh, color: colors.ink2),
         title: 'Check for a newer build',
         body: 'Yello is installed from a file, so updates are fetched here rather than from a store.',
-        action: AppButton(label: 'Check now', variant: AppButtonVariant.outline, dense: true, onPressed: cubit.check),
+        action: AppButton(label: 'Check now', variant: AppButtonVariant.secondary, dense: true, onPressed: cubit.check),
       ),
     };
   }

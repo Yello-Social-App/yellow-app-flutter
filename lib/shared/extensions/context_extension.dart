@@ -9,4 +9,12 @@ extension ContextX on BuildContext {
   TextTheme get textTheme => Theme.of(this).textTheme;
   Size get screenSize => MediaQuery.sizeOf(this);
   bool get isDark => Theme.of(this).brightness == Brightness.dark;
+
+  /// What a photo's transparent pixels are filled with: black in dark mode,
+  /// white in light. Pass it as an image's `color` with
+  /// `colorBlendMode: BlendMode.dstOver` (or `ColorFilter.mode` on a
+  /// `DecorationImage`) — `dstOver` paints it *behind* the picture and only
+  /// within the picture's own bounds, so a `contain`-letterboxed photo keeps
+  /// its surrounding background. Stickers deliberately don't use this.
+  Color get imageBackdrop => isDark ? Colors.black : Colors.white;
 }

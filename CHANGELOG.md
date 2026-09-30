@@ -16,6 +16,173 @@ file only when it genuinely helps.
 
 ## [Unreleased]
 
+### Added
+
+- **Calls ring even when Yello is closed.** On Android an incoming call now
+  rings like a phone call — your ringtone, on the lock screen, until you
+  answer or it stops — with **Accept** and **Decline** right on the
+  notification. Accept opens Yello straight into the call (unlock first if
+  the phone is locked); Decline turns it down without opening the app. A
+  call you don't pick up leaves a "Missed call" notification, and answering
+  on another device stops this one ringing. On iPhone the call shows as a
+  notification you tap to open the call.
+
+- **Ink outline theme.** A third look on the Theme screen (account menu →
+  Theme), in light and dark. It keeps the Classic colors but draws every
+  card and button with a bold outline and a solid offset shadow, the
+  "sticker" style, instead of thin borders and soft shadows. In dark mode
+  the outlines turn cream.
+- **Voice and video calls.** A one-to-one chat now has a phone and a camera
+  button in its header. The person you call hears Yello ring wherever they
+  are in the app, and can answer or decline from a full-screen call page. In a
+  call you can mute, switch the camera on or off, flip it, and move sound
+  between the earpiece and the speaker. Press Back (or the arrow at the top)
+  to shrink the call to a pill and keep using the app; tap the pill to come
+  back. When a call ends you see why for a moment — declined, no answer,
+  busy on another call.
+
+  For now the app has to be open for a call to ring — a phone with Yello
+  closed does not hear it yet. On Android a call keeps going with the screen
+  off, shown as an ongoing "Call with …" notification.
+- **Group calls.** Group chats now have the phone and camera buttons too, and
+  ring every member who is free (up to 16 people in a call). Once you are in,
+  everyone appears as a tile in a two-column grid — swipe or tap the arrow
+  for more than six people — with a small badge showing who is talking and
+  who is muted, and a chat button (with its unread count) that takes you to
+  the group's messages under the shrunk call. Hanging up leaves the call; it
+  carries on for the others until fewer than two are left. If a group
+  already has a call going, its chat shows a **Join** bar ("Group call · 3 in
+  call"), and the call buttons join that call rather than starting another.
+  You can join even after declining, missing the ring, or leaving.
+- **Screen sharing in calls (Android).** A Share button in any call sends
+  your phone's screen to everyone in it, after Android asks for permission.
+  A shared screen is shown large above the group's tiles, or full screen in
+  a one-to-one call. Not available on iPhone yet.
+- **Call screens follow your theme** — white in light mode, black in dark
+  mode. Only the name and buttons laid over someone's full-screen video stay
+  light-on-dark, so they remain readable on any picture.
+- **Start a chat or a group from the Inbox.** The pencil button at the top of
+  Chat now opens a "New message" window listing your friends. Tick one friend
+  to open your chat with them, or tick two or more, give the group a name,
+  and tap Create group. You can search the list by name or @username.
+- **Friends and Requests tabs in Circle.** Circle now has two tabs, styled like
+  the Feed / Community ones. **Friends** lists the people you're connected
+  with. **Requests** shows the requests sent to you (Accept or decline them)
+  and the ones you've sent that are still waiting (tap Cancel to take one
+  back). The Requests tab shows how many are waiting on you.
+- **Blocked tab in Circle.** A third tab lists everyone you've blocked, with an
+  Unblock button (and a confirmation) on each person.
+
+### Changed
+
+- **Buttons follow one style.** The main action on a screen or card is the
+  yellow button; every other action next to it is the same pill with a thin
+  outline. The two slightly different grey styles are gone, and so are the
+  plain yellow text links "Load more", "Unmute", "Unblock", "Close" and
+  "Cancel" used to be. Deleting a post or comment and removing or unblocking
+  a friend now ask in the same rounded confirmation card as logging out, not
+  the plain system box. A button that's busy or unavailable greys out
+  whatever its style.
+
+- **The "yello." wordmark matches the web and desktop apps.** It's now set in
+  rounded Fredoka in the brand yellow, with a darker-yellow 3D edge in dark
+  mode and a dark outline and drop shadow in light mode. Page titles drawn in
+  the same style (Chat, Signals, Circle, Theme…) change with it.
+
+- **Transparent pictures get a solid background.** A photo with see-through
+  areas (a PNG logo or cut-out, say) now sits on white in light mode and black
+  in dark mode, instead of letting the card or bubble behind it show through.
+  This covers post photos, chat pictures, stories, profile covers and
+  pictures, link previews, the full-screen photo viewer, and the post and
+  story composers. Stickers stay transparent.
+- **A new, softer loading shimmer, on every screen.** Placeholders are now a
+  gentle tint that shows up on every theme (before, they almost disappeared
+  on white cards). A light diagonal sheen sweeps across the whole screen at
+  once, then pauses, instead of each block flashing on its own timer. Screens
+  that showed a spinner or a generic grey card while loading now show a
+  placeholder shaped like their real content: the Inbox, a chat thread, group
+  info, Signals, notification settings, Circle, a post and its comments,
+  community comments, your story archive, shared posts, a project page, and
+  the reactions, story-viewers and new-message lists. The feed shows a
+  placeholder card while it loads more posts. With "Remove animations" turned
+  on in your phone's settings, the placeholders stay still.
+- **Other people's profiles look like yours.** Opening someone's profile now
+  shows the same layout as your own Profile tab: the same cover and avatar,
+  their connections and post count under their name, a Personal details card
+  (name, username, join date), the All / Shared switcher, and the top bar
+  that shows their name and avatar as you scroll. The friend button and
+  Message sit side by side where your Add to story and Edit profile are.
+  Block user moved into the **⋯** menu at the top right, and you can pull
+  down to refresh.
+- **One empty state everywhere.** A new chat with no messages yet, an empty
+  profile tab, shared posts, the story archive, notifications, the sticker
+  picker, and the reactions and story-viewers sheets now all show the same
+  yellow-dot card used on Communities, instead of a blank screen or a line of
+  plain text.
+- **A white Feed header.** The top of the Feed — the date, the Yello bar,
+  stories and the Feed / Community tabs — now sits on white, with the posts
+  below on the page's cream. The selected tab is marked with the same glowing
+  yellow line and small arrow as the bottom bar, and it slides across when you
+  switch tabs.
+- **One send button everywhere.** Sending now uses the same paper-plane icon
+  across the app: chat messages and voice notes, sending a sticker, comments on
+  posts and community threads, story replies, and the Publish/Share buttons for
+  posts, threads and stories. A community comment is now sent with the icon
+  button instead of a "Post" label. In a story reply, the heart button turns
+  into a send button while you have something typed.
+- **Text fields light up while you type.** Every text box (search, comments,
+  chat, sign-in, the code boxes, captions, the rename and edit dialogs) now
+  shows a soft yellow glow around its border while you're typing in it. Before,
+  only the chat box did this. On sign-up, a field that's already green or red
+  keeps that colour while it glows.
+- **Photo posts no longer need a caption.** Once you've added a photo, you can
+  publish without writing anything. A post with no photos still needs some
+  text.
+- **A new Feed header.** Under today's date, the top of the Feed is now the
+  Yello wordmark with three round buttons — Search, Signals and Circle. Signals
+  shows how many unread items are waiting; your chats stay on the bottom bar's
+  Chat tab. Stories sit right under it as a plain row with
+  "Your story" first, and below them two tabs: **Feed** (your usual feed) and
+  **Community**, which shows the latest threads from the communities you've
+  joined. The tabs stay pinned under the header as you scroll. If you haven't
+  joined any communities yet, the Community tab says so.
+
+- **Photo posts are photo-first.** In the feed and on profiles, a post with
+  photos now shows the photo across the top of the card, with the author's
+  name over its top edge and the caption over its bottom edge. Long captions
+  are cut to three lines; tap the caption to read the whole post. Tap the
+  photo to see it full screen, or double-tap it to like the post — a heart
+  pops over the photo. Double-tapping never removes your like or changes a
+  reaction you already picked. Text-only posts look the same as before.
+- **New Sign In and Sign Up headers.** Both screens now open on a dark panel
+  with the yello. wordmark in the corner, a link to the other screen at the
+  top right, a large centered title, and a yellow line that draws itself
+  across the panel. The email-code step of sign-up uses the same header, with
+  a Back link. With reduce-motion turned on, the line appears fully drawn.
+- Web links now show preview thumbnails below their text in posts, reposts, comments,
+  chat, bios, and showcase pages. Every distinct link gets a card; unavailable images
+  show a placeholder.
+- **A new look for the chat screen.** The header is now a panel with
+  rounded corners (white in light mode, dark in dark mode) and a soft shadow
+  under it that separates it from the messages. In a one-to-one chat the
+  person's avatar and name sit on the same row as the back and call buttons.
+  A group chat uses the same single row: up to three members' avatars
+  overlap where the one avatar would be (with a "+N" circle for everyone
+  else), then the group's name, and a members button in place of the call
+  buttons. Tap the avatars or the name to open the group's info. The message
+  box's outline glows yellow while you're typing in it.
+
+### Fixed
+
+- Notification bells now use matching black artwork in light themes and white
+  artwork in dark themes, resting when read and gently ringing while unread.
+- Rounded outlines no longer disappear under pictures at the corners. The
+  photo cards on New Post, link previews, community cards, and the sticker
+  preview now keep a full outline all the way around.
+- Tapping the person's picture or name at the top of a story now opens their
+  profile. The story pauses while you're there and picks up where it left off
+  when you come back.
+
 ---
 
 ## [0.6.0] — 2026-09-28

@@ -20,11 +20,14 @@ import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/app_warning_dialog.dart';
 import '../../../../shared/widgets/error_view.dart';
+import '../../../../shared/widgets/glow_border.dart';
 import '../../../friends/domain/entities/friendship_entity.dart';
 import '../../domain/entities/conversation_entity.dart';
 import '../../domain/entities/participant_entity.dart';
 import '../../domain/usecases/chat_usecases.dart';
 import '../bloc/group_info_cubit.dart';
+import '../../../../shared/widgets/shimmer_loading.dart';
+import '../widgets/shimmer_group_info.dart';
 
 /// A group's own screen — name, photo, members and their roles, add /
 /// invite, leave. Reached from the chat header. What each role may do is
@@ -47,7 +50,10 @@ class GroupInfoPage extends StatelessWidget {
 class _GroupInfoView extends StatelessWidget {
   const _GroupInfoView();
 
-  Future<void> _rename(BuildContext context, ConversationEntity conversation) async {
+  Future<void> _rename(
+    BuildContext context,
+    ConversationEntity conversation,
+  ) async {
     final cubit = context.read<GroupInfoCubit>();
     final title = await showDialog<String>(
       context: context,
@@ -57,7 +63,10 @@ class _GroupInfoView extends StatelessWidget {
     unawaited(cubit.rename(title));
   }
 
-  Future<void> _changePhoto(BuildContext context, ConversationEntity conversation) async {
+  Future<void> _changePhoto(
+    BuildContext context,
+    ConversationEntity conversation,
+  ) async {
     final cubit = context.read<GroupInfoCubit>();
     final choice = await showModalBottomSheet<_PhotoChoice>(
       context: context,
@@ -70,7 +79,9 @@ class _GroupInfoView extends StatelessWidget {
         unawaited(cubit.removePhoto());
       case _PhotoChoice.gallery || _PhotoChoice.camera:
         final picked = await ImagePicker().pickImage(
-          source: choice == _PhotoChoice.camera ? ImageSource.camera : ImageSource.gallery,
+          source: choice == _PhotoChoice.camera
+              ? ImageSource.camera
+              : ImageSource.gallery,
           imageQuality: 85,
           maxWidth: AppConstants.postImageMaxDimension,
           maxHeight: AppConstants.postImageMaxDimension,
@@ -135,8 +146,16 @@ class _GroupInfoView extends StatelessWidget {
           context.goNamed(RouteNames.messages);
           return;
         }
-        if (state.actionError != null) AppStatusSnackbar.showError(context, message: state.actionError!);
-        if (state.notice != null) AppStatusSnackbar.showSuccess(context, message: state.notice!, title: 'Done');
+        if (state.actionError != null) {
+          AppStatusSnackbar.showError(context, message: state.actionError!);
+        }
+        if (state.notice != null) {
+          AppStatusSnackbar.showSuccess(
+            context,
+            message: state.notice!,
+            title: 'Done',
+          );
+        }
       },
       child: Scaffold(
         backgroundColor: colors.bg,
@@ -160,14 +179,25 @@ class _GroupInfoView extends StatelessWidget {
                         onPressed: () => Navigator.of(context).maybePop(),
                       ),
                       const SizedBox(width: 12),
-                      Text('Group', style: AppTextStyles.titleLg.copyWith(color: colors.ink)),
+                      Text(
+                        'Group',
+                        style: AppTextStyles.titleLg.copyWith(
+                          color: colors.ink,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 20),
-                  if (state.status == GroupInfoStatus.loading && conversation == null)
-                    const Padding(padding: EdgeInsets.only(top: 40), child: Center(child: CircularProgressIndicator()))
-                  else if (state.status == GroupInfoStatus.error && conversation == null)
-                    ErrorView(message: state.errorMessage ?? 'Could not load this group.', onRetry: cubit.load)
+                  if (state.status == GroupInfoStatus.loading &&
+                      conversation == null)
+                    const ShimmerGroupInfo()
+                  else if (state.status == GroupInfoStatus.error &&
+                      conversation == null)
+                    ErrorView(
+                      message:
+                          state.errorMessage ?? 'Could not load this group.',
+                      onRetry: cubit.load,
+                    )
                   else if (conversation != null) ...[
                     _IdentityCard(
                       conversation: conversation,
@@ -182,10 +212,16 @@ class _GroupInfoView extends StatelessWidget {
                         Expanded(
                           child: AppButton(
                             label: 'Add people',
-                            icon: const Icon(CupertinoIcons.person_add, size: 18),
+                            icon: const Icon(
+                              CupertinoIcons.person_add,
+                              size: 18,
+                            ),
                             dense: true,
                             fullWidth: true,
-                            onPressed: state.isSaving || conversation.participants.length >= groupMaxMembers
+                            onPressed:
+                                state.isSaving ||
+                                    conversation.participants.length >=
+                                        groupMaxMembers
                                 ? null
                                 : () => _pickPeople(context, invite: false),
                           ),
@@ -197,8 +233,10 @@ class _GroupInfoView extends StatelessWidget {
                             icon: const Icon(CupertinoIcons.mail, size: 18),
                             dense: true,
                             fullWidth: true,
-                            variant: AppButtonVariant.outline,
-                            onPressed: state.isSaving ? null : () => _pickPeople(context, invite: true),
+                            variant: AppButtonVariant.secondary,
+                            onPressed: state.isSaving
+                                ? null
+                                : () => _pickPeople(context, invite: true),
                           ),
                         ),
                       ],
@@ -218,7 +256,10 @@ class _GroupInfoView extends StatelessWidget {
                     const SizedBox(height: 24),
                     AppButton(
                       label: 'Leave group',
-                      icon: const Icon(CupertinoIcons.square_arrow_right, size: 18),
+                      icon: const Icon(
+                        CupertinoIcons.square_arrow_right,
+                        size: 18,
+                      ),
                       variant: AppButtonVariant.danger,
                       fullWidth: true,
                       onPressed: state.isSaving ? null : () => _leave(context),
@@ -275,8 +316,8 @@ class _IdentityCard extends StatelessWidget {
               ),
               if (canManage)
                 Positioned(
-                  right: -4,
-                  bottom: -4,
+                  right: -10,
+                  bottom: -10,
                   child: AppIconButton(
                     icon: const Icon(CupertinoIcons.camera, size: 16),
                     size: 32,
@@ -312,7 +353,11 @@ class _IdentityCard extends StatelessWidget {
           ),
           if (busy) ...[
             const SizedBox(height: 10),
-            const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
           ],
         ],
       ),
@@ -394,10 +439,15 @@ class _MemberRow extends StatelessWidget {
     if (isMe || member.role == ParticipantRole.owner) return const [];
     return switch (myRole) {
       ParticipantRole.owner => [
-          member.role == ParticipantRole.admin ? _MemberAction.demote : _MemberAction.promote,
-          _MemberAction.remove,
-        ],
-      ParticipantRole.admin => member.role == ParticipantRole.member ? const [_MemberAction.remove] : const [],
+        member.role == ParticipantRole.admin
+            ? _MemberAction.demote
+            : _MemberAction.promote,
+        _MemberAction.remove,
+      ],
+      ParticipantRole.admin =>
+        member.role == ParticipantRole.member
+            ? const [_MemberAction.remove]
+            : const [],
       ParticipantRole.member => const [],
     };
   }
@@ -426,25 +476,41 @@ class _MemberRow extends StatelessWidget {
                   isMe ? '${member.displayName} (you)' : member.displayName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.bodyMd.copyWith(color: colors.ink, fontWeight: FontWeight.w600),
+                  style: AppTextStyles.bodyMd.copyWith(
+                    color: colors.ink,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 2),
-                Text(member.role.label.toUpperCase(), style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink2)),
+                Text(
+                  member.role.label.toUpperCase(),
+                  style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink2),
+                ),
               ],
             ),
           ),
           if (busy)
             const Padding(
               padding: EdgeInsets.all(12),
-              child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
             )
           else if (actions.isNotEmpty)
             PopupMenuButton<_MemberAction>(
               enabled: !disabled,
               icon: Icon(CupertinoIcons.ellipsis_vertical, color: colors.ink2),
               onSelected: (action) => switch (action) {
-                _MemberAction.promote => cubit.setRole(member.userId, ParticipantRole.admin),
-                _MemberAction.demote => cubit.setRole(member.userId, ParticipantRole.member),
+                _MemberAction.promote => cubit.setRole(
+                  member.userId,
+                  ParticipantRole.admin,
+                ),
+                _MemberAction.demote => cubit.setRole(
+                  member.userId,
+                  ParticipantRole.member,
+                ),
                 _MemberAction.remove => cubit.removeMember(member.userId),
               },
               itemBuilder: (_) => [
@@ -505,7 +571,10 @@ class _RenameDialogState extends State<_RenameDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('RENAME GROUP', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
+            Text(
+              'RENAME GROUP',
+              style: AppTextStyles.eyebrow.copyWith(color: colors.ink2),
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: _controller,
@@ -517,14 +586,16 @@ class _RenameDialogState extends State<_RenameDialog> {
               decoration: InputDecoration(
                 hintText: 'Group name',
                 hintStyle: AppTextStyles.hint.copyWith(color: colors.ink3),
-                counterStyle: AppTextStyles.metaMonoSm.copyWith(color: colors.ink3),
+                counterStyle: AppTextStyles.metaMonoSm.copyWith(
+                  color: colors.ink3,
+                ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(AppRadii.xs),
                   borderSide: BorderSide(color: colors.line, width: 1.5),
                 ),
-                focusedBorder: OutlineInputBorder(
+                focusedBorder: GlowInputBorder(
                   borderRadius: BorderRadius.circular(AppRadii.xs),
-                  borderSide: BorderSide(color: colors.ink, width: 1.5),
+                  borderSide: BorderSide(color: colors.yel, width: 1.5),
                 ),
               ),
             ),
@@ -534,13 +605,19 @@ class _RenameDialogState extends State<_RenameDialog> {
                 Expanded(
                   child: AppButton(
                     label: 'Cancel',
-                    variant: AppButtonVariant.outline,
+                    variant: AppButtonVariant.secondary,
                     fullWidth: true,
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ),
                 const SizedBox(width: 8),
-                Expanded(child: AppButton(label: 'Save', fullWidth: true, onPressed: _submit)),
+                Expanded(
+                  child: AppButton(
+                    label: 'Save',
+                    fullWidth: true,
+                    onPressed: _submit,
+                  ),
+                ),
               ],
             ),
           ],
@@ -559,7 +636,12 @@ class _PhotoSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    Widget row(IconData icon, String label, _PhotoChoice choice, {bool destructive = false}) {
+    Widget row(
+      IconData icon,
+      String label,
+      _PhotoChoice choice, {
+      bool destructive = false,
+    }) {
       final ink = destructive ? colors.red : colors.ink;
       return InkWell(
         onTap: () => Navigator.of(context).pop(choice),
@@ -569,7 +651,13 @@ class _PhotoSheet extends StatelessWidget {
             children: [
               Icon(icon, size: 20, color: ink),
               const SizedBox(width: 14),
-              Text(label, style: AppTextStyles.bodyMd.copyWith(color: ink, fontWeight: FontWeight.w600)),
+              Text(
+                label,
+                style: AppTextStyles.bodyMd.copyWith(
+                  color: ink,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
         ),
@@ -589,9 +677,19 @@ class _PhotoSheet extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              row(CupertinoIcons.photo_on_rectangle, 'Choose from library', _PhotoChoice.gallery),
+              row(
+                CupertinoIcons.photo_on_rectangle,
+                'Choose from library',
+                _PhotoChoice.gallery,
+              ),
               row(CupertinoIcons.camera, 'Take a photo', _PhotoChoice.camera),
-              if (hasPhoto) row(CupertinoIcons.delete, 'Remove photo', _PhotoChoice.remove, destructive: true),
+              if (hasPhoto)
+                row(
+                  CupertinoIcons.delete,
+                  'Remove photo',
+                  _PhotoChoice.remove,
+                  destructive: true,
+                ),
             ],
           ),
         ),
@@ -603,7 +701,11 @@ class _PhotoSheet extends StatelessWidget {
 /// Picks friends who are not yet in the group. Multi-select for adding;
 /// single-select for an invite card, which goes to one DM at a time.
 class _FriendPickerSheet extends StatefulWidget {
-  const _FriendPickerSheet({required this.title, required this.confirmLabel, required this.single});
+  const _FriendPickerSheet({
+    required this.title,
+    required this.confirmLabel,
+    required this.single,
+  });
 
   final String title;
   final String confirmLabel;
@@ -651,10 +753,30 @@ class _FriendPickerSheetState extends State<_FriendPickerSheet> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(widget.title, style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
+                  Text(
+                    widget.title,
+                    style: AppTextStyles.eyebrow.copyWith(color: colors.ink2),
+                  ),
                   const SizedBox(height: 12),
                   if (state.isLoadingFriends)
-                    const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+                    Column(
+                      children: [
+                        for (final width in const [118.0, 92.0, 136.0, 104.0])
+                          ShimmerListTile(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 8,
+                              horizontal: 4,
+                            ),
+                            avatarSize: 38,
+                            titleWidth: width,
+                            trailing: const ShimmerBox(
+                              width: 22,
+                              height: 22,
+                              borderRadius: 11,
+                            ),
+                          ),
+                      ],
+                    )
                   else if (candidates.isEmpty)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 20),
@@ -662,7 +784,9 @@ class _FriendPickerSheetState extends State<_FriendPickerSheet> {
                         state.friends.isEmpty
                             ? 'Add some friends first — only friends can be picked here.'
                             : 'All of your friends are already in this group.',
-                        style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
+                        style: AppTextStyles.bodySm.copyWith(
+                          color: colors.ink2,
+                        ),
                       ),
                     )
                   else
@@ -672,7 +796,9 @@ class _FriendPickerSheetState extends State<_FriendPickerSheet> {
                         itemCount: candidates.length,
                         itemBuilder: (context, index) => _FriendPickRow(
                           friend: candidates[index],
-                          selected: _selected.contains(candidates[index].userId),
+                          selected: _selected.contains(
+                            candidates[index].userId,
+                          ),
                           onTap: () => _toggle(candidates[index].userId),
                         ),
                       ),
@@ -683,7 +809,9 @@ class _FriendPickerSheetState extends State<_FriendPickerSheet> {
                         ? widget.confirmLabel
                         : '${widget.confirmLabel} (${_selected.length})',
                     fullWidth: true,
-                    onPressed: _selected.isEmpty ? null : () => Navigator.of(context).pop(_selected.toList()),
+                    onPressed: _selected.isEmpty
+                        ? null
+                        : () => Navigator.of(context).pop(_selected.toList()),
                   ),
                 ],
               );
@@ -696,7 +824,11 @@ class _FriendPickerSheetState extends State<_FriendPickerSheet> {
 }
 
 class _FriendPickRow extends StatelessWidget {
-  const _FriendPickRow({required this.friend, required this.selected, required this.onTap});
+  const _FriendPickRow({
+    required this.friend,
+    required this.selected,
+    required this.onTap,
+  });
 
   final FriendshipEntity friend;
   final bool selected;
@@ -705,7 +837,9 @@ class _FriendPickRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    final name = friend.fullName?.trim().isNotEmpty == true ? friend.fullName!.trim() : friend.username;
+    final name = friend.fullName?.trim().isNotEmpty == true
+        ? friend.fullName!.trim()
+        : friend.username;
     return InkWell(
       borderRadius: BorderRadius.circular(AppRadii.xs),
       onTap: onTap,
@@ -713,18 +847,28 @@ class _FriendPickRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         child: Row(
           children: [
-            AppAvatar(initials: name.initials, seed: friend.userId.hashCode.abs(), imageUrl: friend.avatarUrl, size: 38),
+            AppAvatar(
+              initials: name.initials,
+              seed: friend.userId.hashCode.abs(),
+              imageUrl: friend.avatarUrl,
+              size: 38,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.bodyMd.copyWith(color: colors.ink, fontWeight: FontWeight.w600),
+                style: AppTextStyles.bodyMd.copyWith(
+                  color: colors.ink,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             Icon(
-              selected ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.circle,
+              selected
+                  ? CupertinoIcons.checkmark_circle_fill
+                  : CupertinoIcons.circle,
               color: selected ? colors.ink : colors.ink3,
             ),
           ],

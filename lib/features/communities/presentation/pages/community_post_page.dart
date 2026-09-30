@@ -12,17 +12,19 @@ import '../../../../core/utils/formatters.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/app_warning_dialog.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/error_view.dart';
+import '../../../../shared/widgets/input_glow.dart';
 import '../../../../shared/widgets/linked_text.dart';
-import '../../../../shared/widgets/shimmer_loading.dart';
+import '../../../../shared/widgets/send_icon.dart';
 import '../../../feed/domain/entities/comment_entity.dart';
-import '../../../link_preview/presentation/widgets/link_preview_card.dart';
 import '../../../feed/domain/entities/post_entity.dart' show ReactionType;
 import '../../domain/entities/community_post_entity.dart';
 import '../bloc/community_post_cubit.dart';
 import '../widgets/vote_arrow_icon.dart';
+import '../widgets/shimmer_community_comment.dart';
 
 /// One community thread: the post, its comments, and a composer.
 ///
@@ -255,7 +257,11 @@ class _CommunityPostViewState extends State<_CommunityPostView> {
                             ),
                             const SizedBox(height: 10),
                             if (state.status == CommunityPostStatus.loading && state.comments.isEmpty)
-                              const ShimmerListCard()
+                              ...const [
+                                ShimmerCommunityComment(),
+                                ShimmerCommunityComment(handleWidth: 64, lineWidthFactors: [0.8]),
+                                ShimmerCommunityComment(handleWidth: 100, lineWidthFactors: [1, 1, 0.35]),
+                              ]
                             else if (state.status == CommunityPostStatus.error && state.comments.isEmpty)
                               ErrorView(
                                 message: state.errorMessage ?? 'Could not load comments.',
@@ -326,24 +332,14 @@ class _CommunityPostViewState extends State<_CommunityPostView> {
     CommunityPostCubit cubit,
     CommentEntity comment,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete comment?'),
-        content: const Text('Its replies go with it. This cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await AppWarningDialog.show(
+      context,
+      title: 'Delete comment?',
+      message: 'Its replies go with it. This cannot be undone.',
+      confirmLabel: 'Delete',
+      icon: CupertinoIcons.trash,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     await cubit.deleteComment(comment);
   }
 }
@@ -424,7 +420,6 @@ class _ThreadHeader extends StatelessWidget {
           if (post.hasBody) ...[
             const SizedBox(height: 10),
             LinkedText(text: post.body, style: AppTextStyles.body.copyWith(color: colors.ink2)),
-            LinkPreviewList(text: post.body, padding: const EdgeInsets.only(top: 12)),
           ],
           const SizedBox(height: 16),
           Row(
@@ -744,13 +739,10 @@ class _Composer extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Container(
+                child: InputGlow(
+                  fillColor: colors.surf,
+                  borderRadius: BorderRadius.circular(AppRadii.xl),
                   padding: const EdgeInsets.symmetric(horizontal: 14),
-                  decoration: BoxDecoration(
-                    color: colors.surf,
-                    border: Border.all(color: colors.line, width: 1.5),
-                    borderRadius: BorderRadius.circular(AppRadii.xl),
-                  ),
                   child: TextField(
                     controller: controller,
                     focusNode: focusNode,
@@ -769,9 +761,13 @@ class _Composer extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              AppButton(
-                label: isEditing ? 'Save' : 'Post',
-                dense: true,
+              // Same send control as the feed's comment composer and chat:
+              // the paper plane sends, a checkmark saves an edit.
+              AppIconButton(
+                icon: isEditing
+                    ? const Icon(CupertinoIcons.checkmark, semanticLabel: 'Save comment')
+                    : const SendIcon(semanticLabel: 'Post comment'),
+                size: 46,
                 onPressed: state.isPosting ? null : () => onSubmit(),
               ),
             ],

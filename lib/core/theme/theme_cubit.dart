@@ -7,10 +7,10 @@ import 'app_colors.dart';
 
 /// The app's active theme: a palette family crossed with a brightness.
 ///
-/// Two axes rather than one flat list of four, because `MaterialApp` already
+/// Two axes rather than one flat list of six, because `MaterialApp` already
 /// owns the brightness axis — it swaps `theme`/`darkTheme` itself — so only
 /// [flavor] has to be resolved before the themes are built. The Theme screen
-/// still presents the four combinations as four rows; that is a presentation
+/// still presents the six combinations as six rows; that is a presentation
 /// choice, not the shape of the state.
 @immutable
 class ThemeState {

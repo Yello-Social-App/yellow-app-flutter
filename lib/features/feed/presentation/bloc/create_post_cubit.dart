@@ -58,7 +58,9 @@ class CreatePostState extends Equatable {
   int get charCount => text.trim().length;
   bool get isShort => charCount > 0 && charCount < AppConstants.postShortLengthThreshold;
   bool get allChecked => checked.length == kPrePublishChecks.length;
-  bool get canPublish => charCount > 0 && allChecked && status != CreatePostStatus.publishing;
+  /// Text or at least one photo — a photo post's caption is optional.
+  bool get hasContent => charCount > 0 || images.isNotEmpty;
+  bool get canPublish => hasContent && allChecked && status != CreatePostStatus.publishing;
 
   CreatePostState copyWith({
     CreatePostStatus? status,
@@ -137,7 +139,10 @@ class CreatePostCubit extends Cubit<CreatePostState> {
     emit(state.copyWith(status: CreatePostStatus.publishing));
 
     final hashtags = state.pickedTags.map((t) => '#$t').join(' ');
-    final content = hashtags.isEmpty ? state.text : '${state.text}\n\n$hashtags';
+    final text = state.text.trim();
+    // No blank-line separator when there's no caption, or a photo-only post
+    // would lead with two empty lines before its hashtags.
+    final content = hashtags.isEmpty ? text : (text.isEmpty ? hashtags : '$text\n\n$hashtags');
 
     final result = await _createPost(
       CreatePostParams(content: content, visibility: state.visibility, images: state.images),

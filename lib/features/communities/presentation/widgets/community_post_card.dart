@@ -112,9 +112,6 @@ class CommunityPostCard extends StatelessWidget {
                     ),
                     if (post.hasBody) ...[
                       const SizedBox(height: 6),
-                      // Links open; no preview card on the row itself, which
-                      // is a three-line teaser inside a list. The post's own
-                      // screen carries the cards.
                       LinkedText(
                         text: post.body,
                         maxLines: 3,

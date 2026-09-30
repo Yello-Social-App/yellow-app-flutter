@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../extensions/context_extension.dart';
 
 /// The six background/foreground pairs the design cycles avatars through
 /// (`AV` in the `.dc.html` source's component script). Literal design
@@ -91,6 +92,7 @@ class AppAvatar extends StatelessWidget {
                       .round(),
                 ),
                 fit: BoxFit.cover,
+                colorFilter: ColorFilter.mode(context.imageBackdrop, BlendMode.dstOver),
               )
             : null,
       ),

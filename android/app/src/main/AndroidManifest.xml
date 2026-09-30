@@ -5,6 +5,13 @@
          notification instead of showing it. PushNotificationService
          requests it via FirebaseMessaging.instance.requestPermission(). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Incoming calls (core/notifications/call_alert.dart): lets the ring
+         wake a locked phone instead of waiting as a tray entry. Granted at
+         install for a sideloaded APK; Android 14+ lets the user revoke it,
+         and then the ring falls back to a heads-up notification. The
+         activity is deliberately NOT showWhenLocked — Accept asks for an
+         unlock rather than opening the app over the keyguard. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
     <!-- Yello is installed from an APK rather than from a store, so it
          fetches and installs its own updates (ADR-029). This lets the app
          ask the OS package installer to open the build it downloaded; the
@@ -16,6 +23,29 @@
          rather than on the way into the chat, so a user who never sends one
          is never asked. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- Calls (features/call, over LiveKit/WebRTC). CAMERA and RECORD_AUDIO
+         are asked for by WebRTC itself when a call first publishes them; the
+         rest are install-time. Audio settings and Bluetooth let LiveKit route
+         call audio between earpiece, speaker and a headset; the network
+         state pair lets WebRTC pick and switch interfaces. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <!-- CallService: without a microphone-type foreground service Android
+         silences the mic once the app leaves the screen, which a screen
+         timing out mid-call is enough to do. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+    <!-- CallService again, while the user shares their screen in a call:
+         Android hands out a screen capture only to an app running a
+         mediaProjection-type foreground service. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
+    <!-- A phone without a camera can still make and take audio calls. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
         android:label="Yello."
         android:name="${applicationName}"
@@ -59,6 +89,13 @@
         <receiver
             android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"
             android:exported="false" />
+        <!-- Keeps a call's microphone alive off screen, and carries a screen
+             share; see CallService.kt. The types must cover everything the
+             service passes to startForeground. -->
+        <service
+            android:name=".CallService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|mediaProjection" />
         <!-- Hands the downloaded APK to the package installer, which is a
              different app and cannot read Yello's private cache without a
              content URI. Authority must match MainActivity.kt's

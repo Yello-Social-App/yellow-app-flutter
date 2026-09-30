@@ -54,7 +54,7 @@ class ErrorView extends StatelessWidget {
               const SizedBox(height: 16),
               AppButton(
                 label: 'Retry',
-                variant: AppButtonVariant.outline,
+                variant: AppButtonVariant.secondary,
                 onPressed: onRetry,
                 dense: true,
               ),
@@ -66,12 +66,16 @@ class ErrorView extends StatelessWidget {
   }
 }
 
-/// Dashed empty-state card ("CAUGHT UP", "NOTHING SAVED YET", etc).
+/// Dashed empty-state card ("CAUGHT UP", "NOTHING SAVED YET", etc) — the one
+/// empty state for every list, thread and sheet in the app.
 class EmptyStateCard extends StatelessWidget {
-  const EmptyStateCard({super.key, required this.title, required this.hint});
+  const EmptyStateCard({super.key, required this.title, required this.hint, this.action});
 
   final String title;
   final String hint;
+
+  /// Optional call to action under the hint (e.g. "Create a sticker").
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -109,6 +113,10 @@ class EmptyStateCard extends StatelessWidget {
             textAlign: TextAlign.center,
             style: AppTextStyles.bodySm.copyWith(color: colors.ink3),
           ),
+          if (action case final action?) ...[
+            const SizedBox(height: 16),
+            action,
+          ],
         ],
       ),
     );

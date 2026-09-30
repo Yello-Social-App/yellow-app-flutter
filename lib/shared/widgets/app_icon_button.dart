@@ -27,24 +27,14 @@ class AppIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    return Material(
-      color: backgroundColor ?? (filled ? colors.yel : colors.surf),
-      shape: CircleBorder(
-        side: BorderSide(color: borderColor ?? colors.line, width: 1.5),
-      ),
-      child: InkWell(
-        onTap: onPressed,
-        customBorder: const CircleBorder(),
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: IconTheme(
-            data: IconThemeData(
-              color: iconColor ?? colors.ink,
-              size: size * 0.4,
-            ),
-            child: Center(child: icon),
-          ),
+    return InkWell(
+      onTap: onPressed,
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: IconTheme(
+          data: IconThemeData(color: iconColor ?? colors.ink, size: size * 0.5),
+          child: Center(child: icon),
         ),
       ),
     );

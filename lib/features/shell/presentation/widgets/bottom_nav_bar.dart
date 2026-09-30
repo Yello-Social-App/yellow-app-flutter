@@ -4,10 +4,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_style.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../features/chat/presentation/bloc/messages_cubit.dart';
 import '../../../../features/feed/presentation/bloc/feed_cubit.dart';
 import '../../../../shared/extensions/string_extension.dart';
+import '../../../../shared/widgets/active_tab_indicator_painter.dart';
 import '../../../../shared/widgets/app_avatar.dart';
 
 /// The bottom nav: Feed, Explore, a raised "+" create button, Inbox, then
@@ -92,6 +94,7 @@ class BottomNavBar extends StatelessWidget {
     // gap of page background showing underneath it.
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     final c = AppColors.of(context);
+    final style = AppStyle.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -99,7 +102,12 @@ class BottomNavBar extends StatelessWidget {
         // A neutral hairline rather than the old yellow tint — the same
         // divider token the app's surfaces already use elsewhere, since a
         // pale yellow line barely shows up against either background.
-        border: Border(top: BorderSide(color: c.line2)),
+        //
+        // Ink outline swaps both for a drawn 2px ink rule and no blur: the bar
+        // sits on the page like every other outlined surface (ADR-050).
+        border: Border(
+          top: style.outlined ? BorderSide(color: c.ink, width: style.borderWidth) : BorderSide(color: c.line2),
+        ),
         // Floats the bar above the page content now that the page
         // background is flat and near-tonal with the bar (see
         // `AppColors.light.bg` / `AppColors.dark.bg`) — a
@@ -113,15 +121,17 @@ class BottomNavBar extends StatelessWidget {
         // crash this app hit elsewhere (see `_ProfileAvatarIcon`'s doc
         // comment). Still unverified on-device since there's no emulator in
         // this sandbox.
-        boxShadow: [
-          BoxShadow(
-            // Always a black scrim, never the ink token — `ink` is near-white
-            // in dark mode, which would turn this into a glow.
-            color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.08),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
-          ),
-        ],
+        boxShadow: style.outlined
+            ? null
+            : [
+                BoxShadow(
+                  // Always a black scrim, never the ink token — `ink` is near-white
+                  // in dark mode, which would turn this into a glow.
+                  color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.08),
+                  blurRadius: 16,
+                  offset: const Offset(0, -4),
+                ),
+              ],
       ),
       child: SizedBox(
         height: _barHeight + bottomInset,
@@ -143,10 +153,9 @@ class BottomNavBar extends StatelessWidget {
                     height: _barHeight,
                     child: IgnorePointer(
                       child: CustomPaint(
-                        painter: _ActiveTabIndicatorPainter(
+                        painter: ActiveTabIndicatorPainter(
                           selectedCenter: animatedCenter,
                           slotWidth: slotWidth,
-                          barHeight: _barHeight,
                           color: c.yel,
                         ),
                       ),
@@ -183,24 +192,33 @@ class BottomNavBar extends StatelessWidget {
                             child: Semantics(
                               label: 'Create post',
                               button: true,
-                              child: Material(
-                                color: _yel,
-                                shape: const CircleBorder(
-                                  side: BorderSide(
-                                    color: Color.fromARGB(157, 155, 152, 146),
-                                    width: 1.8,
-                                  ),
+                              // Ink outline draws the brand button like its
+                              // other buttons: ink edge, ink glyph, hard
+                              // shadow. The soft look keeps its cream ring.
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  boxShadow: style.hardShadow(c, AppStyle.buttonOffset),
                                 ),
-                                child: InkWell(
-                                  onTap: onCreate,
-                                  customBorder: const CircleBorder(),
-                                  child: const SizedBox(
-                                    width: 45,
-                                    height: 45,
-                                    child: Icon(
-                                      CupertinoIcons.add,
-                                      color: _onYelGlyph,
-                                      size: 22,
+                                child: Material(
+                                  color: _yel,
+                                  shape: CircleBorder(
+                                    side: BorderSide(
+                                      color: style.outlined ? c.ink : _onYelGlyph,
+                                      width: style.outlined ? style.borderWidth : 1.8,
+                                    ),
+                                  ),
+                                  child: InkWell(
+                                    onTap: onCreate,
+                                    customBorder: const CircleBorder(),
+                                    child: SizedBox(
+                                      width: 45,
+                                      height: 45,
+                                      child: Icon(
+                                        CupertinoIcons.add,
+                                        color: style.outlined ? c.onYel : _onYelGlyph,
+                                        size: 22,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -214,7 +232,7 @@ class BottomNavBar extends StatelessWidget {
                             bloc: sl<MessagesCubit>(),
                             builder: (context, state) => _NavItem(
                               icon: CupertinoIcons.bubble_left,
-                              label: 'Inbox',
+                              label: 'Chat',
                               active: currentIndex == 2,
                               dot: state.unreadTotal > 0,
                               onTap: () => onTabSelected(2),
@@ -411,82 +429,5 @@ class _ProfileAvatarIcon extends StatelessWidget {
         borderWidth: 1,
       ),
     );
-  }
-}
-
-/// Paints the active-tab indicator: a short accent line sitting on the
-/// bar's top edge above the selected slot, topped with a small arrowhead
-/// that pops down from the line toward that tab's icon.
-class _ActiveTabIndicatorPainter extends CustomPainter {
-  const _ActiveTabIndicatorPainter({
-    required this.selectedCenter,
-    required this.slotWidth,
-    required this.barHeight,
-    required this.color,
-  });
-
-  final double selectedCenter;
-  final double slotWidth;
-  final double barHeight;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const outerInset = 2.0;
-    // `size.height` is normally just `barHeight` (the CustomPaint is sized
-    // to exactly the icon row's Positioned box, not the bar's full height
-    // with its safe-area filler below) — `barTop` stays here so this still
-    // centers correctly if that ever changes.
-    final barTop = (size.height - barHeight) / 2;
-    final topY = barTop + outerInset;
-
-    final lineHalfWidth = slotWidth * .2;
-    final lineStart = Offset(selectedCenter - lineHalfWidth, topY);
-    final lineEnd = Offset(selectedCenter + lineHalfWidth, topY);
-
-    final glowLinePaint = Paint()
-      ..color = color.withValues(alpha: .5)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 5.5
-      ..strokeCap = StrokeCap.round
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-    final linePaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.6
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawLine(lineStart, lineEnd, glowLinePaint);
-    canvas.drawLine(lineStart, lineEnd, linePaint);
-
-    // Small arrowhead sitting on the line, tip pointing down toward the icon
-    // — base overlaps the line slightly so it reads as popping down out of
-    // it.
-    const arrowHalfWidth = 5.0;
-    const arrowHeight = 6.0;
-    final arrowBaseY = topY + 1;
-    final arrowTipY = arrowBaseY + arrowHeight;
-    final arrowPath = Path()
-      ..moveTo(selectedCenter - arrowHalfWidth, arrowBaseY)
-      ..lineTo(selectedCenter, arrowTipY)
-      ..lineTo(selectedCenter + arrowHalfWidth, arrowBaseY)
-      ..close();
-
-    canvas.drawPath(
-      arrowPath,
-      Paint()
-        ..color = color.withValues(alpha: .55)
-        ..style = PaintingStyle.fill
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
-    );
-    canvas.drawPath(arrowPath, Paint()..color = color);
-  }
-
-  @override
-  bool shouldRepaint(covariant _ActiveTabIndicatorPainter oldDelegate) {
-    return oldDelegate.selectedCenter != selectedCenter ||
-        oldDelegate.slotWidth != slotWidth ||
-        oldDelegate.barHeight != barHeight ||
-        oldDelegate.color != color;
   }
 }

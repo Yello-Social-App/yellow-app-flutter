@@ -18,33 +18,29 @@
 /// exact steps. `appLogo.png` itself is bundled as a Flutter asset (matches
 /// `pubspec.yaml`'s `assets:` glob) but nothing in `lib/` reads it.
 ///
-/// [circleIcon] IS actively read: `FeedPage._Header` renders it (full color,
-/// not tinted — it's a two-tone ink/yellow mark already matching the brand
-/// palette) as a header button next to search that opens the **Circle**
-/// (friends) branch (index 1) — despite once also being reused as the
-/// Profile tab's icon inside `BottomNavBar` (a different, unrelated button;
-/// see that file's doc comment), this asset's filename always did genuinely
-/// mean the Circle/friends feature here, which is why it landed on this
-/// button for good. Circle's branch has no bottom-nav slot of its own (see
-/// `BottomNavBar`'s doc comment for why), so this header button is
-/// currently the app's only real nav entry point into it.
+/// [circleIcon] is the Feed header's button into the **Circle** (friends)
+/// branch (index 1). It left the header for a while (ADR-043) and came back
+/// in Inbox's slot (ADR-044). The filename genuinely means the Circle/friends
+/// feature (it was once also borrowed as the Profile tab's icon in
+/// `BottomNavBar`, an unrelated button).
 abstract final class AssetConstants {
   static const String iconDir = 'assets/icons/';
   static const String imageDir = 'assets/images/';
   static const String splashLogo = 'assets/icons/appLogo.png';
   static const String circleIcon = 'assets/icons/Circle.png';
 
-  /// The `_SignalsAction` (feed app bar) glyph, in place of the
-  /// `Icons.favorite_border` Material icon it used to be. [notificationIcon]
-  /// is the resting state (no unread) — the source gif's first frame,
-  /// extracted as a still PNG. [notificationIconActive] only plays while
-  /// there is an unread notification: the source `anime_notification (1).gif`
-  /// at its native speed, followed by ~1.2s held on the resting frame before
-  /// it loops, so it reads as a deliberate ring-then-rest beat rather than
-  /// looping back-to-back with no breathing room. Built once with ffmpeg
-  /// concat (original frames + the held still), not a raw re-export.
-  static const String notificationIcon = 'assets/icons/anime_notification_static.png';
-  static const String notificationIconActive = 'assets/icons/anime_notification_paused.gif';
+  /// Transparent Signals bells: black for light themes, white for dark.
+  /// Unread notifications play a gentle ring, then rest for 1.6 seconds.
+  /// PNGs share the GIFs' resting geometry. Regenerate with
+  /// `python tool/generate_notification_bells.py` (requires Pillow).
+  static const String notificationIcon =
+      'assets/icons/notification_bell_black.png';
+  static const String notificationIconActive =
+      'assets/icons/notification_bell_black.gif';
+  static const String notificationIconDark =
+      'assets/icons/notification_bell_white.png';
+  static const String notificationIconActiveDark =
+      'assets/icons/notification_bell_white.gif';
 
   /// Community thread vote arrows, as four authored PNGs rather than Material
   /// glyphs: outline for "not voted", filled for the direction the viewer
@@ -57,7 +53,7 @@ abstract final class AssetConstants {
   /// "tidied" lowercase path here would load fine locally and throw on
   /// device.
   static const String voteUpArrow = 'assets/icons/vote_up_arrow.png';
-  static const String voteUpArrowActive = 'assets/icons/voted_up_arrow.png';
   static const String voteDownArrow = 'assets/icons/vote_down_arrow.png';
+  static const String voteUpArrowActive = 'assets/icons/voted_up_arrow.png';
   static const String voteDownArrowActive = 'assets/icons/voted_down_Arrow.png';
 }

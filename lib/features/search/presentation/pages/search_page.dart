@@ -13,6 +13,7 @@ import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/error_view.dart';
+import '../../../../shared/widgets/input_glow.dart';
 import '../../../feed/domain/entities/reactor_entity.dart'
     show FriendRelationStatus;
 import '../../domain/entities/user_search_result_entity.dart';
@@ -89,13 +90,10 @@ class _SearchViewState extends State<_SearchView> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Container(
+                    child: InputGlow(
+                      fillColor: colors.surf,
+                      borderRadius: BorderRadius.circular(AppRadii.pill),
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: colors.surf,
-                        border: Border.all(color: colors.line, width: 1.5),
-                        borderRadius: BorderRadius.circular(AppRadii.pill),
-                      ),
                       child: Row(
                         children: [
                           Expanded(

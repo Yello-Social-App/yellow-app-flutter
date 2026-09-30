@@ -9,8 +9,10 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
+import '../../../../shared/widgets/error_view.dart';
 import '../../domain/entities/post_entity.dart';
 import '../bloc/reactors_cubit.dart';
+import '../../../../shared/widgets/shimmer_loading.dart';
 
 /// Opens the paginated "who reacted" list — reached by tapping a row in
 /// `showReactionBreakdownSheet`. [type] null means "everyone regardless of
@@ -95,7 +97,18 @@ class _ReactorsSheetBodyState extends State<_ReactorsSheetBody> {
             child: BlocBuilder<ReactorsCubit, ReactorsState>(
               builder: (context, state) {
                 if (state.status == ReactorsStatus.loading) {
-                  return const Center(child: CircularProgressIndicator());
+                  return ListView(
+                    physics: const NeverScrollableScrollPhysics(),
+                    children: [
+                      for (final width in const [112.0, 86.0, 128.0, 98.0, 120.0])
+                        ShimmerListTile(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          gap: 16,
+                          titleWidth: width,
+                          trailing: const ShimmerBox(width: 22, height: 22, borderRadius: 11),
+                        ),
+                    ],
+                  );
                 }
                 if (state.status == ReactorsStatus.error && state.reactors.isEmpty) {
                   return Center(
@@ -103,8 +116,9 @@ class _ReactorsSheetBodyState extends State<_ReactorsSheetBody> {
                   );
                 }
                 if (state.reactors.isEmpty) {
-                  return Center(
-                    child: Text('No reactions yet.', style: AppTextStyles.body.copyWith(color: colors.ink2)),
+                  return const SingleChildScrollView(
+                    padding: EdgeInsets.all(16),
+                    child: EmptyStateCard(title: 'NO REACTIONS YET', hint: 'Reactions on this post show up here.'),
                   );
                 }
                 return ListView.builder(

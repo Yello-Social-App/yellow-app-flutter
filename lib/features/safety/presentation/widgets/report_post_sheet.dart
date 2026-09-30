@@ -7,6 +7,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/glow_border.dart';
 import '../../domain/entities/post_report_entity.dart';
 import '../../domain/usecases/safety_usecases.dart';
 import '../bloc/report_post_cubit.dart';
@@ -113,6 +114,10 @@ class _ReportPostSheetState extends State<_ReportPostSheet> {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppRadii.lg),
                     borderSide: BorderSide(color: colors.line, width: 1.5),
+                  ),
+                  focusedBorder: GlowInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadii.lg),
+                    borderSide: BorderSide(color: colors.yel, width: 1.5),
                   ),
                 ),
               ),

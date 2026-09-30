@@ -7,12 +7,12 @@ import '../../../../core/di/injection.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/error_view.dart';
 import '../../../feed/domain/entities/post_entity.dart';
 import '../../../feed/presentation/widgets/post_card.dart';
 import '../bloc/shared_posts_cubit.dart';
+import '../../../../shared/widgets/shimmer_loading.dart';
 
 /// Full-screen list of the signed-in user's shared (reposted) posts —
 /// pushed from Profile's stats row (see `profile_page.dart`'s Shared
@@ -61,7 +61,11 @@ class _SharedPostsView extends StatelessWidget {
               child: BlocBuilder<SharedPostsCubit, SharedPostsState>(
                 builder: (context, state) {
                   return switch (state.status) {
-                    SharedPostsStatus.loading => const Center(child: CircularProgressIndicator()),
+                    SharedPostsStatus.loading => ListView(
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
+                      children: const [ShimmerPostCard(), ShimmerPostCard(hasImage: false)],
+                    ),
                     SharedPostsStatus.error => Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24),
@@ -71,27 +75,12 @@ class _SharedPostsView extends StatelessWidget {
                         ),
                       ),
                     ),
-                    SharedPostsStatus.loaded when state.posts.isEmpty => Center(
+                    SharedPostsStatus.loaded when state.posts.isEmpty => const Center(
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: colors.line, width: 1.5),
-                            borderRadius: BorderRadius.circular(AppRadii.xl),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text('NOTHING SHARED YET', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Repost something from your feed and it lands here.',
-                                textAlign: TextAlign.center,
-                                style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
-                              ),
-                            ],
-                          ),
+                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+                        child: EmptyStateCard(
+                          title: 'NOTHING SHARED YET',
+                          hint: 'Repost something from your feed and it lands here.',
                         ),
                       ),
                     ),

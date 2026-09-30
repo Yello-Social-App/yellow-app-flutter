@@ -10,11 +10,15 @@ import '../../../../core/di/injection.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/extensions/context_extension.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
+import '../../../../shared/widgets/glow_border.dart';
 import '../../../../shared/widgets/image_placeholder.dart';
+import '../../../../shared/widgets/input_glow.dart';
+import '../../../../shared/widgets/send_icon.dart';
 import '../../domain/entities/post_entity.dart';
 import '../bloc/create_post_cubit.dart';
 import '../bloc/feed_cubit.dart';
@@ -24,7 +28,10 @@ class CreatePostPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(create: (_) => sl<CreatePostCubit>(), child: const _CreatePostView());
+    return BlocProvider(
+      create: (_) => sl<CreatePostCubit>(),
+      child: const _CreatePostView(),
+    );
   }
 }
 
@@ -48,7 +55,10 @@ class _CreatePostViewState extends State<_CreatePostView> {
   Future<void> _pickImages(CreatePostCubit cubit) async {
     final remaining = AppConstants.postMaxImages - cubit.state.images.length;
     if (remaining <= 0) {
-      AppStatusSnackbar.showError(context, message: 'You can attach up to ${AppConstants.postMaxImages} photos.');
+      AppStatusSnackbar.showError(
+        context,
+        message: 'You can attach up to ${AppConstants.postMaxImages} photos.',
+      );
       return;
     }
     final picked = await _picker.pickMultiImage(
@@ -57,15 +67,22 @@ class _CreatePostViewState extends State<_CreatePostView> {
       maxHeight: AppConstants.postImageMaxDimension,
       limit: remaining,
     );
-    if (picked.isNotEmpty) cubit.addImages(picked.map((x) => File(x.path)).toList());
+    if (picked.isNotEmpty)
+      cubit.addImages(picked.map((x) => File(x.path)).toList());
   }
 
   void _notAvailableYet(String label) {
-    AppStatusSnackbar.showError(context, message: '$label attachments aren\'t available yet.');
+    AppStatusSnackbar.showError(
+      context,
+      message: '$label attachments aren\'t available yet.',
+    );
   }
 
   Future<void> _addTag(CreatePostCubit cubit) async {
-    final tag = await showDialog<String>(context: context, builder: (_) => const _AddTagDialog());
+    final tag = await showDialog<String>(
+      context: context,
+      builder: (_) => const _AddTagDialog(),
+    );
     if (tag != null && tag.trim().isNotEmpty) cubit.addTag(tag);
   }
 
@@ -81,13 +98,18 @@ class _CreatePostViewState extends State<_CreatePostView> {
 
     return BlocListener<CreatePostCubit, CreatePostState>(
       listenWhen: (prev, curr) =>
-          curr.status == CreatePostStatus.published || curr.status == CreatePostStatus.error,
+          curr.status == CreatePostStatus.published ||
+          curr.status == CreatePostStatus.error,
       listener: (context, state) {
         if (state.status == CreatePostStatus.error) {
-          AppStatusSnackbar.showError(context, message: state.errorMessage ?? 'Could not publish your post.');
+          AppStatusSnackbar.showError(
+            context,
+            message: state.errorMessage ?? 'Could not publish your post.',
+          );
           return;
         }
-        if (state.publishedPost != null) sl<FeedCubit>().prependPost(state.publishedPost!);
+        if (state.publishedPost != null)
+          sl<FeedCubit>().prependPost(state.publishedPost!);
         Navigator.of(context).maybePop();
       },
       child: Scaffold(
@@ -112,7 +134,9 @@ class _CreatePostViewState extends State<_CreatePostView> {
                           child: Row(
                             children: [
                               AppAvatar(
-                                initials: me == null ? '' : (me.fullName ?? me.username).initials,
+                                initials: me == null
+                                    ? ''
+                                    : (me.fullName ?? me.username).initials,
                                 seed: me == null ? 0 : avatarSeedForId(me.id),
                                 imageUrl: me?.avatarUrl,
                                 size: 44,
@@ -123,13 +147,19 @@ class _CreatePostViewState extends State<_CreatePostView> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      me == null ? 'You' : (me.fullName ?? me.username),
-                                      style: AppTextStyles.titleMd.copyWith(color: colors.ink),
+                                      me == null
+                                          ? 'You'
+                                          : (me.fullName ?? me.username),
+                                      style: AppTextStyles.titleMd.copyWith(
+                                        color: colors.ink,
+                                      ),
                                     ),
                                     const SizedBox(height: 6),
                                     Text(
                                       'POSTING AS YOURSELF',
-                                      style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
+                                      style: AppTextStyles.metaMono.copyWith(
+                                        color: colors.ink2,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -147,7 +177,11 @@ class _CreatePostViewState extends State<_CreatePostView> {
                             ])
                               Expanded(
                                 child: Padding(
-                                  padding: EdgeInsets.only(right: a.$1 == PostVisibility.private ? 0 : 7),
+                                  padding: EdgeInsets.only(
+                                    right: a.$1 == PostVisibility.private
+                                        ? 0
+                                        : 7,
+                                  ),
                                   child: _AudienceButton(
                                     icon: a.$2,
                                     label: a.$3,
@@ -159,13 +193,10 @@ class _CreatePostViewState extends State<_CreatePostView> {
                           ],
                         ),
                         _SectionLabel('YOUR WORDS'),
-                        Container(
+                        InputGlow(
+                          fillColor: colors.surf,
+                          borderRadius: BorderRadius.circular(AppRadii.xl),
                           padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: colors.surf,
-                            border: Border.all(color: colors.line, width: 1.5),
-                            borderRadius: BorderRadius.circular(AppRadii.xl),
-                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -174,27 +205,47 @@ class _CreatePostViewState extends State<_CreatePostView> {
                                 maxLines: 5,
                                 minLines: 4,
                                 onChanged: cubit.setText,
-                                style: AppTextStyles.body.copyWith(fontSize: 18, color: colors.ink),
+                                style: AppTextStyles.body.copyWith(
+                                  fontSize: 18,
+                                  color: colors.ink,
+                                ),
                                 decoration: InputDecoration(
                                   border: InputBorder.none,
                                   hintText:
                                       'What ur\'s stories today? Take your time this one cuz '
                                       'stays on your profile.',
-                                  hintStyle: AppTextStyles.body.copyWith(fontSize: 18, color: colors.ink3),
+                                  hintStyle: AppTextStyles.body.copyWith(
+                                    fontSize: 18,
+                                    color: colors.ink3,
+                                  ),
                                 ),
                               ),
-                              Container(height: 1, color: colors.line2, margin: const EdgeInsets.only(bottom: 12)),
+                              Container(
+                                height: 1,
+                                color: colors.line2,
+                                margin: const EdgeInsets.only(bottom: 12),
+                              ),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     '${state.charCount} CHARACTERS',
-                                    style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
+                                    style: AppTextStyles.metaMono.copyWith(
+                                      color: colors.ink2,
+                                    ),
                                   ),
                                   Text(
-                                    state.charCount == 0 ? 'EMPTY' : (state.isShort ? 'SHORT' : 'GOOD LENGTH'),
+                                    state.charCount == 0
+                                        ? (state.images.isEmpty ? 'EMPTY' : 'CAPTION OPTIONAL')
+                                        : (state.isShort
+                                              ? 'SHORT'
+                                              : 'GOOD LENGTH'),
                                     style: AppTextStyles.metaMono.copyWith(
-                                      color: state.charCount > 0 && !state.isShort ? colors.grn : colors.ink2,
+                                      color:
+                                          state.charCount > 0 && !state.isShort
+                                          ? colors.grn
+                                          : colors.ink2,
                                     ),
                                   ),
                                 ],
@@ -208,35 +259,72 @@ class _CreatePostViewState extends State<_CreatePostView> {
                           onAddMore: () => _pickImages(cubit),
                           onRemoveAt: cubit.removeImageAt,
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 15),
                         Row(
                           children: [
                             for (final t in [
-                              (CupertinoIcons.camera, 'Photos', () => _pickImages(cubit)),
-                              (CupertinoIcons.videocam, 'Video', () => _notAvailableYet('Video')),
-                              (CupertinoIcons.location, 'Place', () => _notAvailableYet('Place')),
-                              (CupertinoIcons.smiley, 'Feel', () => _notAvailableYet('Feel')),
+                              (
+                                CupertinoIcons.camera,
+                                'Photos',
+                                () => _pickImages(cubit),
+                              ),
+                              (
+                                CupertinoIcons.videocam,
+                                'Video',
+                                () => _notAvailableYet('Video'),
+                              ),
+                              (
+                                CupertinoIcons.location,
+                                'Place',
+                                () => _notAvailableYet('Place'),
+                              ),
+                              (
+                                CupertinoIcons.smiley,
+                                'Feel',
+                                () => _notAvailableYet('Feel'),
+                              ),
                             ])
                               Expanded(
                                 child: Padding(
-                                  padding: EdgeInsets.only(right: t.$2 == 'Feel' ? 0 : 8),
+                                  padding: EdgeInsets.only(
+                                    right: t.$2 == 'Feel' ? 0 : 8,
+                                  ),
                                   child: Material(
                                     color: colors.surf,
-                                    borderRadius: BorderRadius.circular(AppRadii.md),
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadii.md,
+                                    ),
                                     child: InkWell(
-                                      borderRadius: BorderRadius.circular(AppRadii.md),
+                                      borderRadius: BorderRadius.circular(
+                                        AppRadii.md,
+                                      ),
                                       onTap: t.$3,
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 12,
+                                        ),
                                         decoration: BoxDecoration(
-                                          border: Border.all(color: colors.line, width: 1.5),
-                                          borderRadius: BorderRadius.circular(AppRadii.md),
+                                          border: Border.all(
+                                            color: colors.line,
+                                            width: 1.5,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            AppRadii.md,
+                                          ),
                                         ),
                                         child: Column(
                                           children: [
-                                            Icon(t.$1, size: 18, color: colors.ink),
+                                            Icon(
+                                              t.$1,
+                                              size: 18,
+                                              color: colors.ink,
+                                            ),
                                             const SizedBox(height: 8),
-                                            Text(t.$2, style: AppTextStyles.metaMono.copyWith(color: colors.ink2)),
+                                            Text(
+                                              t.$2,
+                                              style: AppTextStyles.metaMono
+                                                  .copyWith(color: colors.ink2),
+                                            ),
                                           ],
                                         ),
                                       ),
@@ -254,7 +342,10 @@ class _CreatePostViewState extends State<_CreatePostView> {
                             // The suggested pool plus any tag the user typed
                             // in via "Add tag" that isn't already in it —
                             // `{...}` de-dupes and keeps pool order first.
-                            for (final tag in {...kTagPool, ...state.pickedTags})
+                            for (final tag in {
+                              ...kTagPool,
+                              ...state.pickedTags,
+                            })
                               _TagChip(
                                 label: '#$tag',
                                 selected: state.pickedTags.contains(tag),
@@ -274,18 +365,33 @@ class _CreatePostViewState extends State<_CreatePostView> {
                           child: Column(
                             children: [
                               Container(
-                                padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  14,
+                                  16,
+                                  12,
+                                ),
                                 decoration: BoxDecoration(
-                                  border: Border(bottom: BorderSide(color: colors.line2)),
+                                  border: Border(
+                                    bottom: BorderSide(color: colors.line2),
+                                  ),
                                 ),
                                 child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text('BEFORE YOU POST', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
+                                    Text(
+                                      'BEFORE YOU POST',
+                                      style: AppTextStyles.eyebrow.copyWith(
+                                        color: colors.ink2,
+                                      ),
+                                    ),
                                     Text(
                                       '${state.checked.length} OF ${kPrePublishChecks.length}',
                                       style: AppTextStyles.metaMono.copyWith(
-                                        color: state.allChecked ? colors.grn : colors.ink2,
+                                        color: state.allChecked
+                                            ? colors.grn
+                                            : colors.ink2,
                                       ),
                                     ),
                                   ],
@@ -307,7 +413,9 @@ class _CreatePostViewState extends State<_CreatePostView> {
                             'Posts stay on your profile until you remove them. Stories '
                             'disappear after 24 hours — use the story button on the feed for '
                             'something quick.',
-                            style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
+                            style: AppTextStyles.bodySm.copyWith(
+                              color: colors.ink2,
+                            ),
                           ),
                         ),
                       ],
@@ -329,7 +437,11 @@ class _CreatePostViewState extends State<_CreatePostView> {
 /// deck you flip through rather than a filmstrip. Swipe left/right cycles
 /// the front card through the whole selection, looping at both ends.
 class _MediaCardStack extends StatefulWidget {
-  const _MediaCardStack({required this.images, required this.onAddMore, required this.onRemoveAt});
+  const _MediaCardStack({
+    required this.images,
+    required this.onAddMore,
+    required this.onRemoveAt,
+  });
 
   final List<File> images;
   final VoidCallback onAddMore;
@@ -419,7 +531,10 @@ class _MediaCardStackState extends State<_MediaCardStack> {
                   duration: const Duration(milliseconds: 220),
                   transitionBuilder: (child, animation) => FadeTransition(
                     opacity: animation,
-                    child: ScaleTransition(scale: Tween(begin: 0.94, end: 1.0).animate(animation), child: child),
+                    child: ScaleTransition(
+                      scale: Tween(begin: 0.94, end: 1.0).animate(animation),
+                      child: child,
+                    ),
                   ),
                   child: Container(
                     key: ValueKey(images[_index].path),
@@ -427,7 +542,6 @@ class _MediaCardStackState extends State<_MediaCardStack> {
                     height: _height,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(AppRadii.xl),
-                      border: Border.all(color: colors.ink, width: 1.5),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.18),
@@ -436,31 +550,46 @@ class _MediaCardStackState extends State<_MediaCardStack> {
                         ),
                       ],
                     ),
+                    // In the foreground: the photo runs edge to edge, and a
+                    // border in `decoration` is painted under it (docs/GOTCHAS.md).
+                    foregroundDecoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppRadii.xl),
+                      border: Border.all(color: colors.ink, width: 1.5),
+                    ),
                     clipBehavior: Clip.antiAlias,
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        Image.file(images[_index], fit: BoxFit.cover),
+                        Image.file(images[_index], fit: BoxFit.cover, color: context.imageBackdrop, colorBlendMode: BlendMode.dstOver),
                         if (images.length > 1)
                           Positioned(
                             top: 8,
                             left: 8,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.black.withValues(alpha: 0.55),
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(
                                 '${_index + 1}/${images.length}',
-                                style: AppTextStyles.metaMono.copyWith(color: Colors.white, fontSize: 11),
+                                style: AppTextStyles.metaMono.copyWith(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                ),
                               ),
                             ),
                           ),
                         Positioned(
                           top: 8,
                           right: 8,
-                          child: _RoundIconButton(icon: CupertinoIcons.xmark, onTap: () => widget.onRemoveAt(_index)),
+                          child: _RoundIconButton(
+                            icon: CupertinoIcons.xmark,
+                            onTap: () => widget.onRemoveAt(_index),
+                          ),
                         ),
                         if (images.length < AppConstants.postMaxImages)
                           Positioned(
@@ -514,10 +643,21 @@ class _PeekCard extends StatelessWidget {
             height: height,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppRadii.xl),
-              border: Border.all(color: Colors.black.withValues(alpha: 0.15), width: 1.5),
+            ),
+            foregroundDecoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadii.xl),
+              border: Border.all(
+                color: Colors.black.withValues(alpha: 0.15),
+                width: 1.5,
+              ),
             ),
             clipBehavior: Clip.antiAlias,
-            child: Image.file(image, fit: BoxFit.cover),
+            child: Image.file(
+              image,
+              fit: BoxFit.cover,
+              color: context.imageBackdrop,
+              colorBlendMode: BlendMode.dstOver,
+            ),
           ),
         ),
       ),
@@ -573,32 +713,65 @@ class _TopBar extends StatelessWidget {
               borderRadius: BorderRadius.circular(999),
               onTap: () => Navigator.of(context).maybePop(),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                child: Text('Discard', style: AppTextStyles.metaMono.copyWith(color: colors.ink2)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 11,
+                ),
+                child: Text(
+                  'Discard',
+                  style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
+                ),
               ),
             ),
           ),
           Column(
             children: [
-              Text('New post', style: AppTextStyles.titleMd.copyWith(color: colors.ink)),
+              Text(
+                'New post',
+                style: AppTextStyles.titleMd.copyWith(color: colors.ink),
+              ),
               const SizedBox(height: 6),
-              Text('STEP 2 OF 2 · REVIEW', style: AppTextStyles.metaMono.copyWith(fontSize: 10, color: colors.ink2)),
+              Text(
+                'STEP 2 OF 2 · REVIEW',
+                style: AppTextStyles.metaMono.copyWith(
+                  fontSize: 10,
+                  color: colors.ink2,
+                ),
+              ),
             ],
           ),
           Material(
             color: state.canPublish ? colors.yel : colors.surf2,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(999),
-              side: BorderSide(color: state.canPublish ? colors.ink : colors.line, width: 1.5),
+              side: BorderSide(
+                color: state.canPublish ? colors.ink : colors.line,
+                width: 1.5,
+              ),
             ),
             child: InkWell(
               borderRadius: BorderRadius.circular(999),
               onTap: state.canPublish ? onPublish : null,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-                child: Text(
-                  'PUBLISH',
-                  style: AppTextStyles.button.copyWith(color: state.canPublish ? colors.onYel : colors.ink3),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 15,
+                  vertical: 12,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'PUBLISH',
+                      style: AppTextStyles.button.copyWith(
+                        color: state.canPublish ? colors.onYel : colors.ink3,
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    SendIcon(
+                      size: 16,
+                      color: state.canPublish ? colors.onYel : colors.ink3,
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -618,13 +791,21 @@ class _SectionLabel extends StatelessWidget {
     final colors = AppColors.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 22, 4, 10),
-      child: Text(label, style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
+      child: Text(
+        label,
+        style: AppTextStyles.eyebrow.copyWith(color: colors.ink2),
+      ),
     );
   }
 }
 
 class _AudienceButton extends StatelessWidget {
-  const _AudienceButton({required this.icon, required this.label, required this.selected, required this.onTap});
+  const _AudienceButton({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
   final String icon;
   final String label;
   final bool selected;
@@ -637,7 +818,10 @@ class _AudienceButton extends StatelessWidget {
       color: selected ? colors.yel : colors.surf,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadii.md),
-        side: BorderSide(color: selected ? colors.ink : colors.line, width: 1.5),
+        side: BorderSide(
+          color: selected ? colors.ink : colors.line,
+          width: 1.5,
+        ),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadii.md),
@@ -646,9 +830,20 @@ class _AudienceButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 13),
           child: Column(
             children: [
-              Text(icon, style: TextStyle(fontSize: 15, color: selected ? colors.onYel : colors.ink2)),
+              Text(
+                icon,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: selected ? colors.onYel : colors.ink2,
+                ),
+              ),
               const SizedBox(height: 8),
-              Text(label, style: AppTextStyles.metaMono.copyWith(color: selected ? colors.onYel : colors.ink2)),
+              Text(
+                label,
+                style: AppTextStyles.metaMono.copyWith(
+                  color: selected ? colors.onYel : colors.ink2,
+                ),
+              ),
             ],
           ),
         ),
@@ -658,7 +853,11 @@ class _AudienceButton extends StatelessWidget {
 }
 
 class _TagChip extends StatelessWidget {
-  const _TagChip({required this.label, required this.selected, required this.onTap});
+  const _TagChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
   final String label;
   final bool selected;
   final VoidCallback onTap;
@@ -670,14 +869,22 @@ class _TagChip extends StatelessWidget {
       color: selected ? colors.yel : Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(999),
-        side: BorderSide(color: selected ? colors.ink : colors.line, width: 1.5),
+        side: BorderSide(
+          color: selected ? colors.ink : colors.line,
+          width: 1.5,
+        ),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-          child: Text(label, style: AppTextStyles.metaMono.copyWith(color: selected ? colors.onYel : colors.ink2)),
+          child: Text(
+            label,
+            style: AppTextStyles.metaMono.copyWith(
+              color: selected ? colors.onYel : colors.ink2,
+            ),
+          ),
         ),
       ),
     );
@@ -709,7 +916,10 @@ class _AddTagChip extends StatelessWidget {
             children: [
               Icon(CupertinoIcons.add, size: 14, color: colors.ink2),
               const SizedBox(width: 4),
-              Text('Add tag', style: AppTextStyles.metaMono.copyWith(color: colors.ink2)),
+              Text(
+                'Add tag',
+                style: AppTextStyles.metaMono.copyWith(color: colors.ink2),
+              ),
             ],
           ),
         ),
@@ -757,7 +967,10 @@ class _AddTagDialogState extends State<_AddTagDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('ADD A TAG', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
+            Text(
+              'ADD A TAG',
+              style: AppTextStyles.eyebrow.copyWith(color: colors.ink2),
+            ),
             const SizedBox(height: 14),
             TextField(
               controller: _controller,
@@ -771,8 +984,16 @@ class _AddTagDialogState extends State<_AddTagDialog> {
                 counterText: '',
                 hintText: 'yourtag',
                 hintStyle: AppTextStyles.body.copyWith(color: colors.ink3),
-                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: colors.line)),
-                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: colors.ink)),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadii.xs),
+                  borderSide: BorderSide(color: colors.line, width: 1.5),
+                ),
+                focusedBorder: GlowInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadii.xs),
+                  borderSide: BorderSide(color: colors.yel, width: 1.5),
+                ),
               ),
             ),
             const SizedBox(height: 20),
@@ -781,14 +1002,18 @@ class _AddTagDialogState extends State<_AddTagDialog> {
                 Expanded(
                   child: AppButton(
                     label: 'Cancel',
-                    variant: AppButtonVariant.outline,
+                    variant: AppButtonVariant.secondary,
                     fullWidth: true,
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: AppButton(label: 'Add', fullWidth: true, onPressed: _submit),
+                  child: AppButton(
+                    label: 'Add',
+                    fullWidth: true,
+                    onPressed: _submit,
+                  ),
                 ),
               ],
             ),
@@ -800,7 +1025,12 @@ class _AddTagDialogState extends State<_AddTagDialog> {
 }
 
 class _CheckRow extends StatelessWidget {
-  const _CheckRow({required this.label, required this.checked, required this.isLast, required this.onTap});
+  const _CheckRow({
+    required this.label,
+    required this.checked,
+    required this.isLast,
+    required this.onTap,
+  });
   final String label;
   final bool checked;
   final bool isLast;
@@ -814,7 +1044,9 @@ class _CheckRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          border: isLast ? null : Border(bottom: BorderSide(color: colors.line2)),
+          border: isLast
+              ? null
+              : Border(bottom: BorderSide(color: colors.line2)),
         ),
         child: Row(
           children: [
@@ -825,13 +1057,25 @@ class _CheckRow extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: checked ? colors.yel : Colors.transparent,
-                border: Border.all(color: checked ? colors.ink : colors.line, width: 1.5),
+                border: Border.all(
+                  color: checked ? colors.ink : colors.line,
+                  width: 1.5,
+                ),
               ),
-              child: checked ? Icon(CupertinoIcons.checkmark, size: 14, color: colors.onYel) : null,
+              child: checked
+                  ? Icon(
+                      CupertinoIcons.checkmark,
+                      size: 14,
+                      color: colors.onYel,
+                    )
+                  : null,
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(label, style: AppTextStyles.bodySm.copyWith(color: colors.ink)),
+              child: Text(
+                label,
+                style: AppTextStyles.bodySm.copyWith(color: colors.ink),
+              ),
             ),
           ],
         ),

@@ -345,7 +345,9 @@ different depth (a sheet, a floating button), add a second named token to
 
 ## ADR-013 — Loading skeletons mirror the card they stand in for, and live beside it
 
-**Status:** Accepted
+**Status:** Accepted — amended by ADR-046 (new `ShimmerBox` look; Inbox,
+Circle, Signals and project detail now have their own skeletons, so
+`ShimmerListCard` is only `PagedListView`'s fallback)
 
 Every list or page with a distinctive row shape gets its own shimmer
 skeleton, built to that row's exact geometry and kept next to the row it
@@ -358,7 +360,7 @@ mirrors in the feature's `presentation/widgets/`:
 | `_CommunityCard` (directory) | `ShimmerCommunityCard` |
 | `ProjectCard` | `ShimmerProjectCard` |
 | `_ResultRow` (people search) | `ShimmerSearchResultRow` |
-| Profile / public-profile page | `ShimmerProfileView` |
+| Profile / public-profile page | `ShimmerOwnProfileView` (`detailRows: 3` on a public profile) |
 
 `PagedListView` takes the skeleton as a `skeleton:` list and lays it out with
 the same `separatorHeight` as the rows. `ShimmerListCard` stays as the
@@ -2087,3 +2089,476 @@ asking for `REMOVED` without one is a 409.
 - Every sticker surface is **unverified on a device** — there is no emulator in
   the dev sandbox, and the picker sheet, the grid at 320dp, the keyboard inset
   and the transparent-WebP decode all want a real phone.
+
+
+---
+
+## ADR-041 — Link previews accompany linked text across the app
+
+**Status:** Accepted. Supersedes ADR-039's placement, three-card cap, and hidden-failure decisions.
+
+`LinkedText` now owns the preview list below its text, so chat, comments, bios,
+community rows, repost embeds and descriptions share the same behavior. Existing
+post-only lists are removed to avoid duplicate cards, and photo-post previews
+now appear immediately below the caption. Showcase repository and live URL rows
+also include a preview underneath.
+
+Every distinct detected web URL gets a card. Pages without metadata or accessible
+images show a local image placeholder and the host; we do not invent a thumbnail
+or send URLs to a third-party screenshot service. Existing guarded, unauthenticated
+fetches, per-URL selectors, caching and in-flight deduplication are reused.
+
+Cost: long bodies with many links produce taller content and more preview requests.
+Repeated URLs within one body share a card. Device layout and gestures remain
+unverified; validation for this change uses local Flutter checks only.
+
+---
+
+## ADR-042 — Calls are socket frames, drawn above the router, with LiveKit behind one wrapper
+
+**Status:** Accepted
+
+1:1 audio and video calls, from `yello-chat`'s Calls API (see
+`docs/BACKEND.md`). A new `features/call` slice; the media SDK
+(`livekit_client`) lives behind `core/call/call_room.dart`.
+
+**Its own feature, not part of chat.** Stickers went inside chat (ADR-040)
+because they only ever appear in a conversation. A call starts from a chat
+header but rings on any tab and outlives every screen, and its whole
+presentation layer — a cubit that is a singleton, UI that sits above the
+router — has nothing in common with chat's. It shares chat's *transport*
+(`ChatSocket`, `ChatRoutes`, the same `ApiClient`), which is what
+`CallRemoteDataSourceImpl` injects; one connection, not two.
+
+**Requests over the socket, for the first time.** ADR-017 kept every request
+on HTTP. Calls cannot: start, accept, decline and end exist only as frames.
+Each frame carries a fresh `ref`, and `_request` waits for the first frame
+that answers it — the named reply, or an `error` frame echoing the `ref`.
+`call.end`/`call.decline` treat five seconds of silence as success, because
+ending an already-ended call is documented to produce no frame at all.
+
+**The socket is held app-wide while the app is on screen.** ADR-038 leased
+it to the two surfaces that draw a presence dot. A ring can only reach a
+connected device, and the service does not push calls to offline devices
+yet, so `CallHost` holds a lease whenever the user is signed in and the app
+is resumed (or merely `inactive` — a permission prompt or the notification
+shade). A live call keeps it regardless of lifecycle. Cost: one idle socket
+while the app is open on any tab; that is the price of a phone that rings.
+
+**UI above the router, not a route.** A call route would be torn down by
+`goNamed` (a push deep link resets the stack) and would have to be found and
+popped from under whatever was pushed over it. `CallHost` sits in
+`MaterialApp.router`'s `builder`, beside the router's output in a `Stack`:
+full screen, or a pill once minimized. Back is taken by a
+`ChildBackButtonDispatcher` with priority (Back = minimize), and Android's
+predictive-back question ("will the framework handle Back?") is answered by
+catching the router's `NavigationNotification`s and re-sending them with the
+call folded in — see `docs/GOTCHAS.md`.
+
+**Recovery offers, it does not rejoin.** After every `auth.ok`,
+`GET /ws/calls/active` is compared with what the screen shows. A ringing
+call is shown; an ended one closes; but an `ACTIVE` call this device is not
+in becomes `CallPhase.interrupted` (Rejoin / End). Rejoining automatically
+would be right after a crash and wrong when the call is running on the
+user's other device — LiveKit admits one participant per identity, so the
+second join would put the first device out of its own call.
+
+**One wrapper per device concern.** `CallRoom` (LiveKit), `CallTones`
+(ring and ringback — bundled WAVs from `tool/generate_call_tones.py`, played
+as a *ringtone* on Android so silent mode silences it) and `CallKeepAlive`
+(the Android foreground service) are each the only place their platform API
+is touched — `VoiceRecorder`'s shape — so `CallCubit` is testable with
+mocks and no WebRTC.
+
+**A native foreground service, not a package.** Android silences an app's
+microphone soon after it leaves the screen — a screen timing out mid-call is
+enough — unless a microphone-type foreground service runs. `CallService.kt`
+is that and nothing else, behind the `yello/call` channel beside
+`yello/installer`, for the reason `MainActivity.kt` already gives: the
+packages in this space bundle a background isolate the call does not need.
+It is started with `startService` and promotes itself, not with
+`startForegroundService`, whose "promote within seconds or die" contract
+cannot be met on a first call (Android 14 refuses the promotion until
+RECORD_AUDIO is granted, which WebRTC only asks for once it publishes).
+
+**Known gaps:**
+
+- No ring while the app is closed or backgrounded — a server-side push is
+  the only fix.
+- iOS: no CallKit, and the screen auto-locks during a video call. Call audio
+  continues in the background through the `audio` background mode.
+  Unverified: there is no iOS build here.
+- The caller does not pre-connect to the room while it rings (the guide
+  allows it). Joining on `call.accepted` keeps the ringback out of WebRTC's
+  audio session; the cost is a second or so before audio flows.
+- No proximity sensor: an earpiece call leaves the screen on until it times
+  out.
+
+## ADR-043 — The Feed header carries Signals and Inbox; Community is a tab of the feed
+
+**Status:** Accepted.
+
+The Feed's header was restyled to a reference design: brand tile + wordmark on
+the left, round Signals and Inbox buttons with unread counts on the right, a
+borderless stories row, then **Feed / Community** tabs.
+
+- **Three header actions: Search, Signals, Inbox.** Circle left the header
+  and stays reachable from Profile's connections row, now its only entry
+  point — see the comment in `profile_page.dart`.
+  Inbox duplicates the bottom bar's Chat slot on purpose; the header button
+  shows a count, the bar a dot.
+- **Community = `GET /community-posts?scope=joined`.** The scope already
+  existed on `CommunityFeedCubit`; the feed page provides its own instance,
+  lazily, so the Feed tab never pays for the community fetch until the tab is
+  first opened. It lives as long as the (kept-alive) Feed page, so re-entering
+  the tab refreshes it — otherwise a community joined elsewhere would never
+  appear (the long-lived-cubit staleness in `GOTCHAS.md`).
+- **One scroll view, two bodies.** Both tabs render into the feed's existing
+  `CustomScrollView` under a pinned `SliverPersistentHeader`, rather than a
+  `TabBarView`/`NestedScrollView`: the stories row and header scroll away the
+  same way on either tab, and `FeedCubit`'s scroll-survives-tab-switch
+  behaviour is untouched. The cost is a shared scroll offset between the two
+  tabs. Pull-to-refresh and load-more act on whichever tab is showing.
+- The date eyebrow stays, as its own sliver above the pinned bar (not inside
+  it — see `DateLabel`'s doc comment).
+
+## ADR-044 — Circle returns to the Feed header, in Inbox's place
+
+**Status:** Accepted. Amends ADR-043's header actions.
+
+The Feed header's actions are **Search, Signals, Circle**. The Inbox button
+is gone from the header: Inbox already has the bottom bar's Chat slot, so the
+header copy was a duplicate, while Circle (branch 1) had no entry point but
+Profile's connections row. Circle uses the badge-less header button — there is
+no unread count for it — and `AssetConstants.circleIcon`, drawn untinted as
+before. Selecting branch 1 triggers no refresh in `MainShellPage`, so a bare
+`goBranch(1)` is the whole action.
+
+## ADR-045 — Someone else's profile shares the Profile tab's layout
+
+**Status:** Accepted. Supersedes the "two shapes, two skeletons" bullet of
+ADR-024.
+
+`public_profile_page.dart` had kept the old header card (a
+`Transform.translate`-shifted card and avatar, a handle pill, three stat
+tiles, a hand-rolled pill switcher) after the Profile tab moved on, so tapping
+into someone's profile changed the whole shape of the screen. It now builds
+from the same pieces as `profile_page.dart`:
+
+- **Header.** `ProfileHeader` and the new `PublicProfileHeader` both render
+  through one private `_HeaderFrame` in `profile_header.dart`, so the two can
+  no longer drift. The public one has no camera buttons, a plain connections
+  count (no face-pile or chevron: there is no endpoint for someone else's
+  friends), a posts count where yours shows account status
+  (`PublicUserResponse` has no status), and a linkified bio. Its action row
+  is supplied by the page: friend action + Message, as two equal buttons in
+  the slots Add to story / Edit profile use.
+- **Top bar.** The collapsing bar moved out of `profile_page.dart` into
+  `ProfileTopBar` (`profile_top_bar.dart`), taking the identity as data
+  instead of reading `ProfileCubit`, plus an optional `leading` back button.
+  Its Impeller-safe painted shadow (GOTCHAS) moved with it unchanged.
+- **Block user** left the header row for a **⋯** menu in the top bar — the
+  row is for the two primary actions, as on your own profile.
+- **Details / switcher / skeleton.** `ProfileDetailsCard.public` (no email
+  row, no "Add your name" prompt), `SegmentedTabs` with All / Shared (no
+  Saved — that list is the viewer's own), and `ShimmerOwnProfileView` with
+  `detailRows: 3`. `ShimmerProfileView` had no other caller and is deleted.
+- The stat tiles are gone: connections moved to the facts line, the shared
+  count to its tab label, the join date to the details card. Nothing they
+  showed was lost.
+
+**Revisit if:** the API grows a public friends list (the connections row
+could then take a face-pile and open it).
+
+---
+
+## ADR-046 — One screen-space shimmer, and a skeleton for every loading state
+
+**Status:** Accepted
+
+`ShimmerBox` was redrawn from scratch; every skeleton built from it
+(ADR-013) changes with it. Every loading state that still showed a spinner
+or the generic `ShimmerListCard` now has a skeleton shaped like its content.
+
+- **Fill.** A bone is `ink` at 6.5% (light) / 8% (dark) opacity, not a
+  palette token. The old `surf2` → `line` → `surf2` gradient was nearly
+  invisible on a white `surf` card, and its highlight (`line`, 10% ink) was
+  *darker* than its base. In both Quiet Rails palettes it disappeared
+  completely. An `ink` wash reads on every surface in all four palettes,
+  because `ink` always contrasts with `surf`.
+- **Sheen.** A lighter band (`ink` at 2% light / 15% dark), 220px wide and
+  leaning 18°, crosses the *screen* in the first 72% of a 1.7s loop, eased,
+  then rests. Every bone reads the band from a shared `Stopwatch` and places
+  it in global coordinates (`localToGlobal` in paint). So all the bones on
+  screen are lit by one diagonal at the same moment, and a skeleton shimmers
+  as one surface. Before, each box ran its own controller from whenever it
+  was built, and a box's sweep speed depended on its width.
+- **Cost model.** Each bone is a leaf `RenderBox` that is its own repaint
+  boundary. It keeps a `Ticker` (so it pauses under `TickerMode`, e.g. an
+  inactive shell branch) that only calls `markNeedsPaint`: no rebuilds, and
+  the card chrome around it is never repainted. Nothing repaints during the
+  resting tail. With `MediaQuery.disableAnimations` on, the ticker stops and
+  the bone is drawn flat.
+- **Shared row tile.** `ShimmerListTile` (in `shared/`) is an avatar + title
+  + optional subtitle + optional trailing, with every measurement passed in
+  by the call site. This is a deliberate exception to ADR-013's "one
+  skeleton file per row". The inbox, Circle, group members, friend pickers,
+  reactors, story viewers and reaction breakdown rows differ only in
+  numbers. Eight files of the same `Row` would add nothing, and a call site
+  that passes the row's padding and avatar size keeps the numbers next to
+  the row anyway. Rows with their own chrome still get their own file:
+  notification, archive, comment, community comment, chat thread, group
+  info, post detail, project detail, preferences, Circle's section card.
+- **Load-more.** The feed and the Community timeline show a post skeleton
+  instead of a spinner while the next page loads. Small lists (sheets,
+  story archive, notifications) keep their small footer spinner, and so do
+  buttons and full-bleed media viewers.
+
+**Revisit if:** a screen needs the bones to sit on something other than a
+plain surface (a photo, a coloured slab). The translucent `ink` wash will
+tint whatever is under it, which is right on cards but might not be on
+imagery.
+
+---
+
+## ADR-047 — Group calls reuse the 1:1 flow; the viewer's own roster entry decides
+
+**Status:** Accepted
+
+`yello-chat` added group calls and screen sharing (2026-09-30). ADR-042's
+shape stays: one `CallCubit` singleton, UI above the router, LiveKit behind
+`CallRoom`. What changed is how the cubit reads a call.
+
+**One state machine, not a second cubit.** A user is still in at most one
+call, DM or group, so a separate `GroupCallCubit` would need the same
+socket, recovery, keep-alive and ended screen, and would have to coordinate
+with the first over "one call at a time". `CallState.kind` says which it is
+(known before the server answers, so the screen is right from the first
+frame); the phases are the same.
+
+**The viewer's roster entry, not the frame's name, decides.** In a DM,
+`call.accepted` means "answered". In a group it reaches every member while
+most of them are still being rung, and `call.updated` can mean joined, left,
+declined, missed or removed. So group frames go through one method,
+`_onRoster`, which switches on phase × `CallEntity.viewerState`: INVITED
+keeps ringing, JOINED stays (or starts the join while connecting), anything
+else closes the call here. The DM paths are unchanged.
+
+`viewerState` is derived in the mapper from the viewer id the repository
+already resolves per subscription (the `isOutgoing` pattern). The repository
+now reuses that id for `startCall`/`acceptCall` instead of another
+`GET /users/me`, so answering costs no extra round trip; it is cleared with
+the subscription, so it cannot outlive a sign-out.
+
+**`CALL_IN_PROGRESS` is handled in the data source.** The guide's answer is
+"send `call.accept` for `details.callId` instead" — a transport detail, not
+a UI decision. `startCall` resolves with the call the viewer is now JOINED
+in, and the cubit joins any `startCall` result that comes back `ACTIVE`. The
+chat's call buttons never need to know whether a call is running.
+
+**"Join call" is a per-page cubit.** `ConversationCallCubit` (a factory,
+param = conversation id) loads `GET /ws/conversations/{id}/call` and follows
+the same frames. It is not folded into `CallCubit`, which tracks the one
+call the viewer is *in*; the bar is about a call they are *not* in.
+
+**Tiles come from the LiveKit room, names from the conversation.** The
+server's JOINED is not who is connected; the guide says to draw from the
+room. The room knows identities (= user ids, per the token), the call knows
+ids, and only the conversation knows names and avatars, so
+`CallState.members` is resolved once from `GetConversationUseCase`.
+
+**Screen share: Android only, published by hand, 30 fps.**
+`setScreenShareEnabled(true)` takes the room's default publish options — the
+camera's — so `CallRoom` builds the track and publishes it with the guide's
+VP9 `L3T3_KEY` / VP8-backup / maintain-framerate settings at the guide's
+slow-machine numbers (a phone encoding its own screen is that machine).
+Android needs a MediaProjection consent *and* a `mediaProjection` foreground
+service before capture — see `docs/GOTCHAS.md`; `CallService` gains that
+type while sharing rather than a second service. iOS needs a Broadcast
+Upload Extension, its own target and signing work, so the button is hidden
+there. `flutter_webrtc` became a direct dependency for the consent call
+alone (`Helper.requestCapturePermission`), at the version LiveKit already
+resolves.
+
+**Also fixed on the way:** `CallRoom` mapped every LiveKit disconnect to
+`lost`, so `closed` and `replaced` were never produced — a removal from the
+group would have been retried as a network drop and then ended with a
+`call.end`. `DUPLICATE_IDENTITY` now maps to `replaced`,
+`PARTICIPANT_REMOVED`/`ROOM_DELETED` to `closed`.
+
+**Known gaps / unverified:**
+
+- Nothing here has run against a live group call or on a device yet.
+- LiveKit identity = user id is inferred from the guide ("as you").
+- The group caller does not pre-join the room while it rings (ADR-042's
+  choice for DMs); the guide allows it.
+- Stopping a share from Android's own status-bar chip is not observed; the
+  button reads "sharing" until tapped.
+- No screen-share audio (`livekit_client` supports it on the web only).
+
+**Revisit if:** calls grow features only groups have (hand raise,
+spotlight, moderation) — then a dedicated presentation cubit for the grid,
+fed by `CallCubit`, is cheaper than more branches in `_onRoster`.
+
+---
+
+## ADR-048 — The call UI follows the theme: white in light mode, black in dark
+
+**Status:** Accepted
+
+The call screens were drawn from the dark token set in both themes, on the
+reasoning that a call is shown over video and a light screen at night is a
+flashlight. Asked for otherwise (2026-09-30): the call UI now follows the
+theme — pure white in light mode, pure black in dark — the same
+`surf`/`shell` pairing the chat header slab already uses, with the active
+theme's tokens for everything drawn on it.
+
+- **One palette, read per widget.** `CallPalette.of(context)` in
+  `call_widgets.dart` names the handful of roles the call UI needs
+  (background, raised surface, solid disc, tray and its discs, status-bar
+  style) on top of `AppColors.of(context)`. The old `onCallColors` constant
+  is gone.
+- **Full-screen video is the exception.** A 1:1 call draws its name, status
+  and controls over the other person's video, under a dark scrim; dark text
+  there would vanish into a dark picture. That layer is wrapped in
+  `OnVideoTheme`, which swaps in the dark tokens whatever the theme. Group
+  tiles don't need it: their badges and name chips carry their own
+  translucent black backing.
+- **The group tray inverts with the screen.** A light bar with black discs
+  on the black screen (the reference image), a soft grey bar (`slot`) with
+  dark discs on the white one.
+
+**Revisit if:** people take video calls in light mode at night and find the
+white screen harsh — a "keep calls dark" setting would bring the old
+behaviour back behind a choice rather than for everyone.
+
+## ADR-049 — Three button variants, picked by importance
+
+**Status:** Accepted
+
+`AppButton` had grown four variants (`primary`, `outline`, `subtle`,
+`danger`), and about ten actions skipped it for Material's `TextButton`,
+which draws yellow text on the theme's `primary`. Two call sites with the
+same role ended up looking different ("Edit profile" was `subtle`,
+"Connections" beside it was `outline`). Asked for a single rule
+(2026-09-30): primary for the important action, secondary for the rest.
+
+- **`AppButtonVariant { primary, secondary, danger }`.** `secondary` is the
+  old `outline` look (transparent, `line` border, `ink` label). `subtle`'s
+  `surf` fill was indistinguishable from `outline` on a `surf` card and
+  only distinguishable on `bg`, which is not a reason to keep a fourth
+  kind. The enum's doc comment is the rule: one `primary` per group,
+  `danger` only on the confirm step of something destructive.
+- **Every variant greys out when disabled.** Before, only `primary` did;
+  a disabled `outline` looked identical to an enabled one.
+- **Confirmations go through `AppWarningDialog`.** The five remaining
+  `AlertDialog` + `TextButton` confirms (delete post, delete comment ×2,
+  remove friend ×2, unblock) moved onto it. It gained `destructive:` so a
+  confirm that loses nothing ("Unblock") is `primary`, not red.
+- **Loose `TextButton`s became `AppButton(secondary, dense)`.** "Load
+  more", "Unmute", "Unblock", "Close", the new-conversation dialog's
+  "Cancel". Inside a `ListView` the button is wrapped in `Center`, since
+  list children are stretched and a stretched pill left-aligns its label.
+
+Left alone on purpose: the story viewer's "Close" (always drawn on black,
+where theme `ink` would vanish), the story archive's view count (a tappable
+figure, not an action label), and `AppIconButton` (icon chrome, not a
+labelled action).
+
+**Revisit if:** a screen genuinely needs a third level below `secondary`
+(an inline text link inside a paragraph, say) — add a `text` variant then,
+rather than reaching for `TextButton` again.
+
+## ADR-050 — Ink outline is a flavor, and "how it's drawn" lives in `AppStyle`
+
+**Status:** Accepted
+
+Asked for (2026-09-30) a HushStack-style look — thick outlines, hard offset
+shadows — on the app's own colors, fonts and screen structure, selectable
+from the Theme screen rather than replacing the current look.
+
+- **A third `AppThemeFlavor`, `ink`.** The Theme screen, `ThemeCubit` and
+  persistence already handle flavors, so adding one is a case, not a
+  feature. Its palettes (`AppColors.inkLight` / `inkDark`) are the classic
+  pair with one change: `line` is solid `ink`. That single token turns every
+  existing 1.5px hairline (cards, pills, inputs, tab rows, bubbles) into a
+  drawn outline without visiting each call site. `line2` stays faint, so
+  dividers *inside* a card remain seams.
+- **Drawing lives in a second extension, `AppStyle`.** Colors can't express
+  "2px border plus a solid offset", and switching on the flavor in widgets
+  would spread one theme's knowledge across the tree. `AppStyle.outlined`,
+  `borderWidth` and `hardShadow(...)` sit next to `AppColors` in `ThemeData`.
+  `AppShadows.card` returns the hard 5px offset under ink, which restyles
+  the ~35 card call sites at once.
+- **Every hard shadow has zero blur and is black.** It is a solid copy of
+  the shape in the `shell` token (near-black in light, black in dark). It
+  started as `ink`, which made it cream under cream outlines in dark mode;
+  that read as a glow and was switched to black on request (2026-09-30),
+  matching the app's older "shadows are black, never ink" rule. Zero blur
+  keeps it clear of the Impeller `BoxShadow` crash (docs/GOTCHAS.md). The
+  two chrome pieces on the always-black chat slab keep a visible colour
+  instead (search: yellow, compose button: cream), since black would vanish
+  there.
+- **Chrome that had no border gets `InkOutline`.** `AppIconButton` draws
+  only an icon, so the round buttons on Feed, Profile and the chat header
+  and composer are wrapped in `InkOutline`, which returns its child
+  untouched outside ink. The soft flavors render exactly what they did
+  before.
+- **Offsets by role:** cards 5, pill containers 4, buttons 3, active chips
+  and badges 2. Disabled buttons drop the shadow. The chat inbox search
+  field's shadow is yellow, since it sits on the always-dark slab.
+
+**Revisit if:** more screens need outlined chrome than `InkOutline` call
+sites comfortably cover. Then give `AppIconButton` an opt-in outlined mode
+instead of wrapping it at each use.
+
+## ADR-051 — Incoming-call pushes: the app draws the ring on Android, iOS opens only
+
+**Status:** Accepted
+
+`yello-notify` now pushes `CALL_INCOMING`, `CALL_MISSED` and
+`CALL_RING_STOPPED` (docs/BACKEND.md), so a phone can ring with the app in
+the background or killed.
+
+- **Android: drawn by the app, from the data-only push**, in
+  `core/notifications/call_alert.dart` — its own `yello_incoming_calls` channel (the
+  system ringtone at ringtone volume, `max` importance), `FLAG_INSISTENT` so
+  it rings until something stops it, `timeoutAfter` at `expiresAt`,
+  `CATEGORY_CALL`, a full-screen intent, Decline and Accept. Not a native
+  `FirebaseMessagingService` with `CallStyle` as the guide sketches: the
+  data-only push already reaches `firebaseMessagingBackgroundHandler` with
+  the app killed, and a second native push stack beside `firebase_messaging`
+  would fight it for `onMessageReceived`. What is given up is `CallStyle`'s
+  look (the plugin cannot build one).
+- **Accept goes through the running app, not around it.** It opens the app
+  and leaves a pending call id (`PushNotificationService.takePendingCallAnswer`,
+  handed on by `CallHost`); `CallCubit.answerFromNotification` answers once
+  the socket's own recovery (`GET /ws/calls/active`) shows that call ringing.
+  `call.accept` is a socket frame, so answering before the link is up would
+  only fail; reusing recovery also covers "the call ended while the app
+  started" with a "Call ended" screen.
+- **Decline runs headless** in the plugin's background engine over the new
+  `POST /ws/calls/{id}/decline`, with the same token handling as the chat
+  reply (`background_auth.dart`, shared by both now). Not queued through
+  WorkManager as the guide suggests: every answer but a 401 means "done",
+  and a network failure leaves the server's 45 s timeout to end the ring as
+  missed — no new dependency for that one case.
+- **The app on screen draws nothing.** `onMessage` means the socket is
+  already ringing in the app; the push is the same call. When the app comes
+  forward some other way while a ring is up, `CallHost` takes the drawn ring
+  down as soon as the call is live in the app.
+- **The activity is not `showWhenLocked`.** The full-screen intent wakes the
+  phone to the ring; Accept then asks for an unlock rather than opening the
+  whole app over the keyguard for anyone holding the phone.
+- **iOS gets the alert and tap-to-open only.** iOS draws the alert itself;
+  a tap opens the app, whose recovery rings in-app. The `YELLO_CALL`
+  category's buttons are deliberately not registered: neither plugin can
+  tell Accept from Decline on an alert iOS drew (docs/GOTCHAS.md), so a
+  Decline button would decline nothing. `CALL_RING_STOPPED` cannot remove an
+  alert iOS drew either — best effort, as the guide allows.
+
+**Revisit if:** the iOS buttons are wanted — that is native `AppDelegate`
+handling of `YELLO_CALL` responses (decline over `URLSession` with the
+keychain token, Accept forwarded to Dart), built and checked on a Mac; or
+CallKit arrives server-side (VoIP pushes), which replaces the iOS path
+outright.

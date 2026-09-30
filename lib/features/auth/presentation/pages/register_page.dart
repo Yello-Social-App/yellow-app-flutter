@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -11,13 +12,12 @@ import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../bloc/auth_cubit.dart';
 import '../widgets/auth_form_field.dart';
-import '../widgets/auth_hero.dart';
+import '../widgets/auth_wave_header.dart';
 import '../widgets/otp_code_field.dart';
 import '../widgets/toggle_switch.dart';
 
-/// Sign-up screen, in the same illustrated-hero layout as `login_page.dart`
-/// (see `AuthHero`, `AuthFormField`) — the reference "Insightlancer" mock
-/// redrawn in Yello's own palette/typography.
+/// Sign-up screen, in the same [AuthWaveHeader] + pill-field layout as
+/// `login_page.dart` (see `AuthFormField`).
 ///
 /// Only collects what the live `RegisterRequest` actually accepts — email,
 /// username, password, full name (see `AuthRemoteDataSourceImpl.register`).
@@ -56,33 +56,43 @@ class _RegisterViewState extends State<_RegisterView> {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    return Scaffold(
-      backgroundColor: colors.bg,
-      body: BlocListener<AuthCubit, AuthState>(
-        listenWhen: (prev, curr) =>
-            curr.status == AuthStatus.success ||
-            curr.status == AuthStatus.failure,
-        listener: (context, state) {
-          if (state.status == AuthStatus.success) {
-            context.goNamed(RouteNames.feed);
-          } else if (state.errorMessage != null) {
-            AppStatusSnackbar.showError(context, message: state.errorMessage!);
-          }
-        },
-        child: SafeArea(
-          bottom: false,
-          child: BlocBuilder<AuthCubit, AuthState>(
-            builder: (context, state) {
-              return SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 32),
-                child: state.status == AuthStatus.awaitingOtp
-                    ? _OtpCard(
-                        controller: _otpController,
-                        email: state.pendingEmail ?? '',
-                      )
-                    : const _DetailsCard(),
+    // Same status-bar handling as `LoginPage` — see the note there.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: Theme.of(context).brightness == Brightness.dark
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
+      child: Scaffold(
+        backgroundColor: colors.bg,
+        body: BlocListener<AuthCubit, AuthState>(
+          listenWhen: (prev, curr) =>
+              curr.status == AuthStatus.success ||
+              curr.status == AuthStatus.failure,
+          listener: (context, state) {
+            if (state.status == AuthStatus.success) {
+              context.goNamed(RouteNames.feed);
+            } else if (state.errorMessage != null) {
+              AppStatusSnackbar.showError(
+                context,
+                message: state.errorMessage!,
               );
-            },
+            }
+          },
+          child: SafeArea(
+            top: false,
+            bottom: false,
+            child: BlocBuilder<AuthCubit, AuthState>(
+              builder: (context, state) {
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.only(bottom: 32),
+                  child: state.status == AuthStatus.awaitingOtp
+                      ? _OtpCard(
+                          controller: _otpController,
+                          email: state.pendingEmail ?? '',
+                        )
+                      : const _DetailsCard(),
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -161,31 +171,26 @@ class _DetailsCardState extends State<_DetailsCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AuthHero(
-          icon: CupertinoIcons.person_add_solid,
-          badgeA: CupertinoIcons.gift,
-          badgeB: CupertinoIcons.person_crop_rectangle,
-          filled: false,
-          leading: _BackButton(onTap: () => Navigator.of(context).maybePop()),
+        AuthWaveHeader(
+          title: 'Sign Up',
+          action: AuthHeaderAction(
+            label: 'Sign In',
+            icon: CupertinoIcons.person_crop_circle,
+            // Register is normally pushed over Login; fall back to `go` if
+            // it was reached some other way and there's nothing to pop.
+            onTap: () => context.canPop()
+                ? context.pop()
+                : context.goNamed(RouteNames.login),
+          ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Register',
-                style: AppTextStyles.displayXl.copyWith(
-                  color: colors.ink,
-                  fontSize: 36,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
                 'Create your premium sanctuary.',
-                style: AppTextStyles.bodyMd.copyWith(
-                  color: colors.ink2,
-                ),
+                style: AppTextStyles.bodyMd.copyWith(color: colors.ink2),
               ),
               const SizedBox(height: 28),
               AuthFormField(
@@ -227,7 +232,11 @@ class _DetailsCardState extends State<_DetailsCard> {
                     ? null
                     : (_emailLooksValid ? colors.grn : null),
                 trailing: _emailController.text.isNotEmpty && _emailLooksValid
-                    ? Icon(CupertinoIcons.checkmark_circle_fill, size: 19, color: colors.grn)
+                    ? Icon(
+                        CupertinoIcons.checkmark_circle_fill,
+                        size: 19,
+                        color: colors.grn,
+                      )
                     : null,
               ),
               const SizedBox(height: 14),
@@ -277,7 +286,11 @@ class _DetailsCardState extends State<_DetailsCard> {
                 helperText: _confirmMismatch ? 'Passwords do not match.' : null,
                 helperColor: colors.red,
                 trailing: _confirmMismatch
-                    ? Icon(CupertinoIcons.exclamationmark_circle_fill, size: 19, color: colors.red)
+                    ? Icon(
+                        CupertinoIcons.exclamationmark_circle_fill,
+                        size: 19,
+                        color: colors.red,
+                      )
                     : null,
               ),
               const SizedBox(height: 16),
@@ -293,9 +306,7 @@ class _DetailsCardState extends State<_DetailsCard> {
                     const SizedBox(width: 10),
                     Text(
                       'Reminder me next time',
-                      style: AppTextStyles.bodySm.copyWith(
-                        color: colors.ink2,
-                      ),
+                      style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
                     ),
                   ],
                 ),
@@ -318,9 +329,7 @@ class _DetailsCardState extends State<_DetailsCard> {
                 children: [
                   Text(
                     'Already have an account?',
-                    style: AppTextStyles.bodySm.copyWith(
-                      color: colors.ink2,
-                    ),
+                    style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
                   ),
                   const SizedBox(width: 4),
                   GestureDetector(
@@ -375,33 +384,27 @@ class _OtpCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          AuthHero(
-            icon: CupertinoIcons.lock_shield,
-            badgeA: CupertinoIcons.mail,
-            badgeB: CupertinoIcons.person_crop_rectangle,
-            filled: false,
-            leading: _BackButton(
+          AuthWaveHeader(
+            title: 'Verify',
+            action: AuthHeaderAction(
+              label: 'Back',
+              icon: CupertinoIcons.back,
               onTap: () => context.read<AuthCubit>().reset(),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
                   'Check your email',
-                  style: AppTextStyles.displayXl.copyWith(
-                    color: colors.ink,
-                    fontSize: 32,
-                  ),
+                  style: AppTextStyles.titleLg.copyWith(color: colors.ink),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   'Enter the 6-digit code we sent to $email.',
-                  style: AppTextStyles.bodyMd.copyWith(
-                    color: colors.ink2,
-                  ),
+                  style: AppTextStyles.bodyMd.copyWith(color: colors.ink2),
                 ),
                 const SizedBox(height: 28),
                 OtpCodeField(
@@ -456,29 +459,6 @@ class _OtpCard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _BackButton extends StatelessWidget {
-  const _BackButton({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    return Material(
-      color: colors.surf,
-      shape: CircleBorder(side: BorderSide(color: colors.line, width: 1.5)),
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: SizedBox(
-          width: 38,
-          height: 38,
-          child: Icon(CupertinoIcons.back, size: 18, color: colors.ink),
-        ),
       ),
     );
   }

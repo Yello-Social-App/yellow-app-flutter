@@ -167,7 +167,7 @@ finding in a Flutter codebase:
   `AnimatedContainer` or anything that rebuilds on Cubit state — this crashed
   on-device on this project's Impeller/Android renderer. A `CustomPainter`
   with its own blurred `Paint` on a static element is the safe alternative
-  already used elsewhere (`_ActiveTabIndicatorPainter`); for a simple
+  already used elsewhere (`ActiveTabIndicatorPainter`); for a simple
   "active" glow, a plain color change is safest and is this app's existing
   convention.
 - **Layout under `Scaffold` slots**: a bare `Row`/`Column` placed directly in

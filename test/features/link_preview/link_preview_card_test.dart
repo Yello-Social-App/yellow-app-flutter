@@ -61,17 +61,18 @@ void main() {
     expect(find.byType(ShimmerBox), findsNothing);
   });
 
-  testWidgets('a link that cannot be read leaves no card behind', (tester) async {
+  testWidgets('a link that cannot be read retains a thumbnail placeholder and host', (tester) async {
     when(() => getLinkPreview(_url)).thenAnswer((_) async => const Left(ServerFailure()));
 
     await tester.pumpWidget(_host(const LinkPreviewList(text: 'see $_url')));
     await tester.pump();
 
     expect(find.byType(ShimmerBox), findsNothing);
-    expect(tester.getSize(find.byType(LinkPreviewCard)), Size.zero);
+    expect(find.text('No preview image'), findsOneWidget);
+    expect(find.text('STUDIO.EXAMPLE'), findsOneWidget);
   });
 
-  testWidgets('a post with more links than the cap gets the cap, and repeats count once', (tester) async {
+  testWidgets('every distinct link gets a card, including links beyond the former cap', (tester) async {
     for (var i = 0; i < 5; i++) {
       final url = 'https://example.com/$i';
       when(() => getLinkPreview(url)).thenAnswer((_) async => Right(LinkPreviewEntity(url: url, title: 'Page $i')));
@@ -79,16 +80,19 @@ void main() {
 
     await tester.pumpWidget(
       _host(
-        const LinkPreviewList(
-          text: 'https://example.com/0 https://example.com/0 https://example.com/1 '
-              'https://example.com/2 https://example.com/3 https://example.com/4',
+        const SingleChildScrollView(
+          child: LinkPreviewList(
+            text:
+                'https://example.com/0 https://example.com/0 https://example.com/1 '
+                'https://example.com/2 https://example.com/3 https://example.com/4',
+          ),
         ),
       ),
     );
     await tester.pump();
 
-    expect(find.byType(LinkPreviewCard), findsNWidgets(kMaxLinkPreviews));
+    expect(find.byType(LinkPreviewCard), findsNWidgets(5));
     verify(() => getLinkPreview('https://example.com/0')).called(1);
-    verifyNever(() => getLinkPreview('https://example.com/4'));
+    verify(() => getLinkPreview('https://example.com/4')).called(1);
   });
 }

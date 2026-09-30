@@ -18,9 +18,12 @@ import '../../../../core/notifications/push_notification_service.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/security/session_manager.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_style.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/external_link.dart';
+import '../../../../core/utils/formatters.dart';
+import '../../../../shared/extensions/context_extension.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_button.dart';
@@ -28,8 +31,15 @@ import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/app_warning_dialog.dart';
 import '../../../../shared/widgets/error_view.dart';
+import '../../../../shared/widgets/ink_outline.dart';
+import '../../../../shared/widgets/input_glow.dart';
 import '../../../../shared/widgets/linked_text.dart';
 import '../../../../shared/widgets/photo_viewer_page.dart';
+import '../../../../shared/widgets/send_icon.dart';
+import '../../../call/domain/entities/call_entity.dart';
+import '../../../call/presentation/bloc/call_cubit.dart';
+import '../../../call/presentation/bloc/conversation_call_cubit.dart';
+import '../../../call/presentation/widgets/join_call_bar.dart';
 import '../../domain/entities/attachment_entity.dart';
 import '../../domain/entities/conversation_entity.dart';
 import '../../domain/entities/group_invite_entity.dart';
@@ -43,6 +53,7 @@ import '../widgets/sticker_picker_sheet.dart';
 import '../widgets/story_reply_preview.dart';
 import '../widgets/voice_note_bubble.dart';
 import '../widgets/voice_recorder_sheet.dart';
+import '../widgets/shimmer_chat_thread.dart';
 
 /// The quick-react palette on a long-pressed bubble. Any single emoji is
 /// accepted by the server; these six are what one tap offers.
@@ -73,8 +84,18 @@ class ChatPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => sl<ChatCubit>(param1: conversationId)..load(),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(
+          create: (_) => sl<ChatCubit>(param1: conversationId)..load(),
+        ),
+        // The "Join call" bar: this conversation's live call, if any.
+        BlocProvider(
+          create: (_) => sl<ConversationCallCubit>(param1: conversationId)
+            ..start()
+            ..refresh(),
+        ),
+      ],
       child: _ChatView(conversationId: conversationId),
     );
   }
@@ -103,7 +124,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
   final Map<String, GlobalKey> _messageKeys = {};
 
   /// The bubble a reply quote just jumped to; tinted for a moment so the
-  /// eye lands on it. A colour change only — no shadow (`docs/GOTCHAS.md`).
+  /// eye lands on it. A color change only — no shadow (`docs/GOTCHAS.md`).
   String? _highlightedMessageId;
   Timer? _highlightTimer;
   bool _isJumping = false;
@@ -514,7 +535,10 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
       },
       child: Scaffold(
         backgroundColor: colors.bg,
+        // `top: false` because the header slab runs up under the status bar
+        // and pads itself by the inset instead.
         body: SafeArea(
+          top: false,
           child: Column(
             children: [
               // Rebuilds on inbox changes too, since the header reads the
@@ -527,6 +551,10 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                   builder: (context, state) =>
                       _Header(conversation: _conversation(state)),
                 ),
+              ),
+              JoinCallBar(
+                peerOf: () =>
+                    _callPeerOf(_conversation(context.read<ChatCubit>().state)),
               ),
               Expanded(
                 child: BlocConsumer<ChatCubit, ChatState>(
@@ -556,7 +584,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                       previous.errorMessage != current.errorMessage,
                   builder: (context, state) {
                     if (state.status == ChatStatus.loading) {
-                      return const Center(child: CircularProgressIndicator());
+                      return const ShimmerChatThread();
                     }
                     if (state.status == ChatStatus.error) {
                       return SingleChildScrollView(
@@ -567,6 +595,20 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                               'Could not load this conversation.',
                           onRetry: context.read<ChatCubit>().load,
                         ),
+                      );
+                    }
+                    if (state.messages.isEmpty && !state.isTyping) {
+                      return Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SingleChildScrollView(
+                            padding: EdgeInsets.all(14),
+                            child: EmptyStateCard(
+                              title: 'NO MESSAGES YET',
+                              hint: 'Say hi to get the conversation going.',
+                            ),
+                          ),
+                        ],
                       );
                     }
                     return BlocBuilder<MessagesCubit, MessagesState>(
@@ -764,106 +806,268 @@ class _Header extends StatelessWidget {
     final conversation = this.conversation;
     final isGroup = conversation?.isGroup ?? false;
 
-    final String subtitle;
-    if (conversation == null) {
-      subtitle = '';
-    } else if (isGroup) {
-      final n = conversation.participants.length;
-      subtitle = '$n ${n == 1 ? 'MEMBER' : 'MEMBERS'}';
-    } else {
-      subtitle = conversation.isOnline ? 'ACTIVE NOW' : 'OFFLINE';
-    }
+    void openGroupInfo() => context.pushNamed(
+      RouteNames.groupInfo,
+      pathParameters: {'conversationId': conversation!.id},
+    );
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: colors.line, width: 1.5)),
-      ),
-      child: Row(
-        children: [
-          AppIconButton(
-            icon: const Icon(CupertinoIcons.back),
-            size: 36,
-            onPressed: () => Navigator.of(context).maybePop(),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: _isDark(context)
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
+      child: CustomPaint(
+        painter: _HeaderSlabPainter(base: _slabBase(context)),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            MediaQuery.paddingOf(context).top + 10,
+            16,
+            16,
           ),
-          const SizedBox(width: 10),
-          if (conversation != null) ...[
-            Expanded(
-              child: InkWell(
-                borderRadius: BorderRadius.circular(AppRadii.sm),
-                onTap: isGroup
-                    ? () => context.pushNamed(
-                        RouteNames.groupInfo,
-                        pathParameters: {'conversationId': conversation.id},
-                      )
-                    : null,
-                child: Row(
-                  children: [
-                    AppAvatar(
-                      initials: conversation.name.initials,
-                      seed: conversation.avatarSeed,
-                      imageUrl: conversation.avatarUrl,
-                      cacheKey: conversation.avatarCacheKey,
-                      size: 42,
-                      showOnlineDot: conversation.isOnline,
-                    ),
-                    const SizedBox(width: 11),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            conversation.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.titleRow.copyWith(
-                              color: colors.ink,
-                            ),
+          child: Row(
+            children: [
+              _SlabButton(
+                icon: CupertinoIcons.back,
+                onPressed: () => Navigator.of(context).maybePop(),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GestureDetector(
+                  onTap: isGroup ? openGroupInfo : null,
+                  behavior: HitTestBehavior.opaque,
+                  // Avatar (a group's member stack) and name together; the
+                  // name gives way first when space runs out.
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      if (conversation != null) ...[
+                        if (isGroup)
+                          _AvatarStack(conversation: conversation)
+                        else
+                          AppAvatar(
+                            initials: conversation.name.initials,
+                            seed: conversation.avatarSeed,
+                            imageUrl: conversation.avatarUrl,
+                            cacheKey: conversation.avatarCacheKey,
+                            size: _headerAvatarSize,
                           ),
-                          const SizedBox(height: 5),
-                          Row(
-                            children: [
-                              if (!isGroup && conversation.isOnline) ...[
-                                Container(
-                                  width: 7,
-                                  height: 7,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: colors.grn,
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                              ],
-                              Text(
-                                subtitle,
-                                style: AppTextStyles.metaMono.copyWith(
-                                  color: colors.ink2,
-                                ),
-                              ),
-                            ],
+                        const SizedBox(width: 10),
+                      ],
+                      Flexible(
+                        child: Text(
+                          conversation?.name ?? '',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.titleRow.copyWith(
+                            color: colors.ink,
+                            fontSize: 19,
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Group calls too; the group's info page is a tap on its name.
+              _SlabButton(
+                icon: CupertinoIcons.phone,
+                size: 44,
+                onPressed: () => _call(conversation!, CallMedia.audio),
+              ),
+              if (conversation == null)
+                const SizedBox(width: _slabButtonSize)
+              else
+                _SlabButton(
+                  icon: CupertinoIcons.video_camera,
+                  onPressed: () => _call(conversation, CallMedia.video),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The call screen takes over from here (`CallHost`); with a call already
+  /// live this just brings it back to the front. In a group whose call is
+  /// already running, this joins it.
+  void _call(ConversationEntity conversation, CallMedia media) =>
+      sl<CallCubit>().startCall(
+        conversationId: conversation.id,
+        media: media,
+        peer: _callPeerOf(conversation),
+        isGroup: conversation.isGroup,
+      );
+}
+
+/// The conversation as the call screen names it — the other person, or the
+/// group.
+CallPeer _callPeerOf(ConversationEntity? conversation) => conversation == null
+    ? const CallPeer.unknown()
+    : CallPeer(
+        name: conversation.name,
+        avatarSeed: conversation.avatarSeed,
+        avatarUrl: conversation.avatarUrl,
+        avatarCacheKey: conversation.avatarCacheKey,
+      );
+
+bool _isDark(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark;
+
+/// The header slab's fill: white in light mode, the dark chrome colour in
+/// dark mode. Either way the active token set reads on it, so the slab's
+/// contents use `AppColors.of(context)` like the rest of the page.
+Color _slabBase(BuildContext context) {
+  final colors = AppColors.of(context);
+  return _isDark(context) ? colors.shell : colors.surf;
+}
+
+const double _slabButtonSize = 50;
+
+/// The 1:1 header's avatar, and the height of a group's member stack beside it.
+const double _headerAvatarSize = 36;
+
+/// The round buttons on the header slab: white on the dark slab, and the
+/// inset surface with a hairline on the white one.
+class _SlabButton extends StatelessWidget {
+  const _SlabButton({
+    required this.icon,
+    required this.onPressed,
+    this.size = _slabButtonSize,
+  });
+
+  final IconData icon;
+  final VoidCallback onPressed;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final dark = _isDark(context);
+    return InkOutline(
+      child: AppIconButton(
+        icon: Icon(icon),
+        size: size,
+        iconColor: dark ? Colors.white : colors.ink,
+        borderColor: dark ? Colors.transparent : colors.line,
+        onPressed: onPressed,
+      ),
+    );
+  }
+}
+
+/// The first few members as overlapping avatars, then a round "+N" for the
+/// rest. The viewer is left out — it is everyone *else* in the group.
+/// `Stack`/`Positioned` rather than negative margins or a `Transform`, so each
+/// avatar keeps its full hit area (`docs/GOTCHAS.md`).
+class _AvatarStack extends StatelessWidget {
+  const _AvatarStack({required this.conversation});
+
+  final ConversationEntity conversation;
+
+  static const double _size = _headerAvatarSize;
+  static const double _step = 24;
+  static const int _shown = 3;
+  static const double _ring = 2;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final ring = _slabBase(context);
+    final others = conversation.participants
+        .where((p) => p.userId != conversation.viewerId)
+        .toList();
+    final shown = others.take(_shown).toList();
+    final rest = others.length - shown.length;
+    final slots = shown.length + (rest > 0 ? 1 : 0);
+    if (slots == 0) return const SizedBox(height: _size);
+
+    return SizedBox(
+      width: _size + _step * (slots - 1),
+      height: _size,
+      child: Stack(
+        children: [
+          for (var i = 0; i < shown.length; i++)
+            Positioned(
+              left: _step * i,
+              // A solid slab-coloured disc behind each avatar cuts it out of
+              // the one it overlaps. `AppAvatar(ringColor:)` would leave a
+              // see-through gap between ring and photo.
+              child: Container(
+                width: _size,
+                height: _size,
+                padding: const EdgeInsets.all(_ring),
+                decoration: BoxDecoration(shape: BoxShape.circle, color: ring),
+                child: AppAvatar(
+                  initials: shown[i].displayName.initials,
+                  seed: shown[i].userId.hashCode.abs(),
+                  imageUrl: shown[i].avatarUrl,
+                  size: _size - _ring * 2,
                 ),
               ),
             ),
-            if (isGroup)
-              AppIconButton(
-                icon: const Icon(CupertinoIcons.info_circle),
-                size: 36,
-                onPressed: () => context.pushNamed(
-                  RouteNames.groupInfo,
-                  pathParameters: {'conversationId': conversation.id},
+          if (rest > 0)
+            Positioned(
+              left: _step * shown.length,
+              child: Container(
+                width: _size,
+                height: _size,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: colors.surf2,
+                  border: Border.all(color: ring, width: _ring),
+                ),
+                child: Text(
+                  '+${Formatters.compactCount(rest)}',
+                  style: AppTextStyles.titleSm.copyWith(
+                    color: colors.ink,
+                    fontSize: 12,
+                  ),
                 ),
               ),
-          ] else
-            const Spacer(),
+            ),
         ],
       ),
     );
   }
+}
+
+/// The header's slab: rounded bottom corners over a soft drop shadow that
+/// separates it from the transcript.
+///
+/// The blur is a `MaskFilter` on a `Paint` inside this painter — never a
+/// blurred `BoxShadow`, which crashed this project's renderer on a rebuilding
+/// widget (`docs/GOTCHAS.md`).
+class _HeaderSlabPainter extends CustomPainter {
+  const _HeaderSlabPainter({required this.base});
+
+  final Color base;
+
+  static const Radius _corner = Radius.circular(28);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final slab = RRect.fromRectAndCorners(
+      Offset.zero & size,
+      bottomLeft: _corner,
+      bottomRight: _corner,
+    );
+    // Drawn first and nudged down, so only the part below the slab shows.
+    canvas
+      ..drawRRect(
+        slab.shift(const Offset(0, 4)),
+        Paint()
+          ..color = const Color(0xFF000000).withValues(alpha: 0.12)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+      )
+      ..drawRRect(slab, Paint()..color = base);
+  }
+
+  @override
+  bool shouldRepaint(_HeaderSlabPainter oldDelegate) =>
+      oldDelegate.base != base;
 }
 
 // ---------------------------------------------------------------------------
@@ -909,7 +1113,7 @@ class _Composer extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.fromLTRB(10, 10, 10, 14),
           decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: colors.line, width: 1.5)),
+            border: Border(top: BorderSide(color: colors.line, width: AppStyle.of(context).borderWidth)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -937,23 +1141,24 @@ class _Composer extends StatelessWidget {
                 ),
               Row(
                 children: [
-                  AppIconButton(
-                    icon: const Icon(CupertinoIcons.add),
-                    size: 46,
-                    // No files on an edit: the server only changes text.
-                    onPressed: editing == null && !state.isUploading
-                        ? onAttach
-                        : null,
+                  InkOutline(
+                    offset: 0,
+                    child: AppIconButton(
+                      icon: const Icon(CupertinoIcons.add),
+                      size: 46,
+                      // No files on an edit: the server only changes text.
+                      onPressed: editing == null && !state.isUploading
+                          ? onAttach
+                          : null,
+                    ),
                   ),
                   const SizedBox(width: 4),
                   Expanded(
-                    child: Container(
+                    child: InputGlow(
+                      controller: controller,
+                      fillColor: colors.surf,
+                      borderRadius: BorderRadius.circular(AppRadii.pill),
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: colors.surf,
-                        border: Border.all(color: colors.line, width: 1.5),
-                        borderRadius: BorderRadius.circular(AppRadii.pill),
-                      ),
                       child: TextField(
                         controller: controller,
                         focusNode: focusNode,
@@ -997,16 +1202,18 @@ class _Composer extends StatelessWidget {
                       // only changes text, and there is nothing to attach a
                       // recording or a sticker to.
                       if (hasSomethingToSend || editing != null) {
-                        return AppIconButton(
-                          icon: Icon(
-                            editing != null
-                                ? CupertinoIcons.checkmark
-                                : CupertinoIcons.arrow_up,
+                        return InkOutline(
+                          fill: colors.yel,
+                          child: AppIconButton(
+                            icon: editing != null
+                                ? const Icon(CupertinoIcons.checkmark)
+                                : const SendIcon(semanticLabel: 'Send'),
+                            filled: true,
+                            borderColor: colors.ink,
+                            iconColor: AppStyle.of(context).outlined ? colors.onYel : null,
+                            size: 46,
+                            onPressed: state.isUploading ? null : onSend,
                           ),
-                          filled: true,
-                          borderColor: colors.ink,
-                          size: 46,
-                          onPressed: state.isUploading ? null : onSend,
                         );
                       }
                       // Stickers share the idle slot with the mic rather than
@@ -1018,18 +1225,27 @@ class _Composer extends StatelessWidget {
                       return Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          AppIconButton(
-                            icon: const Icon(CupertinoIcons.smiley),
-                            size: 46,
-                            onPressed: state.isUploading ? null : onStickers,
+                          InkOutline(
+                            offset: 0,
+                            child: AppIconButton(
+                              icon: const Icon(CupertinoIcons.smiley),
+                              size: 46,
+                              onPressed: state.isUploading ? null : onStickers,
+                            ),
                           ),
-                          const SizedBox(width: 4),
-                          AppIconButton(
-                            icon: const Icon(CupertinoIcons.mic),
-                            filled: true,
-                            borderColor: colors.ink,
-                            size: 46,
-                            onPressed: state.isUploading ? null : onRecordVoice,
+                          // Only ink outline spaces the pair: two drawn circles
+                          // touching read as one blob.
+                          if (AppStyle.of(context).outlined) const SizedBox(width: 6),
+                          InkOutline(
+                            fill: colors.yel,
+                            child: AppIconButton(
+                              icon: const Icon(CupertinoIcons.mic),
+                              filled: true,
+                              borderColor: colors.ink,
+                              iconColor: AppStyle.of(context).outlined ? colors.onYel : null,
+                              size: 46,
+                              onPressed: state.isUploading ? null : onRecordVoice,
+                            ),
                           ),
                         ],
                       );
@@ -1615,8 +1831,11 @@ class _MessageBubble extends StatelessWidget {
           color: deleted ? colors.surf2 : (mine ? colors.yel : colors.surf),
           border: Border.all(
             color: mine && !deleted ? colors.ink : colors.line,
-            width: 1.5,
+            width: AppStyle.of(context).borderWidth,
           ),
+          // Ink outline lifts only your own bubbles, so the two sides of a
+          // thread still read apart at a glance.
+          boxShadow: mine && !deleted ? AppStyle.of(context).hardShadow(colors, AppStyle.buttonOffset) : null,
           // The tail goes on whatever is lowest: the bubble, the sticker, or
           // the pictures under it.
           borderRadius: _bubbleRadius(
@@ -2030,6 +2249,8 @@ class _AttachmentThumb extends StatelessWidget {
               key: ValueKey(url),
               imageUrl: url,
               cacheKey: attachment.id,
+              color: context.imageBackdrop,
+              colorBlendMode: BlendMode.dstOver,
               fit: BoxFit.cover,
               memCacheWidth: 800,
               placeholder: (_, _) => placeholder,
@@ -2290,7 +2511,7 @@ class _InviteCardBubble extends StatelessWidget {
                             label: 'Decline',
                             dense: true,
                             fullWidth: true,
-                            variant: AppButtonVariant.outline,
+                            variant: AppButtonVariant.secondary,
                             onPressed: busy ? null : onDecline,
                           ),
                         ),

@@ -45,6 +45,21 @@ abstract final class NotificationTypes {
   /// nothing, so blocking is never revealed this way.
   static const friendshipChanged = 'FRIENDSHIP_CHANGED';
 
+  /// Someone is calling the viewer. Push-only, never a row: on Android it
+  /// arrives data-only and the app draws the ring itself, with Accept and
+  /// Decline on it (`core/notifications/call_alert.dart`); on iOS it is an
+  /// alert iOS draws. `data` carries `callId`, `conversationId`, `actorId`,
+  /// `media`, `callKind`, `expiresAt` and ready-made `title`/`body`.
+  static const callIncoming = 'CALL_INCOMING';
+
+  /// The ring ended unanswered — timed out, cancelled, or failed. Replaces
+  /// the ring with a "Missed call" alert under the same key.
+  static const callMissed = 'CALL_MISSED';
+
+  /// Silent: the viewer answered or declined on another device, so this one
+  /// stops ringing. `data` carries `callId`, `conversationId` and `reason`.
+  static const callRingStopped = 'CALL_RING_STOPPED';
+
   /// Post and friend activity shown in Signals. Notification recipients are
   /// determined by the notification service.
   static const signalTypes = {

@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:yello_social_app/shared/widgets/yello_wordmark.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -11,6 +12,8 @@ import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/error_view.dart';
+import '../../../../shared/widgets/glow_border.dart';
+import '../../../../shared/widgets/send_icon.dart';
 import '../../domain/entities/feedback_entity.dart';
 import '../../domain/usecases/safety_usecases.dart';
 import '../bloc/feedback_cubit.dart';
@@ -54,7 +57,10 @@ class _SendFeedbackViewState extends State<_SendFeedbackView> {
     if (!mounted) return;
     if (ok) {
       _note.clear();
-      AppStatusSnackbar.showSuccess(context, message: 'Thanks — your feedback is on its way.');
+      AppStatusSnackbar.showSuccess(
+        context,
+        message: 'Thanks — your feedback is on its way.',
+      );
       return;
     }
     AppStatusSnackbar.showError(
@@ -83,11 +89,19 @@ class _SendFeedbackViewState extends State<_SendFeedbackView> {
                       onPressed: () => Navigator.of(context).maybePop(),
                     ),
                     const SizedBox(width: 12),
-                    Text('Send feedback', style: AppTextStyles.titleLg.copyWith(color: colors.ink)),
+
+                    YelloWordmark(
+                      fontSize: 32,
+                      text: 'Send feedback',
+                      key: const Key('theme_page_wordmark'),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 18),
-                Text('WHAT ARE YOU RATING?', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
+                Text(
+                  'WHAT ARE YOU RATING?',
+                  style: AppTextStyles.eyebrow.copyWith(color: colors.ink2),
+                ),
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
@@ -97,12 +111,17 @@ class _SendFeedbackViewState extends State<_SendFeedbackView> {
                       ChoiceChip(
                         label: Text(feature.label),
                         selected: state.feature == feature,
-                        onSelected: state.submitting ? null : (_) => cubit.selectFeature(feature),
+                        onSelected: state.submitting
+                            ? null
+                            : (_) => cubit.selectFeature(feature),
                       ),
                   ],
                 ),
                 const SizedBox(height: 20),
-                Text('HOW IS IT WORKING?', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
+                Text(
+                  'HOW IS IT WORKING?',
+                  style: AppTextStyles.eyebrow.copyWith(color: colors.ink2),
+                ),
                 const SizedBox(height: 10),
                 _RatingPicker(
                   rating: state.rating,
@@ -117,22 +136,32 @@ class _SendFeedbackViewState extends State<_SendFeedbackView> {
                   style: AppTextStyles.body.copyWith(color: colors.ink),
                   decoration: InputDecoration(
                     hintText: 'Tell us more (optional)',
-                    hintStyle: AppTextStyles.bodySm.copyWith(color: colors.ink3),
+                    hintStyle: AppTextStyles.bodySm.copyWith(
+                      color: colors.ink3,
+                    ),
                     filled: true,
                     fillColor: colors.surf,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(AppRadii.lg),
                       borderSide: BorderSide(color: colors.line, width: 1.5),
                     ),
+                    focusedBorder: GlowInputBorder(
+                      borderRadius: BorderRadius.circular(AppRadii.lg),
+                      borderSide: BorderSide(color: colors.yel, width: 1.5),
+                    ),
                   ),
                 ),
                 AppButton(
                   label: state.submitting ? 'Sending…' : 'Send feedback',
                   fullWidth: true,
+                  trailingIcon: SendIcon(size: 16, color: state.canSubmit ? colors.onYel : colors.ink3),
                   onPressed: state.canSubmit ? () => _send(cubit) : null,
                 ),
                 const SizedBox(height: 28),
-                Text('YOUR RECENT FEEDBACK', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
+                Text(
+                  'YOUR RECENT FEEDBACK',
+                  style: AppTextStyles.eyebrow.copyWith(color: colors.ink2),
+                ),
                 const SizedBox(height: 10),
                 if (state.status == FeedbackStatus.loading)
                   const Padding(
@@ -140,7 +169,11 @@ class _SendFeedbackViewState extends State<_SendFeedbackView> {
                     child: Center(child: CircularProgressIndicator()),
                   )
                 else if (state.status == FeedbackStatus.error)
-                  ErrorView(message: state.errorMessage ?? 'Could not load your feedback.', onRetry: cubit.load)
+                  ErrorView(
+                    message:
+                        state.errorMessage ?? 'Could not load your feedback.',
+                    onRetry: cubit.load,
+                  )
                 else if (state.recent.isEmpty)
                   const EmptyStateCard(
                     title: 'Nothing sent yet',
@@ -152,9 +185,13 @@ class _SendFeedbackViewState extends State<_SendFeedbackView> {
                     const SizedBox(height: 10),
                   ],
                   if (state.hasMore)
-                    TextButton(
-                      onPressed: state.isLoadingMore ? null : cubit.loadMore,
-                      child: Text(state.isLoadingMore ? 'Loading…' : 'Load more'),
+                    Center(
+                      child: AppButton(
+                        label: state.isLoadingMore ? 'Loading…' : 'Load more',
+                        variant: AppButtonVariant.secondary,
+                        dense: true,
+                        onPressed: state.isLoadingMore ? null : cubit.loadMore,
+                      ),
                     ),
                 ],
               ],
@@ -187,7 +224,9 @@ class _RatingPicker extends StatelessWidget {
               onPressed: onRate == null ? null : () => onRate!(value),
               tooltip: '$value out of 5',
               icon: Icon(
-                value <= rating ? CupertinoIcons.star_fill : CupertinoIcons.star,
+                value <= rating
+                    ? CupertinoIcons.star_fill
+                    : CupertinoIcons.star,
                 size: 32,
                 color: value <= rating ? colors.yel : colors.ink3,
               ),
@@ -221,12 +260,17 @@ class _FeedbackRow extends StatelessWidget {
               Expanded(
                 child: Text(
                   entry.feature.label,
-                  style: AppTextStyles.bodySm.copyWith(color: colors.ink, fontWeight: FontWeight.w700),
+                  style: AppTextStyles.bodySm.copyWith(
+                    color: colors.ink,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               for (var value = 1; value <= 5; value++)
                 Icon(
-                  value <= entry.rating ? CupertinoIcons.star_fill : CupertinoIcons.star,
+                  value <= entry.rating
+                      ? CupertinoIcons.star_fill
+                      : CupertinoIcons.star,
                   size: 14,
                   color: value <= entry.rating ? colors.yel : colors.ink3,
                 ),
@@ -234,7 +278,10 @@ class _FeedbackRow extends StatelessWidget {
           ),
           if ((entry.note ?? '').isNotEmpty) ...[
             const SizedBox(height: 6),
-            Text(entry.note!, style: AppTextStyles.bodySm.copyWith(color: colors.ink2)),
+            Text(
+              entry.note!,
+              style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
+            ),
           ],
           const SizedBox(height: 6),
           Text(

@@ -4,13 +4,10 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../../features/chat/data/datasources/chat_remote_datasource.dart' show ChatRoutes;
 import '../../features/chat/domain/usecases/chat_usecases.dart' show chatMessageMaxLength, newChatClientId;
 import '../config/app_config.dart';
-import '../constants/api_constants.dart';
-import '../network/token_refresh_service.dart';
-import '../security/certificate_pinning.dart';
 import '../security/input_sanitizer.dart';
-import '../security/jwt_manager.dart';
 import '../security/secure_storage_service.dart';
 import '../utils/logger.dart';
+import 'background_auth.dart';
 
 /// Id of the Reply action — the Android `RemoteInput` one and the iOS
 /// `UNTextInputNotificationAction` share it, so a response carrying this in
@@ -55,13 +52,9 @@ final DarwinNotificationCategory chatReplyCategory = DarwinNotificationCategory(
 /// Sends [text] into the conversation a chat push's [data] names, and
 /// reports whether the server took it.
 ///
-/// Runs in whichever isolate the reply arrived on: the main one while the
-/// app is alive, the plugin's own background engine when it is not. `sl` is
-/// empty over there and `bootstrap()` never ran, so this builds the two
-/// things it needs itself instead of reaching into DI. Token handling
-/// mirrors [AuthInterceptor]: never send a token already known to be
-/// expired, and refresh once on a 401 — both attempts reuse one `clientId`
-/// so a retry cannot post the reply twice.
+/// Runs in whichever isolate the reply arrived on — see `background_auth.dart`
+/// for how it reaches the API without DI. Both attempts (the second after a
+/// 401 refresh) reuse one `clientId`, so a retry cannot post the reply twice.
 Future<bool> sendChatReply({required Map<String, dynamic> data, required String text}) async {
   final conversationId = data['conversationId'];
   if (conversationId is! String || conversationId.trim().isEmpty) return false;
@@ -71,27 +64,10 @@ Future<bool> sendChatReply({required Map<String, dynamic> data, required String 
   final body = InputSanitizer.sanitizeText(text, maxLength: chatMessageMaxLength);
   if (body.isEmpty) return false;
 
-  // Statics don't cross an isolate boundary, so in the background engine
-  // this is the first thing that sets the base URL at all.
-  if (!AppConfig.isInitialized) AppConfig.init(baseUrl: AppConfig.defaultBaseUrl);
-
   final storage = SecureStorageServiceImpl();
-  var token = await storage.readAccessToken();
+  var token = await backgroundAccessToken(storage);
   if (token == null) return false;
-  if (JwtManagerImpl().isExpired(token)) {
-    token = await _refreshedToken(storage);
-    if (token == null) return false;
-  }
-
-  final dio = Dio(
-    BaseOptions(
-      baseUrl: AppConfig.baseUrl,
-      connectTimeout: ApiConstants.connectTimeout,
-      receiveTimeout: ApiConstants.receiveTimeout,
-      sendTimeout: ApiConstants.sendTimeout,
-      headers: {'Accept': ApiConstants.contentTypeJson, ApiConstants.headerContentType: ApiConstants.contentTypeJson},
-    ),
-  )..httpClientAdapter = CertificatePinning.buildAdapter();
+  final dio = backgroundDio();
 
   final id = conversationId.trim();
   final clientId = newChatClientId();
@@ -103,7 +79,7 @@ Future<bool> sendChatReply({required Map<String, dynamic> data, required String 
         _logReplyFailure('failed', e);
         return false;
       }
-      final refreshed = await _refreshedToken(storage);
+      final refreshed = await refreshedAccessToken(storage);
       if (refreshed == null) return false;
       token = refreshed;
       await _postReply(dio, id, body, clientId, token);
@@ -136,26 +112,15 @@ void _logReplyFailure(String stage, DioException e) {
 Future<void> _markReplyRead(Dio dio, String conversationId, Object? messageId, String token) async {
   if (messageId is! String || messageId.isEmpty) return;
   try {
-    await dio.post<void>(
-      ChatRoutes.read(conversationId),
-      data: {'messageId': messageId},
-      options: Options(headers: {ApiConstants.headerAuthorization: 'Bearer $token'}),
-    );
+    await dio.post<void>(ChatRoutes.read(conversationId), data: {'messageId': messageId}, options: bearer(token));
   } catch (e) {
     appLogger.w('Notification reply: marking $conversationId read failed — $e');
   }
 }
 
-Future<String?> _refreshedToken(SecureStorageService storage) async {
-  final refreshed = await TokenRefreshServiceImpl(storage).refresh();
-  return refreshed ? storage.readAccessToken() : null;
-}
-
-/// The bearer header goes on per request rather than on the client: the
-/// retry runs with a *different* token than the first attempt.
 Future<void> _postReply(Dio dio, String conversationId, String body, String clientId, String token) =>
     dio.post<Map<String, dynamic>>(
       ChatRoutes.messages(conversationId),
       data: {'clientId': clientId, 'body': body},
-      options: Options(headers: {ApiConstants.headerAuthorization: 'Bearer $token'}),
+      options: bearer(token),
     );

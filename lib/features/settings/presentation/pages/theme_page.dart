@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:yello_social_app/shared/widgets/yello_wordmark.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -8,11 +9,11 @@ import '../../../../core/theme/theme_cubit.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../widgets/settings_card.dart';
 
-/// Account menu → Theme. Four choices: the two [AppThemeFlavor]s, each in
+/// Account menu → Theme. Six choices: the three [AppThemeFlavor]s, each in
 /// light and dark. Still no "match the system" option, because [ThemeCubit]
 /// persists a concrete brightness rather than a third value.
 ///
-/// One card per flavor rather than one flat list of four, so the two axes
+/// One card per flavor rather than one flat list of six, so the two axes
 /// stay legible — the card header says *which palette*, the rows say *which
 /// brightness* — and so adding a third flavor later is a third card, not a
 /// six-row list with no structure.
@@ -35,9 +36,20 @@ class ThemePage extends StatelessWidget {
           children: [
             Row(
               children: [
-                AppIconButton(icon: const Icon(CupertinoIcons.back), onPressed: () => Navigator.of(context).maybePop()),
+                AppIconButton(
+                  icon: const Icon(CupertinoIcons.back),
+                  onPressed: () => Navigator.of(context).maybePop(),
+                ),
                 const SizedBox(width: 12),
-                Text('Theme', style: AppTextStyles.titleLg.copyWith(color: colors.ink)),
+                // Text(
+                //   'Theme',
+                //   style: AppTextStyles.titleLg.copyWith(color: colors.ink),
+                // ),
+                YelloWordmark(
+                  fontSize: 32,
+                  text: 'Theme',
+                  key: const Key('theme_page_wordmark'),
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -53,9 +65,19 @@ class ThemePage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     for (final flavor in AppThemeFlavor.values) ...[
-                      Text(flavor.label.toUpperCase(), style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
+                      Text(
+                        flavor.label.toUpperCase(),
+                        style: AppTextStyles.eyebrow.copyWith(
+                          color: colors.ink2,
+                        ),
+                      ),
                       const SizedBox(height: 4),
-                      Text(flavor.blurb, style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink3)),
+                      Text(
+                        flavor.blurb,
+                        style: AppTextStyles.metaMonoSm.copyWith(
+                          color: colors.ink3,
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       SettingsCard(
                         padding: EdgeInsets.zero,
@@ -67,16 +89,26 @@ class ThemePage extends StatelessWidget {
                               icon: CupertinoIcons.sun_max,
                               label: 'Light',
                               selected: theme.flavor == flavor && !theme.isDark,
-                              onTap: () => cubit.setTheme(mode: ThemeMode.light, flavor: flavor),
+                              onTap: () => cubit.setTheme(
+                                mode: ThemeMode.light,
+                                flavor: flavor,
+                              ),
                             ),
-                            Divider(height: 1, thickness: 1, color: colors.line),
+                            Divider(
+                              height: 1,
+                              thickness: 1,
+                              color: colors.line,
+                            ),
                             _ThemeOption(
                               flavor: flavor,
                               brightness: Brightness.dark,
                               icon: CupertinoIcons.moon,
                               label: 'Dark',
                               selected: theme.flavor == flavor && theme.isDark,
-                              onTap: () => cubit.setTheme(mode: ThemeMode.dark, flavor: flavor),
+                              onTap: () => cubit.setTheme(
+                                mode: ThemeMode.dark,
+                                flavor: flavor,
+                              ),
                             ),
                           ],
                         ),
@@ -138,12 +170,20 @@ class _ThemeOption extends StatelessWidget {
                         const SizedBox(width: 6),
                         Text(
                           label,
-                          style: AppTextStyles.bodySm.copyWith(color: colors.ink, fontWeight: FontWeight.w600),
+                          style: AppTextStyles.bodySm.copyWith(
+                            color: colors.ink,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 3),
-                    Text(_subtitle(flavor, brightness), style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink2)),
+                    Text(
+                      _subtitle(flavor, brightness),
+                      style: AppTextStyles.metaMonoSm.copyWith(
+                        color: colors.ink2,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -156,9 +196,18 @@ class _ThemeOption extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: selected ? colors.yel : Colors.transparent,
                   shape: BoxShape.circle,
-                  border: Border.all(color: selected ? colors.ink : colors.line, width: 1.5),
+                  border: Border.all(
+                    color: selected ? colors.ink : colors.line,
+                    width: 1.5,
+                  ),
                 ),
-                child: selected ? Icon(CupertinoIcons.checkmark, size: 14, color: colors.onYel) : null,
+                child: selected
+                    ? Icon(
+                        CupertinoIcons.checkmark,
+                        size: 14,
+                        color: colors.onYel,
+                      )
+                    : null,
               ),
             ],
           ),
@@ -170,8 +219,18 @@ class _ThemeOption extends StatelessWidget {
   static String _subtitle(AppThemeFlavor flavor, Brightness brightness) {
     final isDark = brightness == Brightness.dark;
     return switch (flavor) {
-      AppThemeFlavor.classic => isDark ? 'Dimmed surfaces, easier at night.' : 'Paper background, dark ink.',
-      AppThemeFlavor.quietRails => isDark ? 'Near-black layers, hairline seams.' : 'White cards on a grey canvas.',
+      AppThemeFlavor.classic =>
+        isDark
+            ? 'Dimmed surfaces, easier at night.'
+            : 'Paper background, dark ink.',
+      AppThemeFlavor.quietRails =>
+        isDark
+            ? 'Near-black layers, hairline seams.'
+            : 'White cards on a grey canvas.',
+      AppThemeFlavor.ink =>
+        isDark
+            ? 'Cream outlines on charcoal.'
+            : 'Paper background, ink outlines.',
     };
   }
 }
@@ -215,7 +274,10 @@ class _Swatch extends StatelessWidget {
             SizedBox(
               height: 6,
               child: DecoratedBox(
-                decoration: BoxDecoration(color: preview.yel, borderRadius: BorderRadius.circular(3)),
+                decoration: BoxDecoration(
+                  color: preview.yel,
+                  borderRadius: BorderRadius.circular(3),
+                ),
               ),
             ),
           ],

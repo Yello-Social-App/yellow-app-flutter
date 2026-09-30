@@ -9,8 +9,10 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
+import '../../../../shared/widgets/error_view.dart';
 import '../../domain/entities/story_entity.dart';
 import '../bloc/story_viewers_cubit.dart';
+import '../../../../shared/widgets/shimmer_loading.dart';
 
 /// "Seen by" for a story you own.
 ///
@@ -91,7 +93,21 @@ class _StoryViewersSheet extends StatelessWidget {
     final cubit = context.read<StoryViewersCubit>();
 
     if (state.status == StoryViewersStatus.loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return ListView(
+        physics: const NeverScrollableScrollPhysics(),
+        children: [
+          // ListTile's two-line shape: 72px tall, 16/24 side padding.
+          for (final width in const [118.0, 92.0, 136.0, 104.0, 124.0])
+            ShimmerListTile(
+              padding: const EdgeInsetsDirectional.fromSTEB(16, 16, 24, 16),
+              gap: 16,
+              titleWidth: width,
+              subtitleWidth: 70,
+              subtitleHeight: 9,
+              trailing: const ShimmerBox(width: 24, height: 9),
+            ),
+        ],
+      );
     }
     if (state.status == StoryViewersStatus.error) {
       return Center(
@@ -106,18 +122,15 @@ class _StoryViewersSheet extends StatelessWidget {
       );
     }
     if (state.viewers.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            viewCount > 0
-                // The count survived; the names did not.
-                ? 'The list of names is only kept for 48 hours after posting.'
-                : 'No one has seen this yet.',
-            textAlign: TextAlign.center,
-            style: AppTextStyles.body.copyWith(color: colors.ink2),
-          ),
-        ),
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: viewCount > 0
+            // The count survived; the names did not.
+            ? const EmptyStateCard(
+                title: 'NAMES EXPIRED',
+                hint: 'The list of names is only kept for 48 hours after posting.',
+              )
+            : const EmptyStateCard(title: 'NO VIEWS YET', hint: 'No one has seen this yet.'),
       );
     }
 

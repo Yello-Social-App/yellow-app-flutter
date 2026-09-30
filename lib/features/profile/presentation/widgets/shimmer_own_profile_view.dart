@@ -4,14 +4,15 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/shimmer_loading.dart';
 
-/// Loading skeleton for the **Profile tab** (`profile_page.dart`), following
-/// ADR-013: a structural stand-in for the real `ListView`, kept beside the
-/// widgets it mirrors.
+/// Loading skeleton for both profile screens — the Profile tab
+/// (`profile_page.dart`) and someone else's (`public_profile_page.dart`) —
+/// following ADR-013: a structural stand-in for the real `ListView`, kept
+/// beside the widgets it mirrors.
 ///
-/// `ShimmerProfileView` next door still serves `public_profile_page.dart`,
-/// which uses a header card of its own proportions; this screen's layout is
-/// close but not identical, so it keeps its own skeleton rather than flashing
-/// the other shape.
+/// The two screens share one layout ([ProfileHeader] / [PublicProfileHeader]
+/// on the same frame), so they share this skeleton too. The only difference
+/// is how many rows the details card holds, which [detailRows] carries: four
+/// on your own profile, three on someone else's (no email).
 ///
 /// Measurements copied from [ProfileHeader] and [ProfileDetailsCard]: the
 /// 196px cover with its 84px fade into `bg`, the identity card whose top edge
@@ -27,7 +28,10 @@ import '../../../../shared/widgets/shimmer_loading.dart';
 /// 16, and the post list, which renders real `PostCard`s and so borrows the
 /// feed's [ShimmerPostCard].
 class ShimmerOwnProfileView extends StatelessWidget {
-  const ShimmerOwnProfileView({super.key});
+  const ShimmerOwnProfileView({super.key, this.detailRows = 4});
+
+  /// Rows in the details-card skeleton.
+  final int detailRows;
 
   static const double _coverHeight = 196;
   static const double _avatarSize = 112;
@@ -148,7 +152,7 @@ class ShimmerOwnProfileView extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    for (var i = 0; i < 4; i++) ...[
+                    for (var i = 0; i < detailRows; i++) ...[
                       if (i > 0) Divider(height: 1, thickness: 1, color: colors.line2),
                       const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 14, vertical: 13),

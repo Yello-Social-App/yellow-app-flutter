@@ -146,6 +146,7 @@ class ConversationEntity extends Equatable {
     this.unreadCount = 0,
     this.viewerId,
     this.isOnline = false,
+    this.onlineMemberCount = 0,
     this.photoUrl,
     this.photoUrlExpiresAt,
   });
@@ -180,6 +181,13 @@ class ConversationEntity extends Equatable {
   /// socket is down — and never "this person is offline". Always false for a
   /// group: its avatar is the group's photo, not a person's.
   final bool isOnline;
+
+  /// A group's counterpart to [isOnline]: how many members other than the
+  /// viewer are known to be online. Folded in by `MessagesCubit` from the same
+  /// presence frames, with the same caveat — zero means *nobody known to be
+  /// online*, not "everyone is offline". Always 0 for a DM, which uses
+  /// [isOnline]. Kept separate so a group never grows a dot on its photo.
+  final int onlineMemberCount;
 
   /// Group photo — a presigned link that expires at [photoUrlExpiresAt] and
   /// is re-signed on every read, so it is not part of [props] (see
@@ -257,6 +265,7 @@ class ConversationEntity extends Equatable {
     int? unreadCount,
     String? viewerId,
     bool? isOnline,
+    int? onlineMemberCount,
     Object? photoUrl = _unset,
     Object? photoUrlExpiresAt = _unset,
   }) {
@@ -272,6 +281,7 @@ class ConversationEntity extends Equatable {
       unreadCount: unreadCount ?? this.unreadCount,
       viewerId: viewerId ?? this.viewerId,
       isOnline: isOnline ?? this.isOnline,
+      onlineMemberCount: onlineMemberCount ?? this.onlineMemberCount,
       photoUrl: identical(photoUrl, _unset) ? this.photoUrl : photoUrl as String?,
       photoUrlExpiresAt: identical(photoUrlExpiresAt, _unset) ? this.photoUrlExpiresAt : photoUrlExpiresAt as DateTime?,
     );
@@ -291,5 +301,5 @@ class ConversationEntity extends Equatable {
 
   @override
   List<Object?> get props =>
-      [id, title, lastMessage, lastMessageAtOrNull, unreadCount, participants, isOnline, hasPhoto];
+      [id, title, lastMessage, lastMessageAtOrNull, unreadCount, participants, isOnline, onlineMemberCount, hasPhoto];
 }

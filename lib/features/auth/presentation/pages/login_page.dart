@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -11,14 +12,13 @@ import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../bloc/auth_cubit.dart';
 import '../widgets/auth_form_field.dart';
-import '../widgets/auth_hero.dart';
+import '../widgets/auth_wave_header.dart';
 import '../widgets/toggle_switch.dart';
 
-/// Sign-in screen: illustrated hero header, big left-aligned "Login"
-/// heading, icon-prefixed pill fields, a remember-me toggle + forgot-
-/// password row, and the primary Sign In button — the layout of the
-/// reference "Insightlancer" login/register mock, redrawn in Yello's own
-/// palette/typography (see `AuthHero`, `AuthFormField`, `ToggleSwitch`).
+/// Sign-in screen: a dark [AuthWaveHeader] (wordmark, "Sign Up" link, big
+/// centered "Sign In" title, self-drawing yellow wave), then icon-prefixed
+/// pill fields, a remember-me toggle + forgot-password row, and the primary
+/// Sign In button (see `AuthFormField`, `ToggleSwitch`).
 /// Google/Apple "continue" buttons stay below as a bonus block (visual
 /// only — no social-login endpoint exists, tapping shows a "not available
 /// yet" snackbar).
@@ -77,203 +77,214 @@ class _LoginViewState extends State<_LoginView> {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    return Scaffold(
-      backgroundColor: colors.bg,
-      body: BlocListener<AuthCubit, AuthState>(
-        listenWhen: (prev, curr) =>
-            curr.status == AuthStatus.success ||
-            curr.status == AuthStatus.failure,
-        listener: (context, state) {
-          if (state.status == AuthStatus.success) {
-            context.goNamed(RouteNames.feed);
-          } else if (state.errorMessage != null) {
-            AppStatusSnackbar.showError(context, message: state.errorMessage!);
-          }
-        },
-        child: SafeArea(
-          bottom: false,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.only(bottom: 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const AuthHero(
-                  icon: CupertinoIcons.envelope_open,
-                  badgeA: CupertinoIcons.mail,
-                  badgeB: CupertinoIcons.sparkles,
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'Login',
-                        style: AppTextStyles.displayXl.copyWith(
-                          color: colors.ink,
-                          fontSize: 36,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Please sign in to continue.',
-                        style: AppTextStyles.bodyMd.copyWith(
-                          color: colors.ink2,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      AuthFormField(
-                        label: 'Email address',
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        autofillHints: const [AutofillHints.email],
-                        textInputAction: TextInputAction.next,
-                        leadingIcon: CupertinoIcons.mail,
-                        onChanged: (_) => setState(() {}),
-                      ),
-                      const SizedBox(height: 14),
-                      AuthFormField(
-                        label: 'Password',
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        autofillHints: const [AutofillHints.password],
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) => _submit(context),
-                        leadingIcon: CupertinoIcons.lock,
-                        onChanged: (_) => setState(() {}),
-                        trailing: GestureDetector(
-                          onTap: () => setState(
-                            () => _obscurePassword = !_obscurePassword,
-                          ),
-                          child: Icon(
-                            _obscurePassword
-                                ? CupertinoIcons.eye_slash
-                                : CupertinoIcons.eye,
-                            size: 19,
-                            color: colors.ink3,
+    // Status-bar style for when the dark header has scrolled away; the
+    // header sets its own light style while it's under the status bar.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: Theme.of(context).brightness == Brightness.dark
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
+      child: Scaffold(
+        backgroundColor: colors.bg,
+        body: BlocListener<AuthCubit, AuthState>(
+          listenWhen: (prev, curr) =>
+              curr.status == AuthStatus.success ||
+              curr.status == AuthStatus.failure,
+          listener: (context, state) {
+            if (state.status == AuthStatus.success) {
+              context.goNamed(RouteNames.feed);
+            } else if (state.errorMessage != null) {
+              AppStatusSnackbar.showError(
+                context,
+                message: state.errorMessage!,
+              );
+            }
+          },
+          // `top: false` — the header runs under the status bar and pads
+          // for it itself.
+          child: SafeArea(
+            top: false,
+            bottom: false,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(bottom: 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AuthWaveHeader(
+                    title: 'Sign In',
+                    action: AuthHeaderAction(
+                      label: 'Sign Up',
+                      icon: CupertinoIcons.person_crop_circle,
+                      onTap: () => context.pushNamed(RouteNames.register),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Please sign in to continue.',
+                          style: AppTextStyles.bodyMd.copyWith(
+                            color: colors.ink2,
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          GestureDetector(
-                            onTap: () =>
-                                setState(() => _rememberMe = !_rememberMe),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                ToggleSwitch(
-                                  value: _rememberMe,
-                                  onChanged: (v) =>
-                                      setState(() => _rememberMe = v),
+                        const SizedBox(height: 20),
+                        AuthFormField(
+                          label: 'Email address',
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          autofillHints: const [AutofillHints.email],
+                          textInputAction: TextInputAction.next,
+                          leadingIcon: CupertinoIcons.mail,
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 14),
+                        AuthFormField(
+                          label: 'Password',
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          autofillHints: const [AutofillHints.password],
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => _submit(context),
+                          leadingIcon: CupertinoIcons.lock,
+                          onChanged: (_) => setState(() {}),
+                          trailing: GestureDetector(
+                            onTap: () => setState(
+                              () => _obscurePassword = !_obscurePassword,
+                            ),
+                            child: Icon(
+                              _obscurePassword
+                                  ? CupertinoIcons.eye_slash
+                                  : CupertinoIcons.eye,
+                              size: 19,
+                              color: colors.ink3,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            GestureDetector(
+                              onTap: () =>
+                                  setState(() => _rememberMe = !_rememberMe),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  ToggleSwitch(
+                                    value: _rememberMe,
+                                    onChanged: (v) =>
+                                        setState(() => _rememberMe = v),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    'Remember me next time',
+                                    style: AppTextStyles.bodySm.copyWith(
+                                      color: colors.ink2,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: GestureDetector(
+                            onTap: () => _showForgotPasswordSheet(context),
+                            child: Text(
+                              'Forgot password?',
+                              style: AppTextStyles.metaMono.copyWith(
+                                color: colors.yeld,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        BlocBuilder<AuthCubit, AuthState>(
+                          builder: (context, state) {
+                            return AppButton(
+                              label: state.isSubmitting
+                                  ? 'Signing in…'
+                                  : 'Sign In',
+                              fullWidth: true,
+                              onPressed: state.isSubmitting || !_canSubmit
+                                  ? null
+                                  : () => _submit(context),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 18),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              "Don't have an account?",
+                              style: AppTextStyles.bodySm.copyWith(
+                                color: colors.ink2,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () =>
+                                  context.pushNamed(RouteNames.register),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                  horizontal: 4,
                                 ),
-                                const SizedBox(width: 10),
-                                Text(
-                                  'Remember me next time',
-                                  style: AppTextStyles.bodySm.copyWith(
-                                    color: colors.ink2,
+                                child: Text(
+                                  'Sign Up',
+                                  style: AppTextStyles.buttonLg.copyWith(
+                                    color: colors.yeld,
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: GestureDetector(
-                          onTap: () => _showForgotPasswordSheet(context),
-                          child: Text(
-                            'Forgot password?',
-                            style: AppTextStyles.metaMono.copyWith(
-                              color: colors.yeld,
-                              fontSize: 11,
-                            ),
-                          ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 22),
-                      BlocBuilder<AuthCubit, AuthState>(
-                        builder: (context, state) {
-                          return AppButton(
-                            label: state.isSubmitting
-                                ? 'Signing in…'
-                                : 'Sign In',
-                            fullWidth: true,
-                            onPressed: state.isSubmitting || !_canSubmit
-                                ? null
-                                : () => _submit(context),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 18),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            "Don't have an account?",
-                            style: AppTextStyles.bodySm.copyWith(
-                              color: colors.ink2,
+                        const SizedBox(height: 26),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Container(height: 1, color: colors.line),
                             ),
-                          ),
-                          const SizedBox(width: 4),
-                          GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => context.pushNamed(RouteNames.register),
-                            child: Padding(
+                            Padding(
                               padding: const EdgeInsets.symmetric(
-                                vertical: 10,
-                                horizontal: 4,
+                                horizontal: 12,
                               ),
                               child: Text(
-                                'Sign Up',
-                                style: AppTextStyles.buttonLg.copyWith(
-                                  color: colors.yeld,
+                                'OR',
+                                style: AppTextStyles.metaMono.copyWith(
+                                  color: colors.ink3,
                                 ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 26),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Container(height: 1, color: colors.line),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Text(
-                              'OR',
-                              style: AppTextStyles.metaMono.copyWith(
-                                color: colors.ink3,
-                              ),
+                            Expanded(
+                              child: Container(height: 1, color: colors.line),
                             ),
-                          ),
-                          Expanded(
-                            child: Container(height: 1, color: colors.line),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-                      _SocialButton(
-                        label: 'Continue with Google',
-                        icon: _googleIcon(),
-                        onTap: () => _notAvailable(context, 'Google'),
-                      ),
-                      const SizedBox(height: 10),
-                      _SocialButton(
-                        label: 'Continue with Apple',
-                        icon: Icon(Icons.apple, size: 20, color: colors.ink),
-                        onTap: () => _notAvailable(context, 'Apple'),
-                      ),
-                    ],
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        _SocialButton(
+                          label: 'Continue with Google',
+                          icon: _googleIcon(),
+                          onTap: () => _notAvailable(context, 'Google'),
+                        ),
+                        const SizedBox(height: 10),
+                        _SocialButton(
+                          label: 'Continue with Apple',
+                          icon: Icon(Icons.apple, size: 20, color: colors.ink),
+                          onTap: () => _notAvailable(context, 'Apple'),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

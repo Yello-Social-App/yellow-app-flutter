@@ -11,6 +11,7 @@ import '../../../../shared/widgets/error_view.dart';
 import '../../../auth/presentation/widgets/toggle_switch.dart';
 import '../../domain/entities/notification_entity.dart';
 import '../bloc/notification_preferences_cubit.dart';
+import '../widgets/shimmer_preferences.dart';
 
 /// Human label for each wire [NotificationType] — used only by this screen;
 /// the inbox itself never renders a type-derived sentence anymore (see
@@ -69,10 +70,7 @@ class _PreferencesView extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
                 if (state.status == PreferencesStatus.loading)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 40),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
+                  const ShimmerPreferences()
                 else if (state.status == PreferencesStatus.error)
                   Padding(
                     padding: const EdgeInsets.only(top: 24),

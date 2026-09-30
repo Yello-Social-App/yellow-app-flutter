@@ -18,9 +18,10 @@ import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/error_view.dart';
 import '../../../../shared/widgets/linked_text.dart';
-import '../../../../shared/widgets/shimmer_loading.dart';
+import '../../../link_preview/presentation/widgets/link_preview_card.dart';
 import '../../domain/entities/project_entity.dart';
 import '../bloc/project_detail_cubit.dart';
+import '../widgets/shimmer_project_detail.dart';
 
 /// One project's screen.
 ///
@@ -108,7 +109,7 @@ class _ProjectDetailView extends StatelessWidget {
                               onRetry: cubit.refresh,
                             )
                           else
-                            const ShimmerListCard(),
+                            const ShimmerProjectDetail(),
                         ],
                       ),
                     ),
@@ -197,7 +198,7 @@ class _Body extends StatelessWidget {
                   ),
                   AppButton(
                     label: project.isLiked ? 'Liked' : 'Like',
-                    variant: project.isLiked ? AppButtonVariant.subtle : AppButtonVariant.primary,
+                    variant: project.isLiked ? AppButtonVariant.secondary : AppButtonVariant.primary,
                     dense: true,
                     icon: Icon(
                       project.isLiked ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
@@ -244,10 +245,14 @@ class _Body extends StatelessWidget {
           const SizedBox(height: 8),
           // These launch now (ADR-039 added `url_launcher`, which ADR-014 said
           // an "Open" affordance was waiting on). Long-press still copies.
-          if (project.hasRepo)
+          if (project.hasRepo) ...[
             _LinkRow(label: 'REPOSITORY', url: project.repoUrl!, icon: CupertinoIcons.chevron_left_slash_chevron_right),
-          if (project.hasLive)
+            LinkPreviewList(text: project.repoUrl!, padding: const EdgeInsets.only(bottom: 8)),
+          ],
+          if (project.hasLive) ...[
             _LinkRow(label: 'LIVE', url: project.liveUrl!, icon: CupertinoIcons.arrow_up_right_square),
+            LinkPreviewList(text: project.liveUrl!, padding: const EdgeInsets.only(bottom: 8)),
+          ],
         ],
         const SizedBox(height: 18),
         Text('BY', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),

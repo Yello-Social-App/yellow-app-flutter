@@ -5,8 +5,8 @@
 Index of every meaningful file in `lib/`, so you can jump straight to the
 right one instead of searching. **Read this before opening source files.**
 
-- Generated from commit `de67e7d`
-- `lib/`: 321 Dart files · `test/`: 48 test files
+- Generated from commit `8d8260b`
+- `lib/`: 359 Dart files · `test/`: 59 test files
 - Regenerate: `bash tool/codemap.sh` · Staleness check: `bash tool/codemap.sh --check`
 
 Layer rule (see [ARCHITECTURE.md](ARCHITECTURE.md)): `presentation` → `domain/usecases`
@@ -74,6 +74,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 
 ### Singletons (`registerLazySingleton`)
 
+- `AcceptCallUseCase`
 - `AcceptFriendRequestUseCase`
 - `AcceptGroupInviteUseCase`
 - `AddCommentUseCase`
@@ -93,6 +94,9 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `BiometricAuthService`
 - `BlockUserUseCase`
 - `BookmarksLocalDataSource`
+- `CallCubit`
+- `CallRemoteDataSource`
+- `CallRepository`
 - `CancelFriendRequestUseCase`
 - `ChangeMemberRoleUseCase`
 - `ChatRemoteDataSource`
@@ -106,6 +110,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `CreatePostUseCase`
 - `CreateStickerDraftUseCase`
 - `CreateStoryUseCase`
+- `DeclineCallUseCase`
 - `DeclineFriendRequestUseCase`
 - `DeclineGroupInviteUseCase`
 - `DeleteCommentUseCase`
@@ -117,20 +122,24 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `DownloadUpdateUseCase`
 - `EditCommentUseCase`
 - `EditMessageUseCase`
+- `EndCallUseCase`
 - `FeedCubit`
 - `FeedRemoteDataSource`
 - `FeedRepository`
 - `ForgotPasswordUseCase`
 - `FriendsRemoteDataSource`
 - `FriendsRepository`
+- `GetActiveCallUseCase`
 - `GetAppBuildInfoUseCase`
 - `GetBlockedUsersUseCase`
+- `GetCallTokenUseCase`
 - `GetCommentsUseCase`
 - `GetCommunitiesUseCase`
 - `GetCommunityCommentsUseCase`
 - `GetCommunityFeedUseCase`
 - `GetCommunityPostsUseCase`
 - `GetCommunityUseCase`
+- `GetConversationCallUseCase`
 - `GetConversationUseCase`
 - `GetConversationsUseCase`
 - `GetFeedUseCase`
@@ -226,6 +235,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `SetGroupPhotoUseCase`
 - `ShowcaseRemoteDataSource`
 - `ShowcaseRepository`
+- `StartCallUseCase`
 - `StartDirectConversationUseCase`
 - `StartGroupConversationUseCase`
 - `StickerRemoteDataSource`
@@ -268,6 +278,7 @@ on re-entry.
 - `CreatePostCubit`
 - `FeedbackCubit`
 - `FriendsCubit`
+- `NewConversationCubit`
 - `NotificationPreferencesCubit`
 - `PrivacySafetyCubit`
 - `ProfileCubit`
@@ -299,7 +310,7 @@ on re-entry.
 **Widgets**
 
 - `lib/features/auth/presentation/widgets/auth_form_field.dart` — AuthFormField
-- `lib/features/auth/presentation/widgets/auth_hero.dart` — AuthHero
+- `lib/features/auth/presentation/widgets/auth_wave_header.dart` — AuthHeaderAction, AuthWaveHeader
 - `lib/features/auth/presentation/widgets/otp_code_field.dart` — OtpCodeField
 - `lib/features/auth/presentation/widgets/toggle_switch.dart` — ToggleSwitch
 
@@ -333,6 +344,46 @@ on re-entry.
 - `lib/features/auth/data/datasources/auth_local_datasource.dart` — AuthLocalDataSourceImpl
 - `lib/features/auth/data/datasources/auth_remote_datasource.dart` — TokenPair, RegistrationResponse, VerifyOtpResult, AuthRemoteDataSourceImpl
 
+### Call — `lib/features/call`
+
+**Cubits + States**
+
+- `lib/features/call/presentation/bloc/call_cubit.dart` — CallState, CallCubit, formatCallDuration()
+- `lib/features/call/presentation/bloc/conversation_call_cubit.dart` — ConversationCallCubit
+
+**Widgets**
+
+- `lib/features/call/presentation/widgets/call_host.dart` — CallHost
+- `lib/features/call/presentation/widgets/call_screen.dart` — CallScreen, CallPill
+- `lib/features/call/presentation/widgets/call_widgets.dart` — CallPalette, OnVideoTheme, CallRoundAction, CallTimerText
+- `lib/features/call/presentation/widgets/group_call_view.dart` — GroupCallView
+- `lib/features/call/presentation/widgets/join_call_bar.dart` — JoinCallBar
+
+**Usecases**
+
+- `lib/features/call/domain/usecases/call_usecases.dart` — StartCallParams, StartCallUseCase, AcceptCallUseCase, DeclineCallUseCase, EndCallUseCase, GetCallTokenUseCase, GetActiveCallUseCase, GetConversationCallUseCase
+
+**Entities**
+
+- `lib/features/call/domain/entities/call_entity.dart` — CallParticipant, CallEntity, CallTokenEntity, CallPeer
+
+**Repository interfaces**
+
+- `lib/features/call/domain/repositories/call_repository.dart` — CallLinkChanged, CallRinging, CallAccepted, CallUpdated, CallEnded
+
+**Repository implementations**
+
+- `lib/features/call/data/repositories/call_repository_impl.dart` — CallRepositoryImpl
+
+**Models (JSON ⇄ entity)**
+
+- `lib/features/call/data/models/call_model.dart`
+
+**Data sources**
+
+- `lib/features/call/data/datasources/call_frame_decoder.dart`
+- `lib/features/call/data/datasources/call_remote_datasource.dart` — CallInProgressException, CallRemoteDataSourceImpl
+
 ### Chat — `lib/features/chat`
 
 **Cubits + States**
@@ -340,6 +391,7 @@ on re-entry.
 - `lib/features/chat/presentation/bloc/chat_cubit.dart` — ChatState, ChatCubit
 - `lib/features/chat/presentation/bloc/group_info_cubit.dart` — GroupInfoState, GroupInfoCubit
 - `lib/features/chat/presentation/bloc/messages_cubit.dart` — MessagesState, MessagesCubit
+- `lib/features/chat/presentation/bloc/new_conversation_cubit.dart` — NewConversationState, NewConversationCubit
 - `lib/features/chat/presentation/bloc/sticker_creator_cubit.dart` — StickerCreatorState, StickerCreatorCubit
 - `lib/features/chat/presentation/bloc/stickers_cubit.dart` — StickersState, StickersCubit
 - `lib/features/chat/presentation/bloc/voice_recorder_cubit.dart` — VoiceRecorderState, VoiceRecorderCubit
@@ -352,6 +404,10 @@ on re-entry.
 
 **Widgets**
 
+- `lib/features/chat/presentation/widgets/new_conversation_dialog.dart` — showNewConversationDialog()
+- `lib/features/chat/presentation/widgets/shimmer_chat_thread.dart` — ShimmerChatThread
+- `lib/features/chat/presentation/widgets/shimmer_conversation_list.dart` — ShimmerConversationList
+- `lib/features/chat/presentation/widgets/shimmer_group_info.dart` — ShimmerGroupInfo
 - `lib/features/chat/presentation/widgets/sticker_creator_sheet.dart` — showStickerCreator()
 - `lib/features/chat/presentation/widgets/sticker_image.dart` — StickerImageView
 - `lib/features/chat/presentation/widgets/sticker_picker_sheet.dart` — showStickerPicker()
@@ -421,6 +477,7 @@ on re-entry.
 
 - `lib/features/communities/presentation/widgets/community_post_card.dart` — CommunityPostCard
 - `lib/features/communities/presentation/widgets/shimmer_community_card.dart` — ShimmerCommunityCard
+- `lib/features/communities/presentation/widgets/shimmer_community_comment.dart` — ShimmerCommunityComment
 - `lib/features/communities/presentation/widgets/shimmer_community_post_card.dart` — ShimmerCommunityPostCard
 - `lib/features/communities/presentation/widgets/vote_arrow_icon.dart` — VoteArrowIcon
 
@@ -483,6 +540,8 @@ on re-entry.
 - `lib/features/feed/presentation/widgets/reaction_glyph.dart` — ReactionGlyphSlot, ReactionGlyph
 - `lib/features/feed/presentation/widgets/reaction_picker.dart` — showReactionPicker()
 - `lib/features/feed/presentation/widgets/reactors_sheet.dart` — showReactorsSheet()
+- `lib/features/feed/presentation/widgets/shimmer_archive_row.dart` — ShimmerArchiveRow
+- `lib/features/feed/presentation/widgets/shimmer_post_detail.dart` — ShimmerPostDetail, ShimmerCommentRow
 - `lib/features/feed/presentation/widgets/stories_rail.dart` — StoriesRail
 - `lib/features/feed/presentation/widgets/story_background.dart` — StoryCoverSwatch, storyBackgroundForeground(), storyBackgroundGradient()
 - `lib/features/feed/presentation/widgets/story_viewers_sheet.dart` — showStoryViewersSheet()
@@ -545,6 +604,10 @@ on re-entry.
 **Pages**
 
 - `lib/features/friends/presentation/pages/friends_page.dart` — FriendsPage
+
+**Widgets**
+
+- `lib/features/friends/presentation/widgets/shimmer_friends_section.dart` — ShimmerFriendsSection
 
 **Usecases**
 
@@ -616,6 +679,11 @@ on re-entry.
 - `lib/features/notification/presentation/pages/notification_preferences_page.dart` — NotificationPreferencesPage
 - `lib/features/notification/presentation/pages/notifications_page.dart` — NotificationsPage
 
+**Widgets**
+
+- `lib/features/notification/presentation/widgets/shimmer_notification_row.dart` — ShimmerNotificationRow
+- `lib/features/notification/presentation/widgets/shimmer_preferences.dart` — ShimmerPreferences
+
 **Usecases**
 
 - `lib/features/notification/domain/usecases/notification_usecases.dart` — GetInboxParams, GetInboxUseCase, GetUnreadNotificationCountUseCase, MarkNotificationReadUseCase, MarkAllNotificationsReadUseCase, DeleteNotificationUseCase, RegisterDeviceParams, RegisterDeviceUseCase, UnregisterDeviceUseCase, GetNotificationPreferencesUseCase, UpdateNotificationPreferencesParams, UpdateNotificationPreferencesUseCase
@@ -661,9 +729,9 @@ on re-entry.
 **Widgets**
 
 - `lib/features/profile/presentation/widgets/profile_details_card.dart` — ProfileDetailsCard
-- `lib/features/profile/presentation/widgets/profile_header.dart` — ProfileHeader
+- `lib/features/profile/presentation/widgets/profile_header.dart` — ProfileHeader, PublicProfileHeader
+- `lib/features/profile/presentation/widgets/profile_top_bar.dart` — ProfileBarIdentity, ProfileTopBar
 - `lib/features/profile/presentation/widgets/shimmer_own_profile_view.dart` — ShimmerOwnProfileView
-- `lib/features/profile/presentation/widgets/shimmer_profile_view.dart` — ShimmerProfileView
 
 **Usecases**
 
@@ -848,6 +916,7 @@ on re-entry.
 - `lib/features/showcase/presentation/widgets/project_card.dart` — ProjectCard
 - `lib/features/showcase/presentation/widgets/publish_nudge_card.dart` — PublishNudgeCard
 - `lib/features/showcase/presentation/widgets/shimmer_project_card.dart` — ShimmerProjectCard
+- `lib/features/showcase/presentation/widgets/shimmer_project_detail.dart` — ShimmerProjectDetail
 - `lib/features/showcase/presentation/widgets/tech_chip_row.dart` — TechChipRow
 - `lib/features/showcase/presentation/widgets/tech_filter_sheet.dart` — showTechFilterSheet()
 
@@ -886,6 +955,12 @@ on re-entry.
 - `lib/core/audio/voice_note_plays_store.dart` — VoiceNotePlaysStore
 - `lib/core/audio/voice_recorder.dart` — VoiceRecorder
 
+**`lib/core/call`**
+
+- `lib/core/call/call_keep_alive.dart` — CallKeepAlive
+- `lib/core/call/call_room.dart` — CallRoomMember, CallRoomSnapshot, CallRoom
+- `lib/core/call/call_tones.dart` — CallTones
+
 **`lib/core/config`**
 
 - `lib/core/config/app_config.dart`
@@ -923,8 +998,10 @@ on re-entry.
 
 **`lib/core/notifications`**
 
+- `lib/core/notifications/background_auth.dart` — backgroundAccessToken(), backgroundDio(), bearer(), refreshedAccessToken()
+- `lib/core/notifications/call_alert.dart` — callAlertId(), callIdOf(), cancelCallAlert(), declineCallFromNotification(), handleCallPush(), isCallPush()
 - `lib/core/notifications/chat_reply_action.dart` — sendChatReply()
-- `lib/core/notifications/push_notification_service.dart` — ConversationDestination, PostDestination, ProfileDestination, ReportsDestination, PushNotificationServiceImpl, cancelChatNotification(), chatAlertDetails(), chatAlertPayload(), chatNotificationTag(), decodeNotificationPayload(), firebaseMessagingBackgroundHandler(), notificationReplyBackgroundHandler(), replyFromNotification()
+- `lib/core/notifications/push_notification_service.dart` — ConversationDestination, PostDestination, ProfileDestination, ReportsDestination, PushNotificationServiceImpl, cancelChatNotification(), chatAlertDetails(), chatAlertPayload(), chatNotificationTag(), decodeNotificationPayload(), firebaseMessagingBackgroundHandler(), notificationActionBackgroundHandler(), replyFromNotification()
 
 **`lib/core/router`**
 
@@ -947,6 +1024,7 @@ on re-entry.
 **`lib/core/theme`**
 
 - `lib/core/theme/app_colors.dart` — AppColors
+- `lib/core/theme/app_style.dart` — AppStyle
 - `lib/core/theme/app_text_styles.dart`
 - `lib/core/theme/app_theme.dart`
 - `lib/core/theme/theme_cubit.dart` — ThemeState, ThemeCubit
@@ -980,6 +1058,7 @@ on re-entry.
 
 **`lib/shared/widgets`**
 
+- `lib/shared/widgets/active_tab_indicator_painter.dart` — ActiveTabIndicatorPainter
 - `lib/shared/widgets/app_avatar.dart` — AppAvatar, avatarSeedForId()
 - `lib/shared/widgets/app_button.dart` — AppButton
 - `lib/shared/widgets/app_icon_button.dart` — AppIconButton
@@ -990,13 +1069,18 @@ on re-entry.
 - `lib/shared/widgets/explore_title_menu.dart` — ExploreTitleMenu
 - `lib/shared/widgets/filter_chip_pill.dart` — FilterChipPill
 - `lib/shared/widgets/filter_dropdown_pill.dart` — FilterDropdownPill
+- `lib/shared/widgets/glow_border.dart` — GlowBorder, GlowBorderPainter, GlowInputBorder
 - `lib/shared/widgets/image_placeholder.dart` — ImagePlaceholder
+- `lib/shared/widgets/ink_outline.dart` — InkOutline
+- `lib/shared/widgets/input_glow.dart` — InputGlow
 - `lib/shared/widgets/linked_text.dart` — LinkedText
 - `lib/shared/widgets/paged_list_view.dart` — PagedListView
 - `lib/shared/widgets/photo_viewer_page.dart` — PhotoViewerArgs, PhotoViewerPage, openPhotoViewer()
 - `lib/shared/widgets/responsive_content.dart` — ResponsiveContent
 - `lib/shared/widgets/segmented_tabs.dart` — SegmentedTabs
-- `lib/shared/widgets/shimmer_loading.dart` — ShimmerBox, ShimmerListCard, ShimmerPostCard
+- `lib/shared/widgets/send_icon.dart` — SendIcon
+- `lib/shared/widgets/shimmer_loading.dart` — ShimmerBox, ShimmerListCard, ShimmerPostCard, ShimmerTextLines, ShimmerListTile
+- `lib/shared/widgets/underline_tabs.dart` — UnderlineTabsDelegate
 - `lib/shared/widgets/yello_wordmark.dart` — YelloWordmark
 
 ---
@@ -1005,19 +1089,28 @@ on re-entry.
 
 - `test/core/audio/voice_note_plays_store_test.dart`
 - `test/core/network/error_handler_test.dart`
+- `test/core/notifications/call_alert_test.dart`
 - `test/core/notifications/push_destination_test.dart`
 - `test/core/security/input_sanitizer_test.dart`
 - `test/core/security/jwt_manager_test.dart`
 - `test/core/security/private_network_guard_test.dart`
 - `test/core/security/session_manager_test.dart`
+- `test/core/theme/ink_outline_theme_test.dart`
 - `test/core/utils/link_scanner_test.dart`
 - `test/core/utils/presigned_url_test.dart`
 - `test/features/auth/domain/login_usecase_test.dart`
+- `test/features/auth/presentation/auth_wave_header_test.dart`
+- `test/features/call/call_cubit_test.dart`
+- `test/features/call/call_frame_decoder_test.dart`
+- `test/features/call/call_remote_datasource_test.dart`
+- `test/features/call/conversation_call_cubit_test.dart`
+- `test/features/call/group_call_view_test.dart`
 - `test/features/chat/chat_cubit_actions_test.dart`
 - `test/features/chat/chat_frame_decoder_test.dart`
 - `test/features/chat/chat_socket_test.dart`
 - `test/features/chat/loading_test.dart`
 - `test/features/chat/message_mapper_test.dart`
+- `test/features/chat/new_conversation_cubit_test.dart`
 - `test/features/chat/presence_test.dart`
 - `test/features/chat/sticker_image_test.dart`
 - `test/features/chat/sticker_mapper_test.dart`
@@ -1035,6 +1128,7 @@ on re-entry.
 - `test/features/feed/story_compose_page_test.dart`
 - `test/features/feed/story_cubit_test.dart`
 - `test/features/feed/story_mapper_test.dart`
+- `test/features/friends/friends_cubit_test.dart`
 - `test/features/link_preview/link_preview_card_test.dart`
 - `test/features/link_preview/link_preview_cubit_test.dart`
 - `test/features/link_preview/link_preview_model_test.dart`
@@ -1049,6 +1143,7 @@ on re-entry.
 - `test/features/showcase/showcase_widgets_test.dart`
 - `test/helpers/mock_data.dart`
 - `test/shared/widgets/date_label_test.dart`
+- `test/shared/widgets/input_glow_test.dart`
 - `test/shared/widgets/linked_text_test.dart`
 - `test/shared/widgets/photo_viewer_test.dart`
 - `test/shared/widgets/shimmer_skeletons_test.dart`

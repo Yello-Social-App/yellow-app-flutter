@@ -11,6 +11,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
+import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/paged_list_view.dart';
@@ -257,9 +258,11 @@ class _MutedRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          TextButton(
+          AppButton(
+            label: busy ? 'Unmuting…' : 'Unmute',
+            variant: AppButtonVariant.secondary,
+            dense: true,
             onPressed: busy ? null : onUnmute,
-            child: Text(busy ? 'Unmuting…' : 'Unmute'),
           ),
         ],
       ),

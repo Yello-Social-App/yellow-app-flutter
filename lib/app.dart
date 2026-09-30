@@ -10,6 +10,7 @@ import 'core/theme/app_colors.dart';
 import 'core/theme/app_text_styles.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_cubit.dart';
+import 'features/call/presentation/widgets/call_host.dart';
 import 'l10n/app_localizations.dart';
 import 'shared/widgets/responsive_content.dart';
 
@@ -36,8 +37,10 @@ class YelloApp extends StatelessWidget {
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             // Applied once, here, rather than per-screen — see
-            // ResponsiveContent's doc comment and _clampTextScale's.
-            builder: (context, child) => _clampTextScale(context, ResponsiveContent(child: child!)),
+            // ResponsiveContent's doc comment and _clampTextScale's. The call
+            // UI goes inside both, above the router: see CallHost.
+            builder: (context, child) =>
+                _clampTextScale(context, ResponsiveContent(child: CallHost(child: child!))),
             routerConfig: sl<AppRouter>().router,
           );
         },

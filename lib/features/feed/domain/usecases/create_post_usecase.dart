@@ -32,8 +32,10 @@ class CreatePostUseCase implements UseCase<PostEntity, CreatePostParams> {
   @override
   Future<Either<Failure, PostEntity>> call(CreatePostParams params) {
     final clean = InputSanitizer.sanitizeText(params.content, maxLength: kPostMaxChars);
-    if (clean.isEmpty) {
-      return Future.value(const Left(ValidationFailure('Write something before you post.')));
+    // A caption is optional on a photo post — the backend's `content` has no
+    // minimum — so only a post with neither text nor photos is rejected.
+    if (clean.isEmpty && params.images.isEmpty) {
+      return Future.value(const Left(ValidationFailure('Write something or add a photo before you post.')));
     }
     return _repository.createPost(content: clean, visibility: params.visibility, images: params.images);
   }

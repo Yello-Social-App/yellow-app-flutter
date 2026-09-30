@@ -9,15 +9,11 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/external_link.dart';
 import '../../../../core/utils/link_scanner.dart';
+import '../../../../shared/extensions/context_extension.dart';
 import '../../../../shared/widgets/image_placeholder.dart';
 import '../../../../shared/widgets/shimmer_loading.dart';
 import '../../domain/entities/link_preview_entity.dart';
 import '../bloc/link_preview_cubit.dart';
-
-/// How many cards one body of text gets, however many links it holds. Three
-/// is already an unusual post; past that the cards are longer than the text
-/// they belong to.
-const int kMaxLinkPreviews = 3;
 
 /// The height of a card's picture. Fixed rather than aspect-ratio-driven: an
 /// `og:image` is 1.91:1 by convention but nothing enforces it, and a feed of
@@ -30,7 +26,11 @@ const double kLinkPreviewImageHeight = 168;
 /// pass the same string it already rendered — there is no way for the cards
 /// and the tappable links above them to disagree about what the links are.
 class LinkPreviewList extends StatelessWidget {
-  const LinkPreviewList({super.key, required this.text, this.padding = const EdgeInsets.fromLTRB(14, 0, 14, 12)});
+  const LinkPreviewList({
+    super.key,
+    required this.text,
+    this.padding = const EdgeInsets.fromLTRB(14, 0, 14, 12),
+  });
 
   final String text;
   final EdgeInsets padding;
@@ -41,18 +41,18 @@ class LinkPreviewList extends StatelessWidget {
     for (final link in LinkScanner.scan(text)) {
       // The same link twice in one post is one card.
       if (!urls.contains(link.url)) urls.add(link.url);
-      if (urls.length == kMaxLinkPreviews) break;
     }
     if (urls.isEmpty) return const SizedBox.shrink();
 
     return Padding(
       padding: padding,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           for (final url in urls) ...[
             if (url != urls.first) const SizedBox(height: 8),
-            LinkPreviewCard(url: url),
+            LinkPreviewCard(key: ValueKey(url), url: url),
           ],
         ],
       ),
@@ -94,16 +94,21 @@ class _LinkPreviewCardState extends State<LinkPreviewCard> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocSelector<LinkPreviewCubit, LinkPreviewState, (LinkPreviewStatus, LinkPreviewEntity?)>(
+    return BlocSelector<
+      LinkPreviewCubit,
+      LinkPreviewState,
+      (LinkPreviewStatus, LinkPreviewEntity?)
+    >(
       bloc: _cubit,
-      selector: (state) => (state.statusOf(widget.url), state.previewOf(widget.url)),
+      selector: (state) =>
+          (state.statusOf(widget.url), state.previewOf(widget.url)),
       builder: (context, slot) {
         final (status, preview) = slot;
         return switch (status) {
           LinkPreviewStatus.loading => const _LoadingCard(),
-          // Nothing readable at the other end. The link is still a link in the
-          // text above — an error card would only take up room saying so.
-          LinkPreviewStatus.unavailable => const SizedBox.shrink(),
+          LinkPreviewStatus.unavailable => _ReadyCard(
+            preview: LinkPreviewEntity(url: widget.url),
+          ),
           LinkPreviewStatus.ready => _ReadyCard(preview: preview!),
         };
       },
@@ -126,7 +131,14 @@ class _ReadyCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (preview.hasImage) _Thumbnail(imageUrl: preview.imageUrl!),
+          if (preview.hasImage)
+            _Thumbnail(imageUrl: preview.imageUrl!)
+          else
+            const SizedBox(
+              height: kLinkPreviewImageHeight,
+              width: double.infinity,
+              child: ImagePlaceholder(caption: 'No preview image'),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
             child: Column(
@@ -139,7 +151,9 @@ class _ReadyCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         preview.label.toUpperCase(),
-                        style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink3),
+                        style: AppTextStyles.metaMonoSm.copyWith(
+                          color: colors.ink3,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -186,13 +200,17 @@ class _Thumbnail extends StatelessWidget {
       width: double.infinity,
       child: CachedNetworkImage(
         imageUrl: imageUrl,
+        color: context.imageBackdrop,
+        colorBlendMode: BlendMode.dstOver,
         fit: BoxFit.cover,
         // Decoded to the box it is drawn in, not to whatever the page
         // published — an `og:image` is routinely 1200px wide.
         memCacheWidth: (MediaQuery.sizeOf(context).width * dpr).round(),
         memCacheHeight: (kLinkPreviewImageHeight * dpr).round(),
-        placeholder: (_, _) => const ShimmerBox(height: kLinkPreviewImageHeight, borderRadius: 0),
-        errorWidget: (_, _, _) => const ImagePlaceholder(),
+        placeholder: (_, _) =>
+            const ShimmerBox(height: kLinkPreviewImageHeight, borderRadius: 0),
+        errorWidget: (_, _, _) =>
+            const ImagePlaceholder(caption: 'No preview image'),
       ),
     );
   }
@@ -242,9 +260,12 @@ class _CardShell extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
+        // In the foreground: the preview image runs to the card's top and
+        // side edges, and a border in `decoration` is painted under it
+        // (docs/GOTCHAS.md, "A Container border disappears…").
         child: Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: colors.line2, width: 1.5),
+          foregroundDecoration: BoxDecoration(
+            border: Border.all(color: colors.line2, width: 1),
             borderRadius: BorderRadius.circular(AppRadii.md),
           ),
           child: child,

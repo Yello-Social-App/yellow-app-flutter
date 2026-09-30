@@ -1,3 +1,10 @@
+import 'package:dartz/dartz.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:yello_social_app/core/di/injection.dart';
+import 'package:yello_social_app/core/error/failures.dart';
+import 'package:yello_social_app/features/link_preview/domain/usecases/get_link_preview_usecase.dart';
+import 'package:yello_social_app/features/link_preview/presentation/bloc/link_preview_cubit.dart';
+import 'package:yello_social_app/features/link_preview/presentation/widgets/link_preview_card.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,7 +18,9 @@ const MethodChannel _urlLauncherChannel = MethodChannel('plugins.flutter.io/url_
 
 /// No `theme:` — `AppColors.of` falls back to the light palette, which is
 /// what the rest of the widget tests in this repo rely on too.
-Widget _host(Widget child) => MaterialApp(home: Scaffold(body: Center(child: child)));
+Widget _host(Widget child) => MaterialApp(
+  home: Scaffold(body: Center(child: child)),
+);
 
 /// The plain text of every span carrying a tap recognizer.
 List<String> _linkSpans(WidgetTester tester) {
@@ -23,22 +32,28 @@ List<String> _linkSpans(WidgetTester tester) {
   return spans;
 }
 
+class _MockGetLinkPreview extends Mock implements GetLinkPreviewUseCase {}
+
 void main() {
   late List<MethodCall> calls;
 
   setUp(() {
     calls = [];
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      _urlLauncherChannel,
-      (call) async {
-        calls.add(call);
-        // `canLaunch` and `launch` both answer bool.
-        return true;
-      },
-    );
+    final getPreview = _MockGetLinkPreview();
+    when(() => getPreview(any())).thenAnswer((_) async => const Left(ServerFailure()));
+    sl.registerSingleton(LinkPreviewCubit(getLinkPreview: getPreview));
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(_urlLauncherChannel, (
+      call,
+    ) async {
+      calls.add(call);
+      // `canLaunch` and `launch` both answer bool.
+      return true;
+    });
   });
 
-  tearDown(() {
+  tearDown(() async {
+    await sl<LinkPreviewCubit>().close();
+    await sl.reset();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       _urlLauncherChannel,
       null,
@@ -112,5 +127,25 @@ void main() {
     // assertion: the State must not leave a stale recognizer behind.
     await tester.pumpWidget(_host(const SizedBox.shrink()));
     expect(tester.takeException(), isNull);
+  });
+  testWidgets('preview stays below its text inside a narrow intrinsic chat bubble', (tester) async {
+    await tester.pumpWidget(
+      _host(
+        const SizedBox(
+          width: 183,
+          child: IntrinsicWidth(
+            child: LinkedText(text: 'https://example.com/a', style: TextStyle(fontSize: 14)),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(LinkPreviewCard), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(find.byType(LinkPreviewCard)).width, lessThanOrEqualTo(183));
+    expect(
+      tester.getTopLeft(find.byType(LinkPreviewCard)).dy,
+      greaterThan(tester.getBottomLeft(find.byType(RichText).first).dy),
+    );
   });
 }

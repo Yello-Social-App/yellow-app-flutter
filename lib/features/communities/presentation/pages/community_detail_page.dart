@@ -205,7 +205,7 @@ class _Header extends StatelessWidget {
                   const SizedBox(width: 10),
                   AppButton(
                     label: community.isMember ? 'Leave' : 'Join',
-                    variant: community.isMember ? AppButtonVariant.outline : AppButtonVariant.primary,
+                    variant: community.isMember ? AppButtonVariant.secondary : AppButtonVariant.primary,
                     dense: true,
                     onPressed: membershipBusy ? null : onToggleMembership,
                   ),

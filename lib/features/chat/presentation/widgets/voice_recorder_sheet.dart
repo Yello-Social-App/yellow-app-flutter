@@ -10,6 +10,8 @@ import '../../../../core/audio/voice_recorder.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/send_icon.dart';
 import '../../domain/entities/attachment_entity.dart';
 import '../../domain/usecases/chat_usecases.dart';
 import '../bloc/voice_recorder_cubit.dart';
@@ -540,7 +542,7 @@ class _Controls extends StatelessWidget {
       children: [
         _RoundButton(
           size: 52,
-          icon: CupertinoIcons.delete,
+          icon: const Icon(CupertinoIcons.delete),
           background: colors.surf,
           foreground: colors.ink2,
           border: colors.line,
@@ -556,7 +558,7 @@ class _Controls extends StatelessWidget {
         if (state.isRecording)
           _RoundButton(
             size: 64,
-            icon: CupertinoIcons.stop_fill,
+            icon: const Icon(CupertinoIcons.stop_fill),
             background: colors.surf,
             foreground: colors.ink,
             border: colors.ink,
@@ -566,7 +568,7 @@ class _Controls extends StatelessWidget {
         else
           _RoundButton(
             size: 64,
-            icon: CupertinoIcons.mic,
+            icon: const Icon(CupertinoIcons.mic),
             background: colors.red,
             foreground: Colors.white,
             border: colors.red,
@@ -576,7 +578,7 @@ class _Controls extends StatelessWidget {
         const SizedBox(width: 28),
         _RoundButton(
           size: 52,
-          icon: CupertinoIcons.paperplane_fill,
+          icon: const SendIcon(),
           background: colors.yel,
           foreground: colors.onYel,
           border: colors.yel,
@@ -612,7 +614,7 @@ class _RoundButton extends StatelessWidget {
   });
 
   final double size;
-  final IconData icon;
+  final Widget icon;
   final Color background;
   final Color foreground;
   final Color border;
@@ -645,7 +647,10 @@ class _RoundButton extends StatelessWidget {
                     dimension: size * 0.36,
                     child: CircularProgressIndicator(strokeWidth: 2, color: foreground),
                   )
-                : Icon(icon, size: size * 0.38, color: foreground),
+                : IconTheme(
+                    data: IconThemeData(size: size * 0.38, color: foreground),
+                    child: icon,
+                  ),
           ),
         ),
       ),
@@ -683,7 +688,7 @@ class _MicDenied extends StatelessWidget {
               style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
             ),
             const SizedBox(height: 22),
-            TextButton(onPressed: onClose, child: const Text('Close')),
+            AppButton(label: 'Close', variant: AppButtonVariant.secondary, dense: true, onPressed: onClose),
           ],
         ),
       ),
