@@ -7,6 +7,7 @@ import '../../../../core/di/injection.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/extensions/context_extension.dart';
 import '../../../feed/domain/entities/story_entity.dart';
 import '../../../feed/presentation/bloc/story_preview_cubit.dart';
 import '../../../feed/presentation/widgets/story_background.dart';
@@ -146,6 +147,8 @@ class _Thumb extends StatelessWidget {
           // Signed URLs are re-signed on every read — key by the object's
           // own address or every bubble re-downloads the same picture.
           cacheKey: image.cacheKey,
+          color: context.imageBackdrop,
+          colorBlendMode: BlendMode.dstOver,
           width: _size,
           height: _size,
           fit: BoxFit.cover,

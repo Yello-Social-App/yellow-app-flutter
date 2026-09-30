@@ -14,6 +14,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
+import '../../../../shared/widgets/glow_border.dart';
 import '../../domain/entities/sticker_entity.dart';
 import '../../domain/usecases/sticker_usecases.dart';
 import '../bloc/sticker_creator_cubit.dart';
@@ -240,7 +241,7 @@ class _PickStep extends StatelessWidget {
             Expanded(
               child: AppButton(
                 label: 'Photo library',
-                variant: AppButtonVariant.outline,
+                variant: AppButtonVariant.secondary,
                 dense: true,
                 fullWidth: true,
                 icon: const Icon(CupertinoIcons.photo_on_rectangle, size: 16),
@@ -251,7 +252,7 @@ class _PickStep extends StatelessWidget {
             Expanded(
               child: AppButton(
                 label: 'Camera',
-                variant: AppButtonVariant.outline,
+                variant: AppButtonVariant.secondary,
                 dense: true,
                 fullWidth: true,
                 icon: const Icon(CupertinoIcons.camera, size: 16),
@@ -362,7 +363,7 @@ class _EditStep extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppRadii.xs),
               borderSide: BorderSide(color: colors.line, width: 1.5),
             ),
-            focusedBorder: OutlineInputBorder(
+            focusedBorder: GlowInputBorder(
               borderRadius: BorderRadius.circular(AppRadii.xs),
               borderSide: BorderSide(color: colors.yel, width: 1.5),
             ),
@@ -377,7 +378,7 @@ class _EditStep extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: AppButton(
             label: 'Change picture',
-            variant: AppButtonVariant.subtle,
+            variant: AppButtonVariant.secondary,
             dense: true,
             icon: const Icon(CupertinoIcons.photo, size: 16),
             onPressed: busy ? null : onChangePicture,
@@ -389,7 +390,7 @@ class _EditStep extends StatelessWidget {
             Expanded(
               child: AppButton(
                 label: 'Save',
-                variant: AppButtonVariant.outline,
+                variant: AppButtonVariant.secondary,
                 dense: true,
                 fullWidth: true,
                 onPressed: busy ? null : onSave,
@@ -455,8 +456,9 @@ class _Preview extends StatelessWidget {
 
     return Container(
       height: 216,
-      decoration: BoxDecoration(
-        color: colors.surf2,
+      decoration: BoxDecoration(color: colors.surf2, borderRadius: BorderRadius.circular(AppRadii.sm)),
+      // In the foreground: the checkerboard fills edge to edge (docs/GOTCHAS.md).
+      foregroundDecoration: BoxDecoration(
         border: Border.all(color: colors.line, width: 1.5),
         borderRadius: BorderRadius.circular(AppRadii.sm),
       ),

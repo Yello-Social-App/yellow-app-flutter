@@ -10,6 +10,8 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
+import '../../../../shared/widgets/input_glow.dart';
+import '../../../../shared/widgets/send_icon.dart';
 import '../../domain/entities/community_entity.dart';
 import '../../domain/entities/community_post_entity.dart'
     show kCommunityPostBodyMaxChars, kCommunityPostTitleMaxChars;
@@ -124,6 +126,10 @@ class _CreateCommunityPostViewState extends State<_CreateCommunityPostView> {
                       AppButton(
                         label: 'Publish',
                         dense: true,
+                        trailingIcon: SendIcon(
+                          size: 16,
+                          color: (!_canSubmit || state.isSubmitting) ? colors.ink3 : colors.onYel,
+                        ),
                         onPressed: (!_canSubmit || state.isSubmitting) ? null : _publish,
                       ),
                     ],
@@ -237,13 +243,10 @@ class _Field extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    return Container(
+    return InputGlow(
+      fillColor: colors.surf,
+      borderRadius: BorderRadius.circular(AppRadii.lg),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-      decoration: BoxDecoration(
-        color: colors.surf,
-        border: Border.all(color: colors.line, width: 1.5),
-        borderRadius: BorderRadius.circular(AppRadii.lg),
-      ),
       child: TextField(
         controller: controller,
         autofocus: autofocus,

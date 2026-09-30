@@ -181,7 +181,7 @@ class _Loaded extends StatelessWidget {
             ),
             AppButton(
               label: 'Copy',
-              variant: AppButtonVariant.outline,
+              variant: AppButtonVariant.secondary,
               dense: true,
               icon: const Icon(CupertinoIcons.doc_on_doc, size: 14),
               onPressed: () => _copy(context),

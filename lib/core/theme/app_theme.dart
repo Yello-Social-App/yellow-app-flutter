@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
+import 'app_style.dart';
 
 /// Corner-radius tokens used throughout the design (cards, pills, tiles).
 abstract final class AppRadii {
@@ -39,11 +40,17 @@ abstract final class AppSpacing {
 /// that — but never put this inside an `AnimatedContainer` or anything that
 /// re-decorates per animation frame: that is the shape that crashed this
 /// project's Impeller/Android renderer (`docs/GOTCHAS.md`).
+///
+/// Under [AppThemeFlavor.ink] the pair is replaced by one hard, unblurred
+/// offset in the near-black `shell` token — a drawn edge rather than a soft
+/// lift, but still black in both themes, as above (ADR-050).
 abstract final class AppShadows {
   /// A content card resting on the page — post, project, community row,
   /// profile header, settings group. Callers keep their own border/radius;
   /// this only supplies the `boxShadow` list.
   static List<BoxShadow> card(BuildContext context) {
+    final style = AppStyle.of(context);
+    if (style.outlined) return style.hardShadow(AppColors.of(context), AppStyle.cardOffset);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return [
       // Key shadow: what actually sells the lift. Negative spread pulls its
@@ -76,11 +83,12 @@ abstract final class AppShadows {
 /// [ThemeData]s before they are handed over (`lib/app.dart`).
 abstract final class AppTheme {
   static ThemeData light(AppThemeFlavor flavor) =>
-      _build(AppColors.resolve(flavor, Brightness.light), Brightness.light);
+      _build(AppColors.resolve(flavor, Brightness.light), AppStyle.resolve(flavor), Brightness.light);
 
-  static ThemeData dark(AppThemeFlavor flavor) => _build(AppColors.resolve(flavor, Brightness.dark), Brightness.dark);
+  static ThemeData dark(AppThemeFlavor flavor) =>
+      _build(AppColors.resolve(flavor, Brightness.dark), AppStyle.resolve(flavor), Brightness.dark);
 
-  static ThemeData _build(AppColors colors, Brightness brightness) {
+  static ThemeData _build(AppColors colors, AppStyle style, Brightness brightness) {
     final base = ThemeData(brightness: brightness, useMaterial3: true);
     final textTheme = GoogleFonts.nunitoTextTheme(
       base.textTheme,
@@ -135,7 +143,7 @@ abstract final class AppTheme {
       // here so `ResponsiveContent` stays the one source of truth.
       bottomSheetTheme: const BottomSheetThemeData(constraints: BoxConstraints()),
       iconTheme: IconThemeData(color: colors.ink),
-      extensions: [colors],
+      extensions: [colors, style],
     );
   }
 }

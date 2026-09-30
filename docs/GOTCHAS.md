@@ -38,8 +38,8 @@ Putting `BoxDecoration(boxShadow: [BoxShadow(blurRadius: > 0)])` inside an
 this project's Impeller/Android renderer.**
 
 - Safe alternative already used here: a `CustomPainter` with its own blurred
-  `Paint` on a *static* element — see `_ActiveTabIndicatorPainter` in
-  `lib/features/shell/presentation/widgets/bottom_nav_bar.dart:422`.
+  `Paint` on a *static* element — see `ActiveTabIndicatorPainter` in
+  `lib/shared/widgets/active_tab_indicator_painter.dart`.
 - For a simple "active" glow, a plain colour change is safest and is this
   app's existing convention.
 - What *is* fine: a static `BoxDecoration` on a plain `Container` /
@@ -48,6 +48,21 @@ this project's Impeller/Android renderer.**
   (`lib/core/theme/app_theme.dart`, ADR-012) rather than an inline
   `BoxShadow` list; the line not to cross is a blurred shadow whose
   decoration changes per animation frame.
+
+### A hard shadow shows through a transparent button
+
+Under the Ink outline theme (ADR-050), `AppStyle.hardShadow` is a *solid*
+copy of the shape, offset a few pixels. Put it under anything whose face is
+transparent and the whole shadow shows through the face. When the shadow was
+still cream in dark mode, the same colour as the label, "Edit profile" (a
+secondary `AppButton`) shipped as a blank cream pill. A black shadow would
+blank a dark label the same way.
+
+- Give an outlined element an opaque fill: `AppButton` secondary uses `surf`
+  under ink outline, and `InkOutline` fills with `surf` by default.
+- A chip that stays transparent when idle gets no shadow (see post card
+  `_Pill`: only filled chips lift). `InputGlow` skips the shadow when it has no
+  `fillColor`.
 
 ### `Row`/`Column` directly in a `Scaffold` slot stretches to fill
 
@@ -111,7 +126,7 @@ phone becomes at Android's larger **Display size** settings. The feed's
 `ShimmerPostCard` action row shipped this way.
 
 - Give the trailing box `Flexible` (see `ShimmerPostCard`) or wrap the row in
-  `FittedBox(fit: BoxFit.scaleDown)` (see `ShimmerProfileView`).
+  `FittedBox(fit: BoxFit.scaleDown)` (see `AppButton`'s full-width label).
 - `test/shared/widgets/shimmer_skeletons_test.dart` pumps every skeleton at
   320×640 and fails on any overflow — add a new skeleton there.
 
@@ -187,7 +202,73 @@ log that names the cause.
   copying). A link that does nothing *and* says nothing is the bug this
   replaces.
 
+### Android silences the microphone once the app leaves the screen
+
+A call's audio does not stop when Yello is backgrounded — WebRTC keeps
+capturing — but shortly after the app stops being visible Android starts
+handing it **silence**, and the screen timing out mid-call counts. Nothing
+errors; the other person just stops hearing you about a minute in.
+(Documented platform behaviour, designed around before the first call ran —
+not yet reproduced on this project's phones.)
+
+- The fix is a foreground service of type `microphone` for the length of the
+  call: `CallService.kt`, started by `CallKeepAlive.hold`.
+- Start it with `startService` and promote *inside* the service. With
+  `startForegroundService` the app is killed if the promotion does not happen
+  within seconds — and on Android 14 it cannot happen until RECORD_AUDIO is
+  granted, which on a first call is only asked for when WebRTC publishes.
+- A foreground service can only be *started* while the app is on screen,
+  which is why `hold` runs at dial and answer time, and again once the
+  microphone is live, rather than when the app goes to the background.
+
+### Screen capture needs consent, *then* a `mediaProjection` service, *then* capture
+
+Android hands WebRTC a screen capture only while the app runs a foreground
+service of type `mediaProjection`, and Android 14 refuses to give a service
+that type until the user has accepted the "start recording or casting?"
+dialog. The order is fixed: consent (`CallRoom.requestScreenCapture`) →
+re-promote `CallService` with the type (`CallKeepAlive.setScreenCapture`) →
+create and publish the track. (From the platform docs and flutter_webrtc's
+source; not yet reproduced on this project's phones.)
+
+- `startService` returns before the service's `onStartCommand` runs, so
+  "started" is not "promoted". `MainActivity.startForScreenCapture` answers
+  the channel only once `CallService.onPromoted` reports back (3 s cap) —
+  otherwise the capture can race ahead of the type and be refused.
+- A consent token captures once on Android 14. flutter_webrtc keeps the last
+  one and would reuse it, so ask again before every share
+  (`requestCapturePermission` clears it first).
+- Ask for `microphone` only when RECORD_AUDIO is granted: on Android 14 a
+  refused type fails the whole promotion, screen share included.
+
 ## Framework / package versions
+
+### A widget above the router gets neither Back nor predictive back
+
+The call UI sits in `MaterialApp.router`'s `builder`, beside the router's
+output rather than on a route (ADR-042). No `PopScope` reaches it there, so
+Back pops — or on the Feed tab, *closes* — the app hidden underneath a
+full-screen call. (Found by reading the framework's back handling while
+building the call UI; confirm on a device before trusting the details.)
+
+- Back: a `ChildBackButtonDispatcher` off the router's own dispatcher, with
+  `takePriority()`, is asked first; return `true` to consume. A
+  `WidgetsBindingObserver.didPopRoute` does not work — observers are asked in
+  registration order and the router's dispatcher registered first.
+- Predictive back (Android 14+/16 targets): the OS asks *up front* whether
+  the framework handles Back, and the answer comes from the router's
+  `NavigationNotification(canHandlePop:)`. On Feed that is `false`, so the
+  gesture goes straight to the OS and the dispatcher is never called. Catch
+  the router's notifications on their way up and re-dispatch with the
+  overlay's own answer OR-ed in — `CallHost._onNavigation`.
+- **No `Overlay` either.** The router's `Navigator` owns the app's only
+  `Overlay`, and the call UI is its sibling, not its child. Anything that
+  floats in one throws "No Overlay widget found" the moment it builds:
+  `Tooltip` (including `IconButton(tooltip:)`), menus, dropdowns, text
+  selection handles. The group call screen crashed on its first open this
+  way (2026-09-30). Name call buttons with `Semantics(label:)` instead
+  (`CallRoundAction.semanticLabel`).
+
 
 ### An FCM push with a `notification` block runs **no Dart** on Android
 
@@ -235,6 +316,48 @@ Android:
   it the button still draws and Send still dismisses the keyboard — the
   broadcast just goes nowhere, silently. Manifest changes need a full
   rebuild and reinstall, not a hot restart.
+
+### A notification channel keeps its first definition — and ids are shared with Kotlin
+
+Android fixes a channel's importance, sound and audio usage when it is first
+created; `createNotificationChannel` with the same id later only renames it.
+The call ring was first given `yello_calls` — already `CallService.kt`'s
+quiet ongoing-call channel — and on the phone it came out LOW importance,
+no ringtone, no vibration, with the Kotlin channel now *named* "Incoming
+calls". Nothing errors. (Found on the SM-S928B via `dumpsys notification`,
+2026-09-30.)
+
+- Grep `android/` for a channel id before taking one: `yello_default`
+  (pushes), `yello_calls` (CallService), `yello_incoming_calls` (the ring).
+- To check what a phone actually has:
+  `adb shell dumpsys notification | grep "mId='<id>'"`.
+- A channel already on a device cannot be changed by the app — only a new id,
+  or the user in system settings, or an uninstall.
+
+### An action that opens the app cancels its notification by **id only**
+
+`flutter_local_notifications` cancels a notification when one of its actions
+is tapped (`cancelNotification: true`), but not the same way for both kinds:
+the background receiver (`showsUserInterface: false` — Reply, Decline)
+cancels by `(tag, id)`, while an action that opens the activity
+(`showsUserInterface: true` — Accept) cancels by **id alone**. A tagged
+notification survives that second cancel. (Read in the plugin's
+`ActionBroadcastReceiver` / `processForegroundNotificationAction`, v22.3.1.)
+
+- The call ring is therefore drawn **untagged** (`callAlertId`), and an
+  insistent ringtone left sounding after Accept is what the tag would cost.
+- The Accept handler cancels explicitly as well: the plugin only does it
+  when the tap started the activity with that intent.
+
+### iOS: button taps on an alert iOS drew never reach Dart as buttons
+
+`flutter_local_notifications` returns early from `didReceive response` for
+any notification it did not schedule itself, and `firebase_messaging` turns
+every response to an FCM alert — whichever button — into a plain
+`onMessageOpenedApp`. So an APNs alert's action buttons (the `YELLO_CALL`
+category's Accept / Decline) cannot be told apart in Dart. Registering the
+category anyway would draw a Decline that declines nothing; it is left
+unregistered until native `AppDelegate` handling exists (ADR-051).
 
 ### `go_router` ^17.5.0: `GoRouterState.name` is `null` in a top-level `redirect`
 
@@ -335,6 +458,15 @@ explicitly calls `refresh()` on re-entry.
 ---
 
 ## Tooling
+
+### Keep PNG conversion separate from a GIF's palette source
+
+When generating the notification bells with Pillow, converting and saving the
+resting palette image as RGBA before using that same image for the GIF header
+corrupted the exported GIF palette (white became cyan). Generate the PNG from
+a separate image, as `tool/generate_notification_bells.py` does. Decode every
+GIF frame to verify its opaque pixels are exactly the intended black or white;
+checking just the source palette misses the export failure.
 
 ### `dart format` will explode the diff
 
@@ -445,6 +577,25 @@ character class became `[w:.-]` and `\s*` became `s*`.
 A clean analyzer run says nothing about rebuild scope, list virtualization,
 image decode cost, or any of the above. It is the minimum bar before a change
 is considered done, not evidence that it's good.
+
+### Scroll jank in a debug build is not a bug report
+
+A debug APK runs JIT-compiled Dart with asserts on, so it stutters whatever
+the widget tree looks like. Judge smoothness only on
+`flutter build apk --profile` (or `flutter run --profile`). On the Galaxy S24
+Ultra (120 Hz), the same 12-swipe run over the home feed (2026-09-30) gave:
+
+| Build   | 8 ms frames | 16 ms | 24 ms | ≥ 33 ms hitches |
+|---------|-------------|-------|-------|-----------------|
+| debug   | 1410        | 56    | 12    | 12              |
+| profile | 1219        | 43    | 4     | 1               |
+
+- Flutter draws into a `SurfaceView`, so `dumpsys gfxinfo` sees nothing.
+  Measure with SurfaceFlinger instead: `dumpsys SurfaceFlinger --timestats
+  -enable -clear`, scroll with `input swipe`, then `--timestats -dump` and
+  read the app layer's `present2present` histogram.
+- From Git Bash, set `MSYS_NO_PATHCONV=1` first, or it rewrites
+  `/data/local/tmp/...` into a Windows path.
 
 ### No emulator in the dev sandbox
 

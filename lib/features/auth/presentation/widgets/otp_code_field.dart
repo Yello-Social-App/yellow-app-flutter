@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/input_glow.dart';
 
 /// A row of [length] single-digit boxes standing in for one OTP field —
 /// same pill-field palette as `AuthFormField` (colors.surf2 fill,
@@ -110,14 +111,11 @@ class _OtpCodeFieldState extends State<OtpCodeField> {
                 }
                 return KeyEventResult.ignored;
               },
-              child: Container(
-                decoration: BoxDecoration(
-                  color: colors.surf2,
-                  borderRadius: BorderRadius.circular(AppRadii.xs),
-                  border: Border.all(color: colors.line, width: 1.5),
-                ),
-                alignment: Alignment.center,
-                child: TextField(
+              child: InputGlow(
+                fillColor: colors.surf2,
+                borderRadius: BorderRadius.circular(AppRadii.xs),
+                child: Align(
+                  child: TextField(
                   controller: _boxes[i],
                   focusNode: _focusNodes[i],
                   textAlign: TextAlign.center,
@@ -132,6 +130,7 @@ class _OtpCodeFieldState extends State<OtpCodeField> {
                     isDense: true,
                   ),
                   onChanged: (value) => _onChanged(i, value),
+                ),
                 ),
               ),
             ),

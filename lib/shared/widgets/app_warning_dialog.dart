@@ -6,15 +6,13 @@ import '../../core/theme/app_text_styles.dart';
 import '../../core/theme/app_theme.dart';
 import 'app_button.dart';
 
-/// A designed confirmation card for actions that deserve a deliberate
-/// second tap before they happen — currently wired to the Log-out button
-/// on `profile_page.dart`. Renders as a fully custom card (rounded corners,
-/// warning icon badge, pill actions from the app's own [AppButton]) rather
-/// than Material's bare default [AlertDialog] chrome, which several other
-/// confirmations in this app still use as-is (e.g. `post_detail_page.dart`'s
-/// `_confirmDeletePost`/`_confirmDeleteComment`, `friends_page.dart`'s
-/// unfriend confirm) — worth migrating those to this same component later
-/// if a consistent "warning card" look is wanted everywhere, not just here.
+/// The app's one confirmation card for actions that deserve a deliberate
+/// second tap (log out, delete, remove, unblock). Renders as a custom card
+/// (rounded corners, icon badge, pill actions from [AppButton]) rather than
+/// Material's bare [AlertDialog], whose yellow text buttons don't match the
+/// rest of the app. Cancel is always [AppButtonVariant.secondary]; confirm is
+/// [AppButtonVariant.danger], or [AppButtonVariant.primary] when
+/// [destructive] is false.
 class AppWarningDialog extends StatelessWidget {
   const AppWarningDialog({
     super.key,
@@ -23,6 +21,7 @@ class AppWarningDialog extends StatelessWidget {
     this.confirmLabel = 'Confirm',
     this.cancelLabel = 'Cancel',
     this.icon = CupertinoIcons.exclamationmark_triangle_fill,
+    this.destructive = true,
   });
 
   final String title;
@@ -30,6 +29,10 @@ class AppWarningDialog extends StatelessWidget {
   final String confirmLabel;
   final String cancelLabel;
   final IconData icon;
+
+  /// Whether confirming loses something. False turns the confirm button from
+  /// red to the primary yellow (e.g. "Unblock").
+  final bool destructive;
 
   /// Shows the card and resolves `true` only if [confirmLabel] was tapped —
   /// cancel, a tap outside, or a back-gesture dismissal all resolve `false`.
@@ -40,6 +43,7 @@ class AppWarningDialog extends StatelessWidget {
     String confirmLabel = 'Confirm',
     String cancelLabel = 'Cancel',
     IconData icon = CupertinoIcons.exclamationmark_triangle_fill,
+    bool destructive = true,
   }) async {
     final result = await showDialog<bool>(
       context: context,
@@ -49,6 +53,7 @@ class AppWarningDialog extends StatelessWidget {
         confirmLabel: confirmLabel,
         cancelLabel: cancelLabel,
         icon: icon,
+        destructive: destructive,
       ),
     );
     return result ?? false;
@@ -94,7 +99,7 @@ class AppWarningDialog extends StatelessWidget {
                 Expanded(
                   child: AppButton(
                     label: cancelLabel,
-                    variant: AppButtonVariant.outline,
+                    variant: AppButtonVariant.secondary,
                     fullWidth: true,
                     onPressed: () => Navigator.of(context).pop(false),
                   ),
@@ -103,7 +108,7 @@ class AppWarningDialog extends StatelessWidget {
                 Expanded(
                   child: AppButton(
                     label: confirmLabel,
-                    variant: AppButtonVariant.danger,
+                    variant: destructive ? AppButtonVariant.danger : AppButtonVariant.primary,
                     fullWidth: true,
                     onPressed: () => Navigator.of(context).pop(true),
                   ),

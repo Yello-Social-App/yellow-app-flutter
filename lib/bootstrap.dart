@@ -12,6 +12,7 @@ import 'core/notifications/push_notification_service.dart';
 import 'core/security/root_jailbreak_detector.dart';
 import 'core/security/session_manager.dart';
 import 'core/utils/logger.dart';
+import 'features/call/presentation/bloc/call_cubit.dart';
 import 'features/chat/data/datasources/chat_socket.dart';
 import 'features/chat/data/datasources/user_directory.dart';
 import 'features/chat/presentation/bloc/messages_cubit.dart';
@@ -75,6 +76,8 @@ Future<void> bootstrap({required String baseUrl}) async {
     if (state == SessionState.unauthenticated) {
       sl<FeedCubit>().reset();
       sl<MessagesCubit>().reset();
+      // Ends a live call and lets go of the socket before it is reset below.
+      unawaited(sl<CallCubit>().reset());
       // Chat participant names/avatars are cached per session — dropping
       // them here stops the next account seeing the previous one's contacts.
       sl<UserDirectory>().clear();

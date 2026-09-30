@@ -5,6 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/entities/user_entity.dart';
+import '../../domain/entities/public_user_entity.dart';
 
 /// The reference's "Personal details" block, mapped onto the fields this
 /// backend actually has on `UserResponse` — name, username, join date and
@@ -15,11 +16,32 @@ import '../../../auth/domain/entities/user_entity.dart';
 /// chevron beside the name in `ProfileHeader`, but that chevron is gone and a
 /// four-row card doesn't earn the extra tap. Bio lives in the header, and
 /// account status beside the header's connections row.
+///
+/// [ProfileDetailsCard.public] is the same card on someone else's profile:
+/// `PublicUserResponse` has no email, so that row is dropped, and an empty
+/// name is left out rather than prompting a viewer to "Add your name".
 class ProfileDetailsCard extends StatelessWidget {
-  const ProfileDetailsCard({super.key, required this.user, required this.onEdit});
+  ProfileDetailsCard({super.key, required UserEntity user, required VoidCallback this.onEdit})
+    : fullName = user.fullName?.trim() ?? '',
+      username = user.username,
+      joinedAt = user.createdAt,
+      email = user.email,
+      _isOwn = true;
 
-  final UserEntity user;
-  final VoidCallback onEdit;
+  ProfileDetailsCard.public({super.key, required PublicUserEntity user})
+    : fullName = user.fullName?.trim() ?? '',
+      username = user.username,
+      joinedAt = user.createdAt,
+      email = null,
+      onEdit = null,
+      _isOwn = false;
+
+  final String fullName;
+  final String username;
+  final DateTime joinedAt;
+  final String? email;
+  final VoidCallback? onEdit;
+  final bool _isOwn;
 
   static const List<String> _months = [
     'Jan',
@@ -39,21 +61,20 @@ class ProfileDetailsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    final createdAt = user.createdAt;
-    final fullName = user.fullName?.trim() ?? '';
 
     final rows = <Widget>[
-      _DetailRow(
-        icon: CupertinoIcons.person,
-        value: fullName.isEmpty ? 'Add your name' : fullName,
-        muted: fullName.isEmpty,
-      ),
-      _DetailRow(icon: CupertinoIcons.at, value: user.username),
+      if (fullName.isNotEmpty || _isOwn)
+        _DetailRow(
+          icon: CupertinoIcons.person,
+          value: fullName.isEmpty ? 'Add your name' : fullName,
+          muted: fullName.isEmpty,
+        ),
+      _DetailRow(icon: CupertinoIcons.at, value: username),
       _DetailRow(
         icon: CupertinoIcons.gift,
-        value: 'Joined ${_months[createdAt.month - 1]} ${createdAt.day}, ${createdAt.year}',
+        value: 'Joined ${_months[joinedAt.month - 1]} ${joinedAt.day}, ${joinedAt.year}',
       ),
-      _DetailRow(icon: CupertinoIcons.mail, value: user.email),
+      if (email != null) _DetailRow(icon: CupertinoIcons.mail, value: email!),
     ];
 
     return Column(

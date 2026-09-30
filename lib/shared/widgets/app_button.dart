@@ -1,14 +1,21 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_style.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/theme/app_theme.dart';
 
-enum AppButtonVariant { primary, outline, subtle, danger }
+/// The app's button hierarchy. Pick by importance, not by look:
+///
+/// - [primary]: the one action the screen or card is for ("Sign Up",
+///   "Publish", "Accept", "Save"). Brand yellow. At most one per group.
+/// - [secondary]: every other action beside or instead of it ("Cancel",
+///   "Edit profile", "Message", "Retry", "Load more", a toggled-on state
+///   like "Leave" or "Liked"). Transparent with a hairline border.
+/// - [danger]: the confirm step of something destructive (log out, delete,
+///   remove). Only on the second tap — the first entry point is [secondary].
+enum AppButtonVariant { primary, secondary, danger }
 
-/// Pill-shaped CTA matching the mockup's buttons ("Accept", "Follow",
-/// "PUBLISH", "Edit profile", the theme toggle). All three variants share
-/// the same 1.5px-bordered pill shape; only fill/border/text color differ.
 class AppButton extends StatelessWidget {
   const AppButton({
     super.key,
@@ -36,18 +43,19 @@ class AppButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
+    final style = AppStyle.of(context);
     final disabled = onPressed == null;
 
     final (Color bg, Color fg, Color border) = switch (variant) {
-      AppButtonVariant.primary => (
-        disabled ? colors.surf2 : colors.yel,
-        disabled ? colors.ink3 : colors.onYel,
-        disabled ? colors.line : colors.ink,
-      ),
-      AppButtonVariant.outline => (Colors.transparent, colors.ink, colors.line),
-      AppButtonVariant.subtle => (colors.surf, colors.ink2, colors.line),
-      // Destructive confirm actions (logout, delete). Same shallow
-      // (non-disabled-aware) treatment as outline/subtle above.
+      // Disabled keeps the variant's shape (filled vs. outlined) but drops
+      // its color, so a busy "Save" doesn't read as a different button.
+      AppButtonVariant.secondary when disabled => (Colors.transparent, colors.ink3, colors.line),
+      _ when disabled => (colors.surf2, colors.ink3, colors.line),
+      AppButtonVariant.primary => (colors.yel, colors.onYel, colors.ink),
+      // Under ink outline a secondary button sits on a solid hard shadow, so
+      // it needs an opaque face: transparent, the shadow (the `ink` color,
+      // same as the label) shows through and swallows the label.
+      AppButtonVariant.secondary => (style.outlined ? colors.surf : Colors.transparent, colors.ink, colors.line),
       AppButtonVariant.danger => (colors.red, Colors.white, colors.red),
     };
 
@@ -89,17 +97,33 @@ class AppButton extends StatelessWidget {
       ),
     );
 
-    return Material(
+    final button = Material(
       color: bg,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadii.pill),
-        side: BorderSide(color: borderColor ?? border, width: 1.5),
+        // Ink outline draws every enabled variant in ink, danger included,
+        // so a red button still sits on the same drawn edge as its neighbours.
+        side: BorderSide(
+          color: borderColor ?? (style.outlined && !disabled ? colors.ink : border),
+          width: style.borderWidth,
+        ),
       ),
       child: InkWell(
         onTap: onPressed,
         borderRadius: BorderRadius.circular(AppRadii.pill),
         child: child,
       ),
+    );
+
+    // A disabled button stays flat: losing its shadow is part of how it
+    // reads as not pressable.
+    if (!style.outlined || disabled) return button;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+        boxShadow: style.hardShadow(colors, AppStyle.buttonOffset),
+      ),
+      child: button,
     );
   }
 }

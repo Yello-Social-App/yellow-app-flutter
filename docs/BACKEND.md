@@ -284,19 +284,132 @@ established against the live service with `tool/ws_probe.dart` on
 
 Server → client: `message.new/sent/updated/deleted/reactions`,
 `message.read`, `typing`, `presence`, `conversation.new/updated/removed`,
-`group.invite.updated`, `sticker.added/updated/removed`, `error`, `pong` —
+`group.invite.updated`, `sticker.added/updated/removed`,
+`call.ringing/accepted/ended` (and `call.started`, a reply), `error`, `pong` —
 `ChatFrameDecoder` maps each to a `ChatEvent`, except `presence`, which names
 people rather than a conversation and so goes to `PresenceTracker` instead of
 to any one screen (ADR-038), and the `sticker.*` family, which names the
 owner's library rather than a conversation and is read by
 `ChatFrameDecoder.stickerEvent` into a `StickerLibraryEvent` for
-`StickersCubit` (ADR-040). Client → server used by this app: `auth`, `typing`
+`StickersCubit` (ADR-040), and the `call.*` family, which `CallFrameDecoder`
+reads for `CallCubit` (ADR-042). Client → server used by this app: `auth`,
+`call.start/accept/decline/end` (see the calls section below), `typing`
 (`{ conversationId, isTyping }` — **the relayed frame's field names are the
 one thing the probe could not confirm without a real token**; run
 `dart run tool/ws_probe.dart <token>` and the server's validation error
 names them). Everything else still goes over HTTP; the socket is delivery,
-not a second request path. The chat screen keeps a 30 s history poll as a
+not a second request path — the call frames excepted, because calls have no
+HTTP route to take instead. The chat screen keeps a 30 s history poll as a
 safety net while the socket is up and drops to 5 s when it is not.
+
+## yello-chat — calls (added 2026-09-29; groups and screen share 2026-09-30)
+
+Audio and video calls — 1:1, and (since the 2026-09-30 "Group Calls &
+Screen Sharing" note) group calls of up to 16. From the service's Calls API reference (an
+inkdrop note shared 2026-09-29, written for the Electron client; frame
+source of truth server-side is `src/modules/realtime/protocol/protocol.ts`).
+**Not yet checked against a live call** — the socket frames are not in the
+OpenAPI document, so the first on-device call is the verification.
+
+`yello-chat` decides who may call whom, rings over the chat socket, hands
+out LiveKit join tokens and records every call. **Audio and video never go
+through it**: they go to LiveKit Cloud, room `call_<callId>` (two people for a
+DM, up to 16 for a group). The client is `features/call`; the SDK is `livekit_client`, touched
+only in `core/call/call_room.dart` (and the video renderer widget).
+
+| Path | Kind | Notes |
+|---|---|---|
+| `call.start` `{ref, conversationId, media}` | socket | DM or group. Reply `call.started {ref, call}` to the sending socket only: `RINGING`, or already `ENDED`/`BUSY` (nobody could be rung). A group with a live call answers `CONFLICT` / `CALL_IN_PROGRESS` + `details.callId` — join that one instead |
+| `call.accept` `{ref, callId}` | socket | answers a ring **or joins a group call under way** (after declining, missing, leaving, or being added later). First answer → everyone gets `call.accepted`; later joins → `call.updated`. Already JOINED → nothing at all. `CONFLICT` reasons `CALL_FULL` (+`maxParticipants`), `ALREADY_IN_CALL`, none (ended) |
+| `call.decline` `{ref, callId}` | socket | only while INVITED. Group: others keep ringing (`call.updated`); `call.ended DECLINED` once nobody is left ringing and nobody answered |
+| `call.end` `{ref, callId}` | socket | **leave**. Two or more still in → `call.updated` (you are LEFT), call goes on; fewer → `call.ended`. Not in it / already ended → **silent no-op** |
+| `POST /ws/calls/{callId}/decline` | HTTP | decline **with no socket** — the ring notification's Decline button (added 2026-09-30). `204` declined · `409` no longer ringing you · `404` unknown · `403` you are the caller (hang up with `call.end`) · `401` refresh once and retry. Same effect as the `call.decline` frame |
+| `POST /ws/calls/{callId}/token` | HTTP | `{serverUrl, roomName, token, expiresAt}` — only for someone **JOINED** (the caller from the start, others after `call.accept`; `409` otherwise). Grants camera, mic, screen share and screen-share audio |
+| `GET /ws/calls/active` | HTTP | the call you are JOINED in, else one ringing you, else `{call: null}` — re-read after every socket `auth.ok` |
+| `GET /ws/conversations/{id}/call` | HTTP | the conversation's live call or `{call: null}` — the chat's "Join call" bar. `404` for a non-member |
+
+`Call` gained `kind` (`DIRECT`/`GROUP`) and `participants`
+(`[{userId, state, joinedAt}]`, initiator first). `state`: `INVITED · JOINED
+· DECLINED · MISSED · LEFT · BUSY`; all but JOINED can (re)join a group call.
+A member added after the call started is not listed until they join.
+
+Server → client: `call.ringing` (only people being rung), `call.accepted`
+(every member — in a group, keep ringing while your own state is INVITED),
+**`call.updated`** (roster changed, status did not — every member, and anyone
+just removed from the group; read your own entry: INVITED keep ringing,
+JOINED stay, anything else close), `call.ended` (every member; `BUSY` to the
+caller only). `endReason`: `HANGUP · DECLINED · CANCELLED · MISSED · BUSY ·
+FAILED`. `GROUP_CALL_UNSUPPORTED` is never sent any more.
+Errors are ordinary `error` frames **carrying the request's `ref`** — that is
+the only way to tie one to the frame that caused it, so every call frame
+sends a fresh one (`CallRemoteDataSourceImpl._request`). The guide says the
+error "carries your ref" without placing it; the client reads it beside
+`code` and falls back to `details.ref`. Switch on `code` then
+`details.reason` (`CALL_IN_PROGRESS`, `CALL_FULL`, `ALREADY_IN_CALL`), never
+on `message`.
+
+Things that bite:
+
+- **The socket is no longer delivery-only.** ADR-017's rule was "requests go
+  over HTTP"; calls have no HTTP route for start/accept/decline/end, so those
+  four are the first requests this app sends over the socket (ADR-042).
+- **In the app, a ring comes over the socket; off screen, as a push.**
+  The app holds the socket app-wide while it is on screen (`CallHost`), not
+  just from the Inbox. Since 2026-09-30 `yello-notify` also pushes every
+  ring (`CALL_INCOMING`, below) to every registered device of everyone
+  being rung — online or not — so an open app gets both and ignores the
+  push (`call_alert.dart`, `appOnScreen`).
+- **One live call per user, across devices.** A second device of the same
+  user joining the room puts the first one out (LiveKit `DUPLICATE_IDENTITY`),
+  so an `ACTIVE` call found on reconnect is *offered* (Rejoin / End), never
+  auto-joined.
+- **Room lifetime:** 60 s with nobody in it after creation, 20 s grace after
+  the last one leaves; LiveKit's webhook ends an `ACTIVE` call whose room
+  emptied (both apps crashed) as `HANGUP`. Ring timeout 45 s → `MISSED`.
+- **Rate limit:** 5 `call.start` at once, then 1 per 6 s per user.
+- **Token grants:** camera, microphone, screen share and screen-share audio
+  — no data channel, no metadata. Anything that is not media goes over the
+  chat socket. The token is issued "as you", so a LiveKit participant's
+  identity is read as the user id (the call screen's tiles rely on it —
+  **unverified against a live group call**).
+- **Removed from a group mid-call:** `call.updated` with your state LEFT
+  (MISSED if you were being rung), LiveKit disconnects you with
+  `PARTICIPANT_REMOVED`, and token requests answer `404`.
+- **JOINED is the server's view; who is actually connected comes from the
+  LiveKit room.** Tiles are drawn from the room.
+- **Limits:** 16 per group call (`CALL_GROUP_MAX_PARTICIPANTS`), 2 per DM,
+  one live call per conversation.
+- **Screen share quality** is the client's business; the guide targets
+  1080p60 VP9 `L3T3_KEY` with a VP8 backup, 5 Mbps, `maintain-framerate`,
+  and 30 fps / 3 Mbps for slow machines. The phone uses the slow-machine
+  numbers (`CallRoom._screenSharePublish`). Screen-share *audio* is
+  browser/Electron-only in `livekit_client` — the app sends video only.
+
+Not built server-side: a "missed call" line in the chat history, recording,
+end-to-end encryption.
+
+### Incoming-call pushes (2026-09-30)
+
+From the "Incoming calls from outside the app" frontend guide. Three new
+`yello-notify` types, all string-valued `data`, all keyed `call:<callId>`:
+
+| Type | Android | iOS | `data` |
+|---|---|---|---|
+| `CALL_INCOMING` | **data-only**, HIGH, `ttl` = ring time left | alert, `interruption-level: time-sensitive`, category `YELLO_CALL`, sound `yello_ring.caf`, `apns-collapse-id` | `callId`, `conversationId`, `actorId`, `media`, `callKind`, `expiresAt` (start + 45 s), `title`, `body` |
+| `CALL_MISSED` | data-only | alert, same collapse id (replaces the ring by itself) | as above minus `expiresAt` |
+| `CALL_RING_STOPPED` | data-only, silent | background (`content-available`) | `callId`, `conversationId`, `reason` `ANSWERED`/`DECLINED` |
+
+- Never sent to the caller. A push that can't arrive before `expiresAt` is
+  dropped, so a device never rings for a call that is over — the app also
+  checks `expiresAt` itself before drawing.
+- Stop ringing on any of: `CALL_MISSED` / `CALL_RING_STOPPED` for the call,
+  `expiresAt` passing, the socket showing the call, Accept / Decline.
+- Device registration is unchanged; `mutedTypes` accepts the three types.
+  The guide's optional "Calls" toggle (`CALL_INCOMING` + `CALL_MISSED`) is
+  **not built** — the preferences screen toggles single types only.
+- What the app does with each, per platform: `core/notifications/call_alert.dart`
+  and ADR-051. iOS's Accept / Decline buttons are not wired, and
+  `yello_ring.caf` is not bundled (iOS plays its default sound).
 
 ## yello-notify — what changed with the chat features
 

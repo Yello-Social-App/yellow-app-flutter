@@ -67,6 +67,17 @@ abstract final class ChatRoutes {
   static String acceptInvite(String inviteId) => '$_root/invites/$inviteId/accept';
   static String declineInvite(String inviteId) => '$_root/invites/$inviteId/decline';
 
+  // Calls (`features/call`). Starting, answering and hanging up are socket
+  // frames with no HTTP route; here are the LiveKit join token, the two
+  // live-call lookups, and the one HTTP decline — for the incoming-call
+  // notification's Decline button, which runs with no socket at all (the
+  // app open declines with the `call.decline` frame). `active` is a fixed
+  // segment, so it cannot collide with a call id.
+  static const String activeCall = '$_root/calls/active';
+  static String callToken(String callId) => '$_root/calls/$callId/token';
+  static String declineCall(String callId) => '$_root/calls/$callId/decline';
+  static String conversationCall(String id) => '$_root/conversations/$id/call';
+
   /// Live delivery endpoint — same path, upgraded. Frames are
   /// `{event, data}`; see `ChatRepository.watchEvents` and
   /// `ChatFrameDecoder`.

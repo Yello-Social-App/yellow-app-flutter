@@ -10,13 +10,15 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
-import '../../../link_preview/presentation/widgets/link_preview_card.dart';
+import '../../../../shared/widgets/input_glow.dart';
+import '../../../../shared/widgets/send_icon.dart';
 import '../../../safety/presentation/bloc/report_post_cubit.dart';
 import '../../../safety/presentation/widgets/report_post_sheet.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
+import '../../../../shared/widgets/app_warning_dialog.dart';
 import '../../../../shared/widgets/error_view.dart';
 import '../../../../shared/widgets/linked_text.dart';
 import '../../../../shared/widgets/yello_wordmark.dart';
@@ -30,6 +32,7 @@ import '../widgets/post_options_sheet.dart';
 import '../widgets/reaction_breakdown_sheet.dart';
 import '../widgets/reaction_glyph.dart';
 import '../widgets/reaction_picker.dart';
+import '../widgets/shimmer_post_detail.dart';
 
 class PostDetailPage extends StatelessWidget {
   const PostDetailPage({super.key, required this.postId});
@@ -164,9 +167,7 @@ class _PostDetailViewState extends State<_PostDetailView> {
                     Container(height: 1.5, color: colors.line),
                     Expanded(
                       child: switch (state.status) {
-                        PostDetailStatus.loading => const Center(
-                          child: CircularProgressIndicator(),
-                        ),
+                        PostDetailStatus.loading => const ShimmerPostDetail(),
                         PostDetailStatus.error => Center(
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -216,7 +217,8 @@ class _PostDetailViewState extends State<_PostDetailView> {
 /// removed. Hide and mute stay `loaded` and do hand the post back, which is
 /// harmless: every applier swaps an existing row and no-ops when the row is
 /// already gone.
-PostEntity? _result(PostDetailState state) => state.status == PostDetailStatus.loaded ? state.post : null;
+PostEntity? _result(PostDetailState state) =>
+    state.status == PostDetailStatus.loaded ? state.post : null;
 
 void _showPostMenu(
   BuildContext context,
@@ -340,24 +342,14 @@ Future<void> _confirmDeleteComment(
   PostDetailCubit cubit,
   String commentId,
 ) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Delete this comment?'),
-      content: const Text("This can't be undone."),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(false),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: const Text('Delete'),
-        ),
-      ],
-    ),
+  final confirmed = await AppWarningDialog.show(
+    context,
+    title: 'Delete this comment?',
+    message: "This can't be undone.",
+    confirmLabel: 'Delete',
+    icon: CupertinoIcons.trash,
   );
-  if (confirmed != true) return;
+  if (!confirmed) return;
   final ok = await cubit.deleteComment(commentId);
   if (!context.mounted || ok) return;
   AppStatusSnackbar.showError(context, message: 'Could not delete comment.');
@@ -568,21 +560,11 @@ class _PostHeaderCard extends StatelessWidget {
                 style: AppTextStyles.body.copyWith(color: colors.ink),
               ),
             ),
-            LinkPreviewList(text: post.content),
           ],
           if (post.hasImages)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              // A single photo follows its own aspect ratio at the card's
-              // fixed width instead of a fixed box; two or more become a
-              // swipeable carousel with a page indicator.
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadii.lg),
-                child: PostImageCarousel(
-                  imageUrls: post.imageUrls,
-                  placeholderHeight: 300,
-                ),
-              ),
+            PostImageCarousel(
+              imageUrls: post.imageUrls,
+              placeholderHeight: 300,
             ),
           // Facebook-style "shared post" embed — see `RepostedPostPreview`'s
           // doc for why this can't be skipped: a repost's own content/images
@@ -1280,7 +1262,11 @@ class _CommentBar extends StatelessWidget {
                     borderRadius: BorderRadius.circular(999),
                     child: Padding(
                       padding: const EdgeInsets.all(2),
-                      child: Icon(CupertinoIcons.xmark, size: 15, color: colors.ink2),
+                      child: Icon(
+                        CupertinoIcons.xmark,
+                        size: 15,
+                        color: colors.ink2,
+                      ),
                     ),
                   ),
                 ],
@@ -1289,13 +1275,10 @@ class _CommentBar extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Container(
+                child: InputGlow(
+                  fillColor: colors.surf,
+                  borderRadius: BorderRadius.circular(AppRadii.pill),
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: colors.surf,
-                    border: Border.all(color: colors.line, width: 1.5),
-                    borderRadius: BorderRadius.circular(AppRadii.pill),
-                  ),
                   child: TextField(
                     controller: controller,
                     focusNode: focusNode,
@@ -1314,7 +1297,7 @@ class _CommentBar extends StatelessWidget {
               ),
               const SizedBox(width: 9),
               AppIconButton(
-                icon: const Icon(CupertinoIcons.arrow_up),
+                icon: const SendIcon(semanticLabel: 'Send comment'),
                 filled: true,
                 borderColor: colors.ink,
                 size: 46,

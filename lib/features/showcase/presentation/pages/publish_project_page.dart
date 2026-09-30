@@ -10,6 +10,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
+import '../../../../shared/widgets/input_glow.dart';
 import '../../domain/entities/project_entity.dart';
 import '../bloc/publish_project_cubit.dart';
 
@@ -209,7 +210,7 @@ class _PublishProjectViewState extends State<_PublishProjectView> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          AppButton(label: 'Add', variant: AppButtonVariant.outline, dense: true, onPressed: _addTech),
+                          AppButton(label: 'Add', variant: AppButtonVariant.secondary, dense: true, onPressed: _addTech),
                         ],
                       ),
                       if (_tech.isNotEmpty) ...[
@@ -288,13 +289,10 @@ class _Field extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    return Container(
+    return InputGlow(
+      fillColor: colors.surf,
+      borderRadius: BorderRadius.circular(AppRadii.lg),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-      decoration: BoxDecoration(
-        color: colors.surf,
-        border: Border.all(color: colors.line, width: 1.5),
-        borderRadius: BorderRadius.circular(AppRadii.lg),
-      ),
       child: TextField(
         controller: controller,
         minLines: minLines,

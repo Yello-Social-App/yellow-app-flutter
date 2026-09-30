@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
 /// Which palette family the app draws with. Orthogonal to [Brightness]: each
-/// flavor supplies both a light and a dark [AppColors] set, so the four
-/// themes the Theme screen offers are the two flavors crossed with the two
+/// flavor supplies both a light and a dark [AppColors] set, so the six
+/// themes the Theme screen offers are the three flavors crossed with the two
 /// brightnesses.
 ///
 /// Adding a flavor means adding a case here plus its two palettes in
 /// [AppColors] — nothing else in the app hard-codes a palette, because every
-/// widget reads tokens through `AppColors.of(context)`.
+/// widget reads tokens through `AppColors.of(context)`. A flavor that also
+/// changes how surfaces are *drawn* (outline, shadow) says so in `AppStyle`.
 enum AppThemeFlavor {
   /// The original hand-tuned Yello Mobile v2 palette: warm off-white paper
   /// and warm charcoal, soft hairlines, amber-leaning yellow (ADR-020).
@@ -18,7 +19,13 @@ enum AppThemeFlavor {
   /// layers split by hairlines, one saturated yellow per view. Dark-first —
   /// the light set re-points the same roles rather than being its own
   /// design (ADR-035).
-  quietRails('Quiet rails', 'Neutral greys, one saturated yellow.');
+  quietRails('Quiet rails', 'Neutral greys, one saturated yellow.'),
+
+  /// The classic palette drawn bold: every card and button gets a solid ink
+  /// outline and a hard offset shadow instead of a hairline and a blur. The
+  /// colors are classic's, except [AppColors.line], which becomes solid ink —
+  /// the drawing change itself lives in `AppStyle` (ADR-050).
+  ink('Ink outline', 'Classic colors, bold outlines, hard shadows.');
 
   const AppThemeFlavor(this.label, this.blurb);
 
@@ -31,21 +38,22 @@ enum AppThemeFlavor {
   /// Round-trips through `shared_preferences`. The stored string is the enum
   /// `name`, so renaming a constant would orphan saved choices — keep the
   /// names stable and change [label] instead.
-  static AppThemeFlavor fromName(String? name) => values.firstWhere((f) => f.name == name, orElse: () => classic);
+  static AppThemeFlavor fromName(String? name) =>
+      values.firstWhere((f) => f.name == name, orElse: () => classic);
 }
 
 /// Design-token color palette. It began as a 1:1 lift of the Yello Mobile v2
 /// Claude Design source (`:root` / `[data-theme="dark"]` custom properties in
-/// `Yello Mobile v2.dc.html`) and has since been retuned to a lighter, softer
+/// `Yello Mobile v2.dc.html`) and has since been returned to a lighter, softer
 /// set — see ADR-020 for which tokens moved and why. Exposed as a
 /// [ThemeExtension] so every widget can reach the exact token set the app
 /// draws with, rather than approximating it through Material's ColorScheme
 /// roles.
 ///
-/// Four palettes live here, as two [AppThemeFlavor]s crossed with the two
-/// brightnesses: [light]/[dark] are the classic pair, and
+/// Six palettes live here, as three [AppThemeFlavor]s crossed with the two
+/// brightnesses: [light]/[dark] are the classic pair,
 /// [quietRailsLight]/[quietRailsDark] are the Yello Design System's own
-/// tables. Pick one with [resolve] rather than naming a constant — the named
+/// tables, and [inkLight]/[inkDark] are the classic pair with a solid [line]. Pick one with [resolve] rather than naming a constant — the named
 /// constants exist for the handful of widgets that deliberately want a fixed
 /// set regardless of the active theme (see `messages_page.dart`).
 @immutable
@@ -241,17 +249,63 @@ class AppColors extends ThemeExtension<AppColors> {
     onYel: Color(0xFF12120F), // color-on-primary-container
     red: Color(0xFFFF5D5D), // color-error
     grn: Color(0xFF3DDC84), // color-tertiary
-    shell: Color(0xFF0E0E10), // color-chrome
+    shell: Color.fromARGB(255, 9, 14, 26), // color-chrome
     slot: Color(0xFF16161A), // color-surface-container
   );
 
+  /// "Ink outline" light: [light] with [line] set to its own [ink]. That one
+  /// token is what turns every existing 1.5px hairline in the app, on cards,
+  /// pills, inputs and tab rows, into a drawn outline without touching each
+  /// call site. [line2] stays faint on purpose, so the dividers *inside* a
+  /// card remain seams rather than turning into a grid.
+  static const inkLight = AppColors(
+    bg: Color(0xFFFEFCF7),
+    surf: Color(0xFFFFFFFF),
+    surf2: Color(0xFFFAF7F0),
+    ink: Color(0xFF2A2620),
+    ink2: Color(0xFF6B6357),
+    ink3: Color(0xFF918A7B),
+    line: Color(0xFF2A2620),
+    line2: Color(0x0F14120C),
+    yel: Color(0xFFF4C542),
+    yelb: Color(0xFFFFF8E1),
+    yeld: Color(0xFF6F5502),
+    onYel: Color(0xFF2A2620),
+    red: Color(0xFFE4574F),
+    grn: Color(0xFF2E9E5B),
+    shell: Color(0xFF14120C),
+    slot: Color(0xFFF3F0E8),
+  );
+
+  /// "Ink outline" dark: [dark] with [line] set to its cream [ink], so the
+  /// outlines and hard shadows read as cream on charcoal.
+  static const inkDark = AppColors(
+    bg: Color(0xFF1A1811),
+    surf: Color(0xFF24211A),
+    surf2: Color(0xFF2E2B21),
+    ink: Color(0xFFF7F5F0),
+    ink2: Color(0xFFA79F90),
+    ink3: Color(0xFF7D7667),
+    line: Color(0xFFF7F5F0),
+    line2: Color(0x14F7F5F0),
+    yel: Color(0xFFF4C542),
+    yelb: Color(0xFF473807),
+    yeld: Color(0xFFF4C542),
+    onYel: Color(0xFF2A2620),
+    red: Color(0xFFF2726A),
+    grn: Color(0xFF4FC07E),
+    shell: Color(0xFF000000),
+    slot: Color(0xFF322E24),
+  );
+
   /// The palette for a ([AppThemeFlavor], [Brightness]) pair — the single
-  /// place the four sets are selected from.
+  /// place the six sets are selected from.
   static AppColors resolve(AppThemeFlavor flavor, Brightness brightness) {
     final isDark = brightness == Brightness.dark;
     return switch (flavor) {
       AppThemeFlavor.classic => isDark ? dark : light,
       AppThemeFlavor.quietRails => isDark ? quietRailsDark : quietRailsLight,
+      AppThemeFlavor.ink => isDark ? inkDark : inkLight,
     };
   }
 
@@ -318,5 +372,6 @@ class AppColors extends ThemeExtension<AppColors> {
   }
 
   /// Convenience accessor: `AppColors.of(context).ink`.
-  static AppColors of(BuildContext context) => Theme.of(context).extension<AppColors>() ?? light;
+  static AppColors of(BuildContext context) =>
+      Theme.of(context).extension<AppColors>() ?? light;
 }

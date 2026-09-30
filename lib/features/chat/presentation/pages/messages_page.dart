@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_style.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
@@ -15,10 +16,13 @@ import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/date_label.dart';
 import '../../../../shared/widgets/error_view.dart';
-import '../../../../shared/widgets/shimmer_loading.dart';
+import '../../../../shared/widgets/glow_border.dart';
+import '../../../../shared/widgets/ink_outline.dart';
 import '../../../../shared/widgets/yello_wordmark.dart';
 import '../../domain/entities/conversation_entity.dart';
 import '../bloc/messages_cubit.dart';
+import '../widgets/new_conversation_dialog.dart';
+import '../widgets/shimmer_conversation_list.dart';
 
 /// Colors for everything painted **on the header slab** — never
 /// `AppColors.of(context)`.
@@ -46,7 +50,10 @@ class MessagesPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider.value(value: sl<MessagesCubit>()..load(), child: const _MessagesView());
+    return BlocProvider.value(
+      value: sl<MessagesCubit>()..load(),
+      child: const _MessagesView(),
+    );
   }
 }
 
@@ -72,7 +79,8 @@ class _MessagesViewState extends State<_MessagesView> {
     super.dispose();
   }
 
-  void _onQueryChanged(String value) => _query.value = value.trim().toLowerCase();
+  void _onQueryChanged(String value) =>
+      _query.value = value.trim().toLowerCase();
 
   void _clearQuery() {
     _searchController.clear();
@@ -168,16 +176,24 @@ class _MessagesViewState extends State<_MessagesView> {
   List<ConversationEntity> _filter(List<ConversationEntity> all, String query) {
     if (query.isEmpty) return all;
     return all
-        .where((c) => c.name.toLowerCase().contains(query) || c.lastMessagePreview.toLowerCase().contains(query))
+        .where(
+          (c) =>
+              c.name.toLowerCase().contains(query) ||
+              c.lastMessagePreview.toLowerCase().contains(query),
+        )
         .toList(growable: false);
   }
 
-  List<Widget> _bodySlivers(MessagesState state, String query, MessagesCubit cubit) {
+  List<Widget> _bodySlivers(
+    MessagesState state,
+    String query,
+    MessagesCubit cubit,
+  ) {
     if (state.status == MessagesStatus.loading && state.conversations.isEmpty) {
       return const [
         SliverPadding(
           padding: _bodyPadding,
-          sliver: SliverToBoxAdapter(child: ShimmerListCard()),
+          sliver: SliverToBoxAdapter(child: ShimmerConversationList()),
         ),
       ];
     }
@@ -187,7 +203,10 @@ class _MessagesViewState extends State<_MessagesView> {
         SliverPadding(
           padding: _bodyPadding,
           sliver: SliverToBoxAdapter(
-            child: ErrorView(message: state.errorMessage ?? 'Could not load your inbox.', onRetry: cubit.refresh),
+            child: ErrorView(
+              message: state.errorMessage ?? 'Could not load your inbox.',
+              onRetry: cubit.refresh,
+            ),
           ),
         ),
       ];
@@ -202,9 +221,13 @@ class _MessagesViewState extends State<_MessagesView> {
             child: query.isEmpty
                 ? const EmptyStateCard(
                     title: 'NO CONVERSATIONS YET',
-                    hint: 'Start one from a friend’s profile and it will show up here.',
+                    hint:
+                        'Tap the pencil above to message a friend or start a group.',
                   )
-                : const EmptyStateCard(title: 'NO MATCHES', hint: 'No chat in your inbox matches that search.'),
+                : const EmptyStateCard(
+                    title: 'NO MATCHES',
+                    hint: 'No chat in your inbox matches that search.',
+                  ),
           ),
         ),
       ];
@@ -216,7 +239,8 @@ class _MessagesViewState extends State<_MessagesView> {
         sliver: SliverList.separated(
           itemCount: conversations.length,
           separatorBuilder: (_, _) => const _RowDivider(),
-          itemBuilder: (context, index) => _ConversationRow(conversation: conversations[index]),
+          itemBuilder: (context, index) =>
+              _ConversationRow(conversation: conversations[index]),
         ),
       ),
     ];
@@ -258,7 +282,12 @@ class _HeaderSlab extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: EdgeInsets.fromLTRB(18, topInset + 12, 18, _sheetOverlap + 20),
+          padding: EdgeInsets.fromLTRB(
+            18,
+            topInset + 12,
+            18,
+            _sheetOverlap + 20,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -275,27 +304,50 @@ class _HeaderSlab extends StatelessWidget {
                         // because this is painted on the slab.
                         DateLabel(
                           color: _onSlab.ink2,
-                          trailing: unreadTotal == 0 ? 'All caught up' : '$unreadTotal unread',
+                          trailing: unreadTotal == 0
+                              ? 'All caught up'
+                              : '$unreadTotal unread',
                         ),
                         const SizedBox(height: 8),
-                        const YelloWordmark(fontSize: AppTextStyles.displayXlFontSize, text: 'Inbox'),
+                        const YelloWordmark(
+                          fontSize: AppTextStyles.displayXlFontSize,
+                          text: 'Chat',
+                          brightness: Brightness.dark,
+                        ),
                       ],
                     ),
                   ),
-                  AppIconButton(
-                    icon: const Icon(CupertinoIcons.pencil),
-                    backgroundColor: _onSlab.surf2,
-                    borderColor: _onSlab.line,
-                    iconColor: _onSlab.ink,
-                    onPressed: () {},
+                  Semantics(
+                    label: 'New message',
+                    // Ink outline: a yellow key with a cream edge and shadow,
+                    // since an ink one would vanish into the dark slab.
+                    child: InkOutline(
+                      fill: colors.yel,
+                      borderColor: _onSlab.ink,
+                      shadowColor: _onSlab.ink,
+                      child: AppIconButton(
+                        icon: const Icon(CupertinoIcons.pencil),
+                        backgroundColor: _onSlab.surf2,
+                        borderColor: _onSlab.line,
+                        iconColor: AppStyle.of(context).outlined ? colors.onYel : _onSlab.ink,
+                        onPressed: () => _newConversation(context),
+                      ),
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 18),
-              _SlabSearchField(controller: controller, onChanged: onQueryChanged, onClear: onClearQuery),
+              _SlabSearchField(
+                controller: controller,
+                onChanged: onQueryChanged,
+                onClear: onClearQuery,
+              ),
               if (people.isNotEmpty) ...[
                 const SizedBox(height: 20),
-                Text('BROWSE YOUR CHATS', style: AppTextStyles.eyebrow.copyWith(color: _onSlab.ink2)),
+                Text(
+                  'BROWSE YOUR CHATS',
+                  style: AppTextStyles.eyebrow.copyWith(color: _onSlab.ink2),
+                ),
                 const SizedBox(height: 14),
                 _PeopleRail(people: people),
               ],
@@ -310,7 +362,9 @@ class _HeaderSlab extends StatelessWidget {
             height: _sheetOverlap,
             decoration: BoxDecoration(
               color: colors.bg,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadii.huge)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(AppRadii.huge),
+              ),
             ),
           ),
         ),
@@ -319,12 +373,23 @@ class _HeaderSlab extends StatelessWidget {
   }
 }
 
+/// The compose button: pick friends, then land in the DM or the new group.
+/// The dialog has already put the conversation into the Inbox list.
+Future<void> _newConversation(BuildContext context) async {
+  final conversation = await showNewConversationDialog(context);
+  if (conversation == null || !context.mounted) return;
+  await context.pushNamed(
+    RouteNames.chat,
+    pathParameters: {'conversationId': conversation.id},
+  );
+}
+
 /// Flat fill plus three translucent brand discs — the slab's only decoration.
 ///
 /// Painted rather than stacked as `Container`s, and deliberately **unblurred**:
 /// a blurred `BoxShadow` on a rebuilding widget crashes this project's
-/// renderer (`docs/GOTCHAS.md`). Same approach as `_ActiveTabIndicatorPainter`
-/// in `bottom_nav_bar.dart`.
+/// renderer (`docs/GOTCHAS.md`). Same approach as `ActiveTabIndicatorPainter`
+/// in `shared/widgets/active_tab_indicator_painter.dart`.
 class _SlabPainter extends CustomPainter {
   const _SlabPainter({required this.base, required this.glow});
 
@@ -337,21 +402,38 @@ class _SlabPainter extends CustomPainter {
     canvas.drawRect(Offset.zero & size, paint);
 
     paint.color = glow.withValues(alpha: 0.10);
-    canvas.drawCircle(Offset(size.width * 0.88, size.height * 0.10), size.width * 0.26, paint);
+    canvas.drawCircle(
+      Offset(size.width * 0.88, size.height * 0.10),
+      size.width * 0.26,
+      paint,
+    );
 
     paint.color = glow.withValues(alpha: 0.06);
-    canvas.drawCircle(Offset(size.width * 0.08, size.height * 0.52), size.width * 0.32, paint);
+    canvas.drawCircle(
+      Offset(size.width * 0.08, size.height * 0.52),
+      size.width * 0.32,
+      paint,
+    );
 
     paint.color = glow.withValues(alpha: 0.05);
-    canvas.drawCircle(Offset(size.width * 0.58, -size.height * 0.04), size.width * 0.18, paint);
+    canvas.drawCircle(
+      Offset(size.width * 0.58, -size.height * 0.04),
+      size.width * 0.18,
+      paint,
+    );
   }
 
   @override
-  bool shouldRepaint(_SlabPainter oldDelegate) => oldDelegate.base != base || oldDelegate.glow != glow;
+  bool shouldRepaint(_SlabPainter oldDelegate) =>
+      oldDelegate.base != base || oldDelegate.glow != glow;
 }
 
 class _SlabSearchField extends StatelessWidget {
-  const _SlabSearchField({required this.controller, required this.onChanged, required this.onClear});
+  const _SlabSearchField({
+    required this.controller,
+    required this.onChanged,
+    required this.onClear,
+  });
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
@@ -369,46 +451,61 @@ class _SlabSearchField extends StatelessWidget {
     final hintInk = isDark ? _onSlab.ink3 : AppColors.light.ink3;
 
     final radius = BorderRadius.circular(AppRadii.pill);
+    final style = AppStyle.of(context);
 
-    return TextField(
-      controller: controller,
-      onChanged: onChanged,
-      textInputAction: TextInputAction.search,
-      onSubmitted: (_) => FocusScope.of(context).unfocus(),
-      style: AppTextStyles.body.copyWith(color: ink),
-      cursorColor: ink,
-      decoration: InputDecoration(
-        hintText: 'Search your messages',
-        hintStyle: AppTextStyles.hint.copyWith(color: hintInk),
-        prefixIcon: Icon(CupertinoIcons.search, color: hintInk, size: 20),
-        prefixIconConstraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-        suffixIcon: ValueListenableBuilder<TextEditingValue>(
-          valueListenable: controller,
-          builder: (context, value, _) {
-            if (value.text.isEmpty) return const SizedBox.shrink();
-            return IconButton(
-              tooltip: 'Clear search',
-              icon: Icon(CupertinoIcons.xmark, color: hintInk, size: 18),
-              // Bounded so the field's height doesn't jump when the button
-              // appears; still a 40px target.
-              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              padding: EdgeInsets.zero,
-              onPressed: onClear,
-            );
-          },
-        ),
-        // Without this the decoration's default 48px minimum keeps reserving
-        // the clear button's slot even while it is an empty `SizedBox`,
-        // permanently narrowing the field by a button's width.
-        suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-        filled: true,
-        fillColor: fill,
-        isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 15),
-        enabledBorder: OutlineInputBorder(borderRadius: radius, borderSide: BorderSide.none),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: radius,
-          borderSide: BorderSide(color: _onSlab.yel, width: 1.5),
+    // Ink outline gives the field a hard shadow in yellow rather than ink:
+    // it sits on the always-dark slab, where an ink offset would not show.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: style.hardShadow(AppColors.of(context), AppStyle.pillOffset, color: _onSlab.yel),
+      ),
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        textInputAction: TextInputAction.search,
+        onSubmitted: (_) => FocusScope.of(context).unfocus(),
+        style: AppTextStyles.body.copyWith(color: ink),
+        cursorColor: ink,
+        decoration: InputDecoration(
+          hintText: 'Search your messages',
+          hintStyle: AppTextStyles.hint.copyWith(color: hintInk),
+          prefixIcon: Icon(CupertinoIcons.search, color: hintInk, size: 20),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 44,
+            minHeight: 44,
+          ),
+          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (context, value, _) {
+              if (value.text.isEmpty) return const SizedBox.shrink();
+              return IconButton(
+                tooltip: 'Clear search',
+                icon: Icon(CupertinoIcons.xmark, color: hintInk, size: 18),
+                // Bounded so the field's height doesn't jump when the button
+                // appears; still a 40px target.
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                padding: EdgeInsets.zero,
+                onPressed: onClear,
+              );
+            },
+          ),
+          // Without this the decoration's default 48px minimum keeps reserving
+          // the clear button's slot even while it is an empty `SizedBox`,
+          // permanently narrowing the field by a button's width.
+          suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+          filled: true,
+          fillColor: fill,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 15),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: radius,
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: GlowInputBorder(
+            borderRadius: radius,
+            borderSide: BorderSide(color: _onSlab.yel, width: 1.5),
+          ),
         ),
       ),
     );
@@ -429,7 +526,8 @@ class _PeopleRail extends StatelessWidget {
         padding: EdgeInsets.zero,
         itemCount: people.length,
         separatorBuilder: (_, _) => const SizedBox(width: 14),
-        itemBuilder: (context, index) => _RailAvatar(conversation: people[index]),
+        itemBuilder: (context, index) =>
+            _RailAvatar(conversation: people[index]),
       ),
     );
   }
@@ -448,7 +546,10 @@ class _RailAvatar extends StatelessWidget {
       button: true,
       label: 'Open chat with ${conversation.name}',
       child: GestureDetector(
-        onTap: () => context.pushNamed(RouteNames.chat, pathParameters: {'conversationId': conversation.id}),
+        onTap: () => context.pushNamed(
+          RouteNames.chat,
+          pathParameters: {'conversationId': conversation.id},
+        ),
         child: Center(
           child: AppAvatar(
             initials: conversation.name.initials,
@@ -475,7 +576,11 @@ class _RowDivider extends StatelessWidget {
     return Padding(
       // Indented past the avatar so the rule starts at the text column.
       padding: const EdgeInsets.only(left: 68),
-      child: Divider(height: 1, thickness: 1, color: AppColors.of(context).line2),
+      child: Divider(
+        height: 1,
+        thickness: 1,
+        color: AppColors.of(context).line2,
+      ),
     );
   }
 }
@@ -495,7 +600,10 @@ class _ConversationRow extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadii.sm),
-        onTap: () => context.pushNamed(RouteNames.chat, pathParameters: {'conversationId': conversation.id}),
+        onTap: () => context.pushNamed(
+          RouteNames.chat,
+          pathParameters: {'conversationId': conversation.id},
+        ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
           child: Row(
@@ -540,12 +648,17 @@ class _ConversationRow extends StatelessWidget {
                 children: [
                   Text(
                     Formatters.relativeShort(conversation.lastMessageAt),
-                    style: AppTextStyles.metaMono.copyWith(color: unread ? colors.ink : colors.ink3),
+                    style: AppTextStyles.metaMono.copyWith(
+                      color: unread ? colors.ink : colors.ink3,
+                    ),
                   ),
                   const SizedBox(height: 7),
                   // Reserves the badge's height either way, so a read row and
                   // an unread row are exactly the same height.
-                  if (unread) _UnreadBadge(count: conversation.unreadCount) else const SizedBox(height: 20),
+                  if (unread)
+                    _UnreadBadge(count: conversation.unreadCount)
+                  else
+                    const SizedBox(height: 20),
                 ],
               ),
             ],
@@ -564,6 +677,7 @@ class _UnreadBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
+    final style = AppStyle.of(context);
 
     return Container(
       constraints: const BoxConstraints(minWidth: 20),
@@ -575,11 +689,15 @@ class _UnreadBadge extends StatelessWidget {
         // A pill, not `BoxShape.circle`: with `minWidth` and a two-digit count
         // a circle stretches into an ellipse.
         borderRadius: BorderRadius.circular(AppRadii.pill),
-        border: Border.all(color: colors.ink, width: 1.5),
+        border: Border.all(color: colors.ink, width: style.borderWidth),
+        boxShadow: style.hardShadow(colors, AppStyle.chipOffset),
       ),
       child: Text(
         Formatters.compactCount(count),
-        style: AppTextStyles.titleSm.copyWith(fontSize: 10, color: colors.onYel),
+        style: AppTextStyles.titleSm.copyWith(
+          fontSize: 10,
+          color: colors.onYel,
+        ),
       ),
     );
   }

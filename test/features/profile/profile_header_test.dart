@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yello_social_app/features/auth/domain/entities/user_entity.dart';
 import 'package:yello_social_app/features/friends/domain/entities/friendship_entity.dart';
+import 'package:yello_social_app/features/profile/domain/entities/public_user_entity.dart';
 import 'package:yello_social_app/features/profile/presentation/widgets/profile_header.dart';
 import 'package:yello_social_app/shared/widgets/app_avatar.dart';
 
@@ -109,5 +110,62 @@ void main() {
     expect(find.text('12 connections'), findsOneWidget);
     // Three faces plus the profile's own avatar.
     expect(find.byType(AppAvatar), findsNWidgets(4));
+  });
+
+  // Someone else's profile renders on the same frame, minus what a viewer
+  // can't do there.
+  group('PublicProfileHeader', () {
+    Future<void> pumpPublic(WidgetTester tester, {int friendsCount = 0, int postsCount = 0}) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(320, 1000);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: PublicProfileHeader(
+                user: PublicUserEntity(
+                  id: 'u2',
+                  username: 'bo',
+                  fullName: 'Bo Lindqvist',
+                  bio: 'Photos, mostly.',
+                  friendsCount: friendsCount,
+                  postsCount: postsCount,
+                  createdAt: DateTime(2025, 11, 2),
+                ),
+                actions: const Text('ACTIONS'),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('lays out without overflow and shows the page-supplied actions', (tester) async {
+      await pumpPublic(tester, friendsCount: 4800, postsCount: 3000);
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Bo Lindqvist'), findsOneWidget);
+      expect(find.text('Photos, mostly.'), findsOneWidget);
+      expect(find.text('ACTIONS'), findsOneWidget);
+    });
+
+    testWidgets('has no edit affordances', (tester) async {
+      await pumpPublic(tester);
+
+      expect(find.byIcon(CupertinoIcons.camera_fill), findsNothing);
+      expect(find.byIcon(CupertinoIcons.camera), findsNothing);
+      // No friends list to open for someone else, so no chevron either.
+      expect(find.byIcon(CupertinoIcons.chevron_right), findsNothing);
+    });
+
+    testWidgets('states the counts plainly instead of the own-profile prompt', (tester) async {
+      await pumpPublic(tester, postsCount: 1);
+
+      expect(find.text('0 connections'), findsOneWidget);
+      expect(find.text('Find your circle'), findsNothing);
+      expect(find.text('1 post'), findsOneWidget);
+    });
   });
 }

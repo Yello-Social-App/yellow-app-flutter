@@ -13,6 +13,7 @@ import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/date_label.dart';
 import '../../../../shared/widgets/explore_title_menu.dart';
 import '../../../../shared/widgets/filter_chip_pill.dart';
+import '../../../../shared/widgets/input_glow.dart';
 import '../../../../shared/widgets/paged_list_view.dart';
 import '../../../../shared/widgets/segmented_tabs.dart';
 import '../../domain/entities/community_entity.dart';
@@ -302,13 +303,10 @@ class _DirectoryTabState extends State<_DirectoryTab> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-              child: Container(
+              child: InputGlow(
+                fillColor: colors.surf,
+                borderRadius: BorderRadius.circular(AppRadii.pill),
                 padding: const EdgeInsets.only(left: 16, right: 12),
-                decoration: BoxDecoration(
-                  color: colors.surf,
-                  border: Border.all(color: colors.line, width: 1.5),
-                  borderRadius: BorderRadius.circular(AppRadii.pill),
-                ),
                 child: Row(
                   children: [
                     Expanded(
@@ -445,9 +443,14 @@ class _CommunityCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: colors.surf,
-        border: Border.all(color: colors.line, width: 1.5),
         borderRadius: BorderRadius.circular(AppRadii.xl),
         boxShadow: AppShadows.card(context),
+      ),
+      // In the foreground: the cover band runs to the card's top edge, and a
+      // border in `decoration` is painted under it (docs/GOTCHAS.md).
+      foregroundDecoration: BoxDecoration(
+        border: Border.all(color: colors.line, width: 1.5),
+        borderRadius: BorderRadius.circular(AppRadii.xl),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -512,7 +515,7 @@ class _CommunityCard extends StatelessWidget {
                           const SizedBox(width: 8),
                           AppButton(
                             label: community.isMember ? 'Leave' : 'Join',
-                            variant: community.isMember ? AppButtonVariant.outline : AppButtonVariant.primary,
+                            variant: community.isMember ? AppButtonVariant.secondary : AppButtonVariant.primary,
                             dense: true,
                             onPressed: busy ? null : onToggleMembership,
                           ),

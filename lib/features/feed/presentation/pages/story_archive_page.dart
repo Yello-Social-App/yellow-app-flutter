@@ -2,12 +2,14 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:yello_social_app/shared/widgets/yello_wordmark.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../shared/extensions/context_extension.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/app_warning_dialog.dart';
@@ -18,6 +20,7 @@ import '../../domain/entities/story_entity.dart';
 import '../bloc/story_archive_cubit.dart';
 import '../widgets/story_background.dart';
 import '../widgets/story_viewers_sheet.dart';
+import '../widgets/shimmer_archive_row.dart';
 
 /// Account menu → Story archive.
 ///
@@ -44,7 +47,8 @@ class _StoryArchiveView extends StatelessWidget {
     final confirmed = await AppWarningDialog.show(
       context,
       title: 'Delete this story?',
-      message: 'It leaves your archive for good. If it is still live, it disappears for everyone too.',
+      message:
+          'It leaves your archive for good. If it is still live, it disappears for everyone too.',
       confirmLabel: 'Delete',
       icon: CupertinoIcons.delete,
     );
@@ -57,7 +61,10 @@ class _StoryArchiveView extends StatelessWidget {
   /// `from`/`to` are inclusive UTC **calendar days** server-side, so the
   /// picker's local dates go through as-is and the data source formats them
   /// — see `StoryRemoteDataSourceImpl._day`.
-  Future<void> _pickDateRange(BuildContext context, StoryArchiveState state) async {
+  Future<void> _pickDateRange(
+    BuildContext context,
+    StoryArchiveState state,
+  ) async {
     final cubit = context.read<StoryArchiveCubit>();
     final now = DateTime.now();
     final range = await showDateRangePicker(
@@ -67,7 +74,9 @@ class _StoryArchiveView extends StatelessWidget {
       // and keeps the picker navigable.
       firstDate: DateTime(now.year - 1),
       lastDate: DateTime(now.year, now.month, now.day),
-      initialDateRange: state.hasDateRange ? DateTimeRange(start: state.from!, end: state.to!) : null,
+      initialDateRange: state.hasDateRange
+          ? DateTimeRange(start: state.from!, end: state.to!)
+          : null,
     );
     if (range == null) return;
     await cubit.setDateRange(range.start, range.end);
@@ -87,7 +96,10 @@ class _StoryArchiveView extends StatelessWidget {
           builder: (context, state) {
             return NotificationListener<ScrollNotification>(
               onNotification: (notification) {
-                if (notification.metrics.pixels >= notification.metrics.maxScrollExtent - 400) cubit.loadMore();
+                if (notification.metrics.pixels >=
+                    notification.metrics.maxScrollExtent - 400) {
+                  cubit.loadMore();
+                }
                 return false;
               },
               child: RefreshIndicator(
@@ -102,7 +114,12 @@ class _StoryArchiveView extends StatelessWidget {
                           onPressed: () => Navigator.of(context).maybePop(),
                         ),
                         const SizedBox(width: 12),
-                        Text('Story archive', style: AppTextStyles.titleLg.copyWith(color: colors.ink)),
+                        // Text('Story archive', style: AppTextStyles.titleLg.copyWith(color: colors.ink)),
+                        YelloWordmark(
+                          fontSize: 32,
+                          text: 'Story Archive',
+                          key: const Key('theme_page_wordmark'),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 10),
@@ -168,32 +185,36 @@ class _StoryArchiveView extends StatelessWidget {
     final cubit = context.read<StoryArchiveCubit>();
 
     if (state.status == StoryArchiveStatus.loading) {
-      return const [ShimmerListCard(), SizedBox(height: 10), ShimmerListCard()];
+      return const [
+        Padding(
+          padding: EdgeInsets.only(left: 4, bottom: 10),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: ShimmerBox(width: 72, height: 11),
+          ),
+        ),
+        ShimmerArchiveRow(),
+        SizedBox(height: 10),
+        ShimmerArchiveRow(captionWidth: 120),
+        SizedBox(height: 10),
+        ShimmerArchiveRow(captionWidth: 190),
+      ];
     }
     if (state.status == StoryArchiveStatus.error) {
       return [
-        ErrorView(message: state.errorMessage ?? 'Could not load your archive.', onRetry: cubit.load),
+        ErrorView(
+          message: state.errorMessage ?? 'Could not load your archive.',
+          onRetry: cubit.load,
+        ),
       ];
     }
     if (state.isEmpty) {
       return [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 60),
-          child: Column(
-            children: [
-              Icon(CupertinoIcons.book, size: 40, color: colors.ink3),
-              const SizedBox(height: 14),
-              Text('Nothing here yet', style: AppTextStyles.body.copyWith(color: colors.ink)),
-              const SizedBox(height: 6),
-              Text(
-                state.typeFilter == null && !state.hasDateRange
-                    ? 'Stories you post show up here once they expire.'
-                    : 'Nothing matches those filters.',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
-              ),
-            ],
-          ),
+        EmptyStateCard(
+          title: 'NOTHING HERE YET',
+          hint: state.typeFilter == null && !state.hasDateRange
+              ? 'Stories you post show up here once they expire.'
+              : 'Nothing matches those filters.',
         ),
       ];
     }
@@ -202,7 +223,10 @@ class _StoryArchiveView extends StatelessWidget {
       for (final day in state.days) ...[
         Padding(
           padding: const EdgeInsets.only(left: 4, bottom: 10),
-          child: Text(_dayLabel(day.day), style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
+          child: Text(
+            _dayLabel(day.day),
+            style: AppTextStyles.eyebrow.copyWith(color: colors.ink2),
+          ),
         ),
         for (final story in day.stories) ...[
           _ArchiveRow(
@@ -242,7 +266,11 @@ class _StoryArchiveView extends StatelessWidget {
 }
 
 class _ArchiveRow extends StatelessWidget {
-  const _ArchiveRow({required this.story, required this.onDelete, required this.onViewers});
+  const _ArchiveRow({
+    required this.story,
+    required this.onDelete,
+    required this.onViewers,
+  });
 
   final StoryEntity story;
   final VoidCallback onDelete;
@@ -279,23 +307,35 @@ class _ArchiveRow extends StatelessWidget {
                   children: [
                     Text(
                       Formatters.relativeShort(story.createdAt),
-                      style: AppTextStyles.metaMonoSm.copyWith(color: colors.ink3),
+                      style: AppTextStyles.metaMonoSm.copyWith(
+                        color: colors.ink3,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Icon(
-                      story.visibility == StoryVisibility.public ? CupertinoIcons.globe : CupertinoIcons.person_2,
+                      story.visibility == StoryVisibility.public
+                          ? CupertinoIcons.globe
+                          : CupertinoIcons.person_2,
                       size: 12,
                       color: colors.ink3,
                     ),
                     if (!story.isExpired) ...[
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: colors.yelb,
                           borderRadius: BorderRadius.circular(AppRadii.pill),
                         ),
-                        child: Text('LIVE', style: AppTextStyles.metaMonoSm.copyWith(color: colors.yeld)),
+                        child: Text(
+                          'LIVE',
+                          style: AppTextStyles.metaMonoSm.copyWith(
+                            color: colors.yeld,
+                          ),
+                        ),
                       ),
                     ],
                   ],
@@ -341,6 +381,8 @@ class _Thumbnail extends StatelessWidget {
         child: CachedNetworkImage(
           imageUrl: image.url,
           cacheKey: image.cacheKey,
+          color: context.imageBackdrop,
+          colorBlendMode: BlendMode.dstOver,
           width: _size,
           height: _size,
           fit: BoxFit.cover,
@@ -353,7 +395,11 @@ class _Thumbnail extends StatelessWidget {
           errorWidget: (_, _, _) => SizedBox(
             width: _size,
             height: _size,
-            child: Icon(CupertinoIcons.exclamationmark_triangle, size: 18, color: AppColors.of(context).ink3),
+            child: Icon(
+              CupertinoIcons.exclamationmark_triangle,
+              size: 18,
+              color: AppColors.of(context).ink3,
+            ),
           ),
         ),
       );
@@ -363,7 +409,11 @@ class _Thumbnail extends StatelessWidget {
       background: story.background ?? StoryBackground.cover0,
       size: _size,
       borderRadius: radius,
-      child: Icon(CupertinoIcons.textformat, size: 18, color: storyBackgroundForeground(story.background)),
+      child: Icon(
+        CupertinoIcons.textformat,
+        size: 18,
+        color: storyBackgroundForeground(story.background),
+      ),
     );
   }
 }

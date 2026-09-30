@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/input_glow.dart';
 
 /// Icon-prefixed pill text field for the auth screens — [label] is used as
 /// the placeholder (when [placeholder] isn't given separately) and as the
@@ -65,12 +66,13 @@ class AuthFormField extends StatelessWidget {
         Semantics(
           textField: true,
           label: label,
-          child: Container(
-            decoration: BoxDecoration(
-              color: colors.surf2,
-              borderRadius: BorderRadius.circular(AppRadii.pill),
-              border: Border.all(color: border, width: 1.5),
-            ),
+          // A validation colour (green/red) stays the glow's colour too, so
+          // the verdict isn't hidden while the user is still typing.
+          child: InputGlow(
+            fillColor: colors.surf2,
+            borderRadius: BorderRadius.circular(AppRadii.pill),
+            borderColor: border,
+            glowColor: borderColor,
             child: Row(
               children: [
                 const SizedBox(width: 18),

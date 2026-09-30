@@ -13,10 +13,10 @@ import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/error_view.dart';
-import '../../../../shared/widgets/shimmer_loading.dart';
 import '../../../../shared/widgets/yello_wordmark.dart';
 import '../../domain/entities/notification_entity.dart';
 import '../bloc/notifications_cubit.dart';
+import '../widgets/shimmer_notification_row.dart';
 
 class NotificationsPage extends StatelessWidget {
   const NotificationsPage({super.key});
@@ -121,17 +121,23 @@ class _NotificationsView extends StatelessWidget {
                   final bodyIndex = index - 1;
 
                   if (bodyIndex < bodyCount && (loadingEmpty || errorEmpty || state.items.isEmpty)) {
-                    if (loadingEmpty) return const ShimmerListCard();
+                    if (loadingEmpty) {
+                      return const Column(
+                        children: [
+                          ShimmerNotificationRow(),
+                          ShimmerNotificationRow(titleWidth: 118, bodyLines: 1),
+                          ShimmerNotificationRow(titleWidth: 170, bodyLines: 0),
+                          ShimmerNotificationRow(titleWidth: 132),
+                          ShimmerNotificationRow(titleWidth: 104, bodyLines: 1),
+                        ],
+                      );
+                    }
                     if (errorEmpty) {
                       return ErrorView(message: state.errorMessage ?? 'Could not load your notifications.', onRetry: cubit.refresh);
                     }
-                    return Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        "Nothing yet — you'll see likes, comments, reposts, friends' posts and friend requests here.",
-                        textAlign: TextAlign.center,
-                        style: AppTextStyles.bodySm.copyWith(color: colors.ink2),
-                      ),
+                    return const EmptyStateCard(
+                      title: 'ALL QUIET',
+                      hint: "You'll see likes, comments, reposts, friends' posts and friend requests here.",
                     );
                   }
 
@@ -195,7 +201,7 @@ class _Header extends StatelessWidget {
           const SizedBox(width: 8),
           AppButton(
             label: 'Mark read',
-            variant: AppButtonVariant.outline,
+            variant: AppButtonVariant.secondary,
             dense: true,
             onPressed: state.unreadCount == 0 ? null : cubit.markAllRead,
           ),

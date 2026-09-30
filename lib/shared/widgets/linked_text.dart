@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/external_link.dart';
 import '../../core/utils/link_scanner.dart';
+import '../../features/link_preview/presentation/widgets/link_preview_card.dart';
 import 'app_status_snackbar.dart';
 
 /// Matches a `#hashtag` run — highlighted, but not tappable: there is no
@@ -34,6 +35,7 @@ class LinkedText extends StatefulWidget {
     this.maxLines,
     this.overflow,
     this.textAlign,
+    this.showLinkPreviews = true,
   });
 
   final String text;
@@ -51,6 +53,11 @@ class LinkedText extends StatefulWidget {
   final int? maxLines;
   final TextOverflow? overflow;
   final TextAlign? textAlign;
+
+  /// Whether a preview card for each link is drawn under the text (ADR-041).
+  /// Off where the text is already squeezed into something small — a photo
+  /// caption over the image, a repost embed — where the links still open.
+  final bool showLinkPreviews;
 
   @override
   State<LinkedText> createState() => _LinkedTextState();
@@ -110,11 +117,23 @@ class _LinkedTextState extends State<LinkedText> {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    return Text.rich(
+    final text = Text.rich(
       TextSpan(children: _spans(colors)),
       maxLines: widget.maxLines,
       overflow: widget.overflow,
       textAlign: widget.textAlign,
+    );
+    if (_links.isEmpty || !widget.showLinkPreviews) return text;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        text,
+        LinkPreviewList(
+          text: widget.text,
+          padding: const EdgeInsets.only(top: 8),
+        ),
+      ],
     );
   }
 

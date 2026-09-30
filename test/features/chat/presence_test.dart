@@ -183,6 +183,21 @@ void main() {
       expect(cubit.state.conversations.every((c) => !c.isOnline), isTrue);
     });
 
+    test('a group counts its online members, never the viewer, and still gets no dot', () async {
+      cubit.watchPresence();
+      await cubit.load();
+      ConversationEntity group() => cubit.state.conversations.firstWhere((c) => c.id == 'g1');
+      expect(group().onlineMemberCount, 0);
+
+      presence.add({'me', 'u2'});
+      await Future<void>.delayed(Duration.zero);
+      expect(group().onlineMemberCount, 1, reason: 'the viewer being online says nothing about the group');
+      expect(group().isOnline, isFalse);
+
+      cubit.releasePresence();
+      expect(group().onlineMemberCount, 0);
+    });
+
     test('presence is leased: the last release turns every dot off', () async {
       cubit.watchPresence();
       cubit.watchPresence();

@@ -8,6 +8,7 @@ import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/app_warning_dialog.dart';
+import '../../../../shared/widgets/glow_border.dart';
 import '../../domain/entities/post_entity.dart';
 
 /// The post "···" overflow menu — shared by the feed card and the post
@@ -147,19 +148,14 @@ Future<bool> confirmMuteAuthor(BuildContext context, String authorUsername) {
 
 /// "Delete this post?" confirmation — shared so the feed card and the post
 /// detail screen ask the same way before calling their own `deletePost`.
-Future<bool> confirmDeletePost(BuildContext context) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Delete this post?'),
-      content: const Text("This can't be undone."),
-      actions: [
-        TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Cancel')),
-        TextButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('Delete')),
-      ],
-    ),
+Future<bool> confirmDeletePost(BuildContext context) {
+  return AppWarningDialog.show(
+    context,
+    title: 'Delete this post?',
+    message: "This can't be undone.",
+    confirmLabel: 'Delete',
+    icon: CupertinoIcons.trash,
   );
-  return confirmed == true;
 }
 
 class _MenuTile extends StatelessWidget {
@@ -260,6 +256,10 @@ class _EditPostSheetState extends State<_EditPostSheet> {
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(AppRadii.lg),
                   borderSide: BorderSide(color: colors.line, width: 1.5),
+                ),
+                focusedBorder: GlowInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadii.lg),
+                  borderSide: BorderSide(color: colors.yel, width: 1.5),
                 ),
               ),
             ),

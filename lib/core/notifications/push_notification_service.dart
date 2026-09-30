@@ -13,6 +13,7 @@ import '../../features/notification/domain/usecases/notification_usecases.dart';
 import '../constants/app_constants.dart';
 import '../security/secure_storage_service.dart';
 import '../utils/logger.dart';
+import 'call_alert.dart';
 import 'chat_reply_action.dart';
 
 /// Channel every push is shown under on Android. `yello_default` is the id
@@ -101,8 +102,9 @@ class ReportsDestination extends PushDestination {
 /// unregister it on sign-out) in sync with the current FCM token, shows the
 /// notification manually while the app is foregrounded — FCM only auto-pops
 /// a system notification when the app is backgrounded or killed — takes an
-/// alert down again when its chat message is unsent, and answers the Reply
-/// action on a chat alert without the app coming forward (ADR-025).
+/// alert down again when its chat message is unsent, answers the Reply
+/// action on a chat alert without the app coming forward (ADR-025), and
+/// rings for an incoming call while the app is off screen (`call_alert.dart`).
 abstract interface class PushNotificationService {
   Future<void> init();
 
@@ -130,6 +132,18 @@ abstract interface class PushNotificationService {
   /// The destination of the last tapped push, once. Null when there is
   /// none pending or the tap carried no recognised deep link.
   PushDestination? takePendingDestination();
+
+  /// Fires when Accept is pressed on an incoming-call ring; read the call id
+  /// with [takePendingCallAnswer]. Pending rather than passed along because
+  /// Accept can be what started the app, before anything listens.
+  Stream<void> get callAnswers;
+
+  /// The call the user last pressed Accept on, once.
+  String? takePendingCallAnswer();
+
+  /// Takes the ring for [callId] down — the call is on screen in the app
+  /// now, and two rings for one call is one too many.
+  Future<void> dismissCallAlert(String callId);
 }
 
 class PushNotificationServiceImpl implements PushNotificationService {
@@ -140,7 +154,9 @@ class PushNotificationServiceImpl implements PushNotificationService {
   final _updates = StreamController<void>.broadcast();
   final _notificationTaps = StreamController<void>.broadcast();
   final _friendshipChanges = StreamController<String>.broadcast();
+  final _callAnswers = StreamController<void>.broadcast();
   PushDestination? _pendingDestination;
+  String? _pendingCallAnswer;
 
   /// Which message the alert shown *by this isolate* under each chat tag is
   /// for — what lets a `CHAT_MESSAGE_DELETED` push leave a newer message's
@@ -160,6 +176,19 @@ class PushNotificationServiceImpl implements PushNotificationService {
     return destination;
   }
 
+  @override
+  Stream<void> get callAnswers => _callAnswers.stream;
+
+  @override
+  String? takePendingCallAnswer() {
+    final callId = _pendingCallAnswer;
+    _pendingCallAnswer = null;
+    return callId;
+  }
+
+  @override
+  Future<void> dismissCallAlert(String callId) => cancelCallAlert(_local, callId);
+
   void _handleTap(Map<String, dynamic> data) {
     _updates.add(null);
     final destination = PushDestination.fromData(data);
@@ -168,19 +197,37 @@ class PushNotificationServiceImpl implements PushNotificationService {
     _notificationTaps.add(null);
   }
 
-  /// A response to an alert this isolate drew: the Reply action answers the
-  /// conversation in place, anything else is an ordinary tap.
+  /// A response to an alert this app drew: the Reply action answers the
+  /// conversation in place, Accept on a call ring answers the call once the
+  /// app is up, and anything else is an ordinary tap.
   Future<void> _handleLocalResponse(NotificationResponse response) async {
     final data = decodeNotificationPayload(response.payload);
     if (data == null) return;
-    if (response.actionId != chatReplyActionId) {
-      _handleTap(data);
-      return;
+    switch (response.actionId) {
+      case chatReplyActionId:
+        // Reached on iOS, where the delegate answers in this isolate. On
+        // Android an action tap *never* arrives here — see [_replyPortName]
+        // — so the refresh is left to the port rather than done inline.
+        await replyFromNotification(_local, data: data, text: response.input ?? '');
+      case acceptCallActionId:
+        final callId = callIdOf(data);
+        if (callId == null) return;
+        // The plugin cancels by id too, but only when the action opened
+        // the activity afresh; an explicit cancel covers every path in.
+        await cancelCallAlert(_local, callId);
+        _pendingCallAnswer = callId;
+        _callAnswers.add(null);
+        // And open the conversation under the call screen, so hanging up
+        // lands in the chat the call was in.
+        _handleTap(data);
+      case declineCallActionId:
+        // Android never reaches this (a background action); kept so the
+        // action behaves the same wherever it lands.
+        final callId = callIdOf(data);
+        if (callId != null) await declineCallFromNotification(callId);
+      default:
+        _handleTap(data);
     }
-    // Reached on iOS, where the delegate answers in this isolate. On
-    // Android an action tap *never* arrives here — see [_replyPortName] —
-    // so the refresh is left to the port rather than done inline.
-    await replyFromNotification(_local, data: data, text: response.input ?? '');
   }
 
   @override
@@ -203,9 +250,9 @@ class PushNotificationServiceImpl implements PushNotificationService {
     // inbox counts refresh off this.
     replyPort.listen((_) => _updates.add(null));
 
-    await _local
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(_androidChannel);
+    final android = _local.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    await android?.createNotificationChannel(_androidChannel);
+    await android?.createNotificationChannel(callAlertChannel);
     await _local.initialize(
       settings: InitializationSettings(
         android: const AndroidInitializationSettings('@mipmap/ic_launcher'),
@@ -216,9 +263,10 @@ class PushNotificationServiceImpl implements PushNotificationService {
         iOS: DarwinInitializationSettings(notificationCategories: [chatReplyCategory]),
       ),
       onDidReceiveNotificationResponse: _handleLocalResponse,
-      // Fires in the plugin's own engine when the reply was typed while
-      // this isolate was gone — see [notificationReplyBackgroundHandler].
-      onDidReceiveBackgroundNotificationResponse: notificationReplyBackgroundHandler,
+      // Fires in the plugin's own engine for every action that does not
+      // open the app — Reply, and Decline on a call ring — see
+      // [notificationActionBackgroundHandler].
+      onDidReceiveBackgroundNotificationResponse: notificationActionBackgroundHandler,
     );
 
     FirebaseMessaging.onMessageOpenedApp.listen((message) => _handleTap(message.data));
@@ -273,6 +321,10 @@ class PushNotificationServiceImpl implements PushNotificationService {
   Future<void> _onForegroundMessage(RemoteMessage message) async {
     _updates.add(null);
     final data = message.data;
+    if (isCallPush(data)) {
+      await handleCallPush(_local, data, appOnScreen: true);
+      return;
+    }
     if (data['type'] == NotificationTypes.chatMessageDeleted) {
       await _onChatMessageDeleted(data);
       return;
@@ -453,7 +505,7 @@ Map<String, dynamic>? decodeNotificationPayload(String? payload) {
 /// words back.
 ///
 /// Shared by both isolates: the service handles the reply while the app is
-/// alive, [notificationReplyBackgroundHandler] when it isn't, so the
+/// alive, [notificationActionBackgroundHandler] when it isn't, so the
 /// behaviour is the same either way.
 Future<bool> replyFromNotification(
   FlutterLocalNotificationsPlugin local, {
@@ -485,17 +537,25 @@ Future<bool> replyFromNotification(
   return false;
 }
 
-/// Answers a Reply action typed while this app had no running isolate of
-/// its own. Top-level and `vm:entry-point` because the plugin runs it in a
-/// fresh engine, which starts with none of `bootstrap()`'s state — hence
-/// the plugin instance built here and the registrant call, without which
-/// secure storage has no platform channel to read the token through.
+/// Answers an action that does not bring the app forward — a Reply typed
+/// into a chat alert, or Decline on a call ring. On Android these *always*
+/// land here, app running or not (docs/GOTCHAS.md). Top-level and
+/// `vm:entry-point` because the plugin runs it in a fresh engine, which
+/// starts with none of `bootstrap()`'s state — hence the plugin instance
+/// built here and the registrant call, without which secure storage has no
+/// platform channel to read the token through.
 @pragma('vm:entry-point')
-Future<void> notificationReplyBackgroundHandler(NotificationResponse response) async {
-  if (response.actionId != chatReplyActionId) return;
+Future<void> notificationActionBackgroundHandler(NotificationResponse response) async {
+  final actionId = response.actionId;
+  if (actionId != chatReplyActionId && actionId != declineCallActionId) return;
   DartPluginRegistrant.ensureInitialized();
   final data = decodeNotificationPayload(response.payload);
   if (data == null) return;
+  if (actionId == declineCallActionId) {
+    final callId = callIdOf(data);
+    if (callId != null) await declineCallFromNotification(callId);
+    return;
+  }
   await replyFromNotification(FlutterLocalNotificationsPlugin(), data: data, text: response.input ?? '');
 }
 
@@ -531,11 +591,23 @@ Future<void> cancelChatNotification(FlutterLocalNotificationsPlugin local, Strin
 ///   take the earlier alert down (iOS may delay or drop it);
 /// - a data-only `CHAT_MESSAGE`, which the app has to draw itself — and
 ///   drawing it here is the *only* way a backgrounded chat alert can carry
-///   the Reply action, since the OS-drawn one has no actions on it.
+///   the Reply action, since the OS-drawn one has no actions on it;
+/// - the three call pushes: the ring with Accept / Decline, the missed-call
+///   alert that replaces it, and the silent stop (`call_alert.dart`).
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
   final data = message.data;
+  if (isCallPush(data)) {
+    DartPluginRegistrant.ensureInitialized();
+    await handleCallPush(
+      FlutterLocalNotificationsPlugin(),
+      data,
+      appOnScreen: false,
+      osDrewIt: message.notification != null,
+    );
+    return;
+  }
   final tag = chatNotificationTag(data);
   if (tag == null) return;
   final local = FlutterLocalNotificationsPlugin();

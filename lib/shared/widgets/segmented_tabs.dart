@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_style.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -30,12 +31,14 @@ class SegmentedTabs<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
+    final style = AppStyle.of(context);
     return Container(
       padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
         color: colors.surf,
-        border: Border.all(color: colors.line, width: 1.5),
+        border: Border.all(color: colors.line, width: style.borderWidth),
         borderRadius: BorderRadius.circular(AppRadii.pill),
+        boxShadow: style.hardShadow(colors, AppStyle.pillOffset),
       ),
       child: Row(
         children: [
@@ -43,7 +46,14 @@ class SegmentedTabs<T> extends StatelessWidget {
             Expanded(
               child: Material(
                 color: value == current ? colors.yel : Colors.transparent,
-                borderRadius: BorderRadius.circular(AppRadii.pill),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadii.pill),
+                  // The active segment gets its own outline under ink outline,
+                  // so the yellow reads as a pressed key, not a highlight.
+                  side: style.outlined && value == current
+                      ? BorderSide(color: colors.ink, width: style.borderWidth)
+                      : BorderSide.none,
+                ),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(AppRadii.pill),
                   onTap: () => onSelect(value),

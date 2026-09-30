@@ -2,14 +2,19 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/di/injection.dart';
+import '../../../../core/router/route_names.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../shared/extensions/context_extension.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/app_avatar.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/app_warning_dialog.dart';
+import '../../../../shared/widgets/input_glow.dart';
+import '../../../../shared/widgets/send_icon.dart';
 import '../../domain/entities/story_entity.dart';
 import '../bloc/story_cubit.dart';
 import '../widgets/story_background.dart';
@@ -124,6 +129,17 @@ class _StoryViewState extends State<_StoryView> {
     final cubit = context.read<StoryCubit>();
     cubit.pause();
     await showStoryViewersSheet(context, storyId: story.id, viewCount: story.viewCount ?? 0);
+    if (mounted) cubit.resume();
+  }
+
+  /// Pushed over the viewer rather than replacing it, so back lands on the
+  /// same slide. Paused meanwhile: the viewer stays mounted underneath and
+  /// its timer would otherwise play through the ring out of sight.
+  Future<void> _openAuthor(StoryEntity story) async {
+    final cubit = context.read<StoryCubit>();
+    _replyFocus.unfocus();
+    cubit.pause();
+    await context.pushNamed(RouteNames.userProfile, pathParameters: {'userId': story.author.id});
     if (mounted) cubit.resume();
   }
 
@@ -246,6 +262,7 @@ class _StoryViewState extends State<_StoryView> {
                   right: 14,
                   child: _Header(
                     story: story,
+                    onAuthorTap: () => _openAuthor(story),
                     onClose: cubit.dismiss,
                     onDelete: story.isOwner ? _confirmDelete : null,
                   ),
@@ -433,6 +450,8 @@ class _StoryFrame extends StatelessWidget {
       // cache miss every time — key by the object's own address instead.
       // See `presignedObjectKey` and ADR-015.
       cacheKey: image.cacheKey,
+      color: context.imageBackdrop,
+      colorBlendMode: BlendMode.dstOver,
       // `contain`, not `cover`: the whole photo has to be visible, whatever
       // shape it is. The server caps a stored story at 1080x1920, which is
       // never taller in aspect than a phone screen, so in practice this
@@ -526,9 +545,10 @@ class _ProgressBars extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.story, required this.onClose, this.onDelete});
+  const _Header({required this.story, required this.onAuthorTap, required this.onClose, this.onDelete});
 
   final StoryEntity story;
+  final VoidCallback onAuthorTap;
   final VoidCallback onClose;
   final VoidCallback? onDelete;
 
@@ -537,37 +557,49 @@ class _Header extends StatelessWidget {
     final author = story.author;
     return Row(
       children: [
-        AppAvatar(
-          initials: author.displayName.initials,
-          seed: avatarSeedForId(author.id),
-          size: 38,
-          imageUrl: author.avatarUrl,
-        ),
-        const SizedBox(width: 10),
+        // Avatar and name together are the tap target, the way a post
+        // card's author row is. Opaque so the gap between them counts too.
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                story.isOwner ? 'Your story' : author.displayName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
-              ),
-              const SizedBox(height: 5),
-              Row(
-                children: [
-                  Text(
-                    Formatters.relativeShort(story.createdAt),
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.62), fontSize: 10.5),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onAuthorTap,
+            child: Row(
+              children: [
+                AppAvatar(
+                  initials: author.displayName.initials,
+                  seed: avatarSeedForId(author.id),
+                  size: 38,
+                  imageUrl: author.avatarUrl,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        story.isOwner ? 'Your story' : author.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          Text(
+                            Formatters.relativeShort(story.createdAt),
+                            style: TextStyle(color: Colors.white.withValues(alpha: 0.62), fontSize: 10.5),
+                          ),
+                          if (story.visibility == StoryVisibility.public) ...[
+                            const SizedBox(width: 6),
+                            Icon(CupertinoIcons.globe, size: 11, color: Colors.white.withValues(alpha: 0.62)),
+                          ],
+                        ],
+                      ),
+                    ],
                   ),
-                  if (story.visibility == StoryVisibility.public) ...[
-                    const SizedBox(width: 6),
-                    Icon(CupertinoIcons.globe, size: 11, color: Colors.white.withValues(alpha: 0.62)),
-                  ],
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
         if (onDelete != null)
@@ -645,13 +677,11 @@ class _ReplyBar extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: Container(
+          child: InputGlow(
+            fillColor: Colors.black.withValues(alpha: 0.42),
+            borderColor: Colors.white.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(999),
             padding: const EdgeInsets.symmetric(horizontal: 17),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 1.5),
-              color: Colors.black.withValues(alpha: 0.42),
-              borderRadius: BorderRadius.circular(999),
-            ),
             child: TextField(
               controller: controller,
               focusNode: focusNode,
@@ -671,10 +701,25 @@ class _ReplyBar extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 9),
-        _CircleAction(
-          busy: sending,
-          icon: CupertinoIcons.heart,
-          onTap: () => onSend('❤️'),
+        // One slot, two jobs, like the chat composer: with a draft it sends
+        // the draft, without one it sends a heart. Listens to the controller
+        // so only this button rebuilds per keystroke.
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: controller,
+          builder: (context, value, _) {
+            final draft = value.text.trim();
+            return draft.isEmpty
+                ? _CircleAction(
+                    busy: sending,
+                    icon: const Icon(CupertinoIcons.heart, semanticLabel: 'Send a heart'),
+                    onTap: () => onSend('❤️'),
+                  )
+                : _CircleAction(
+                    busy: sending,
+                    icon: const SendIcon(semanticLabel: 'Send reply'),
+                    onTap: () => onSend(value.text),
+                  );
+          },
         ),
       ],
     );
@@ -684,7 +729,7 @@ class _ReplyBar extends StatelessWidget {
 class _CircleAction extends StatelessWidget {
   const _CircleAction({required this.icon, required this.busy, required this.onTap});
 
-  final IconData icon;
+  final Widget icon;
   final bool busy;
   final VoidCallback onTap;
 
@@ -707,7 +752,7 @@ class _CircleAction extends StatelessWidget {
                 height: 18,
                 child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
               )
-            : Icon(icon, color: Colors.white),
+            : IconTheme(data: const IconThemeData(color: Colors.white, size: 24), child: icon),
       ),
     );
   }

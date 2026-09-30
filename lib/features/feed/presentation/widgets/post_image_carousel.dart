@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../shared/extensions/context_extension.dart';
 import '../../../../shared/widgets/image_placeholder.dart';
 import '../../../../shared/widgets/photo_viewer_page.dart';
 
@@ -28,6 +29,8 @@ class PostImageCarousel extends StatefulWidget {
     super.key,
     required this.imageUrls,
     this.placeholderHeight = 280,
+    this.chromePadding = const EdgeInsets.fromLTRB(8, 8, 8, 10),
+    this.onDoubleTap,
   });
 
   final List<String> imageUrls;
@@ -37,6 +40,16 @@ class PostImageCarousel extends StatefulWidget {
   /// single-image `errorBuilder` used, so a missing or broken photo still
   /// occupies the space it always did.
   final double placeholderHeight;
+
+  /// Where the multi-photo chrome sits: the "n/total" badge at
+  /// `top`/`left`, the dot row at `bottom`. The feed card lays its author
+  /// header and caption over the photo, so it pushes these clear of both.
+  final EdgeInsets chromePadding;
+
+  /// Double-tap on the photo — the feed card's like. Setting it makes a
+  /// single tap wait out the double-tap window (~300ms) before the viewer
+  /// opens, so surfaces that don't need it leave it null.
+  final VoidCallback? onDoubleTap;
 
   @override
   State<PostImageCarousel> createState() => _PostImageCarouselState();
@@ -57,28 +70,26 @@ class _PostImageCarouselState extends State<PostImageCarousel> {
     final urls = widget.imageUrls;
 
     if (urls.isEmpty || urls.first.isEmpty) {
-      return SizedBox(
-        height: widget.placeholderHeight,
-        child: const ImagePlaceholder(),
-      );
+      return SizedBox(height: widget.placeholderHeight, child: const ImagePlaceholder());
     }
 
     if (urls.length == 1) {
-      final targetWidth =
-          (MediaQuery.sizeOf(context).width *
-                  MediaQuery.devicePixelRatioOf(context))
-              .round();
+      final targetWidth = (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round();
       return GestureDetector(
         onTap: () => openPhotoViewer(context, imageUrls: urls),
+        onDoubleTap: widget.onDoubleTap,
         child: CachedNetworkImage(
           imageUrl: urls.first,
-          fit: BoxFit.fitWidth,
+          color: context.imageBackdrop,
+          colorBlendMode: BlendMode.dstOver,
+          // `cover`, not `fitWidth`: unconstrained, the box already has the
+          // photo's own aspect ratio and the two draw identically; when a
+          // caller clamps the height (the feed card does), `cover` crops to
+          // fill instead of letterboxing.
+          fit: BoxFit.cover,
           width: double.infinity,
           memCacheWidth: targetWidth,
-          errorWidget: (_, _, _) => SizedBox(
-            height: widget.placeholderHeight,
-            child: const ImagePlaceholder(),
-          ),
+          errorWidget: (_, _, _) => SizedBox(height: widget.placeholderHeight, child: const ImagePlaceholder()),
         ),
       );
     }
@@ -86,6 +97,7 @@ class _PostImageCarouselState extends State<PostImageCarousel> {
     return GestureDetector(
       // Opens on whichever photo is showing, not always the first.
       onTap: () => openPhotoViewer(context, imageUrls: urls, initialIndex: _index),
+      onDoubleTap: widget.onDoubleTap,
       child: SizedBox(
         height: widget.placeholderHeight,
         child: Stack(
@@ -102,24 +114,24 @@ class _PostImageCarouselState extends State<PostImageCarousel> {
                     ? const ImagePlaceholder()
                     : CachedNetworkImage(
                         imageUrl: url,
+color: context.imageBackdrop,
+colorBlendMode: BlendMode.dstOver,
                         fit: BoxFit.cover,
-                        memCacheWidth: (MediaQuery.sizeOf(context).width * dpr)
-                            .round(),
-                        memCacheHeight: (widget.placeholderHeight * dpr)
-                            .round(),
+                        memCacheWidth: (MediaQuery.sizeOf(context).width * dpr).round(),
+                        memCacheHeight: (widget.placeholderHeight * dpr).round(),
                         errorWidget: (_, _, _) => const ImagePlaceholder(),
                       );
               },
             ),
             Positioned(
-              top: 8,
-              left: 8,
+              top: widget.chromePadding.top,
+              left: widget.chromePadding.left,
               child: _CountBadge(index: _index, total: urls.length),
             ),
             Positioned(
               left: 0,
               right: 0,
-              bottom: 10,
+              bottom: widget.chromePadding.bottom,
               child: _DotIndicator(index: _index, total: urls.length),
             ),
           ],
@@ -140,17 +152,8 @@ class _CountBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        '${index + 1}/$total',
-        style: AppTextStyles.metaMono.copyWith(
-          color: Colors.white,
-          fontSize: 11,
-        ),
-      ),
+      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.55), borderRadius: BorderRadius.circular(999)),
+      child: Text('${index + 1}/$total', style: AppTextStyles.metaMono.copyWith(color: Colors.white, fontSize: 11)),
     );
   }
 }

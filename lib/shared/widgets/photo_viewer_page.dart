@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/router/route_names.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../extensions/context_extension.dart';
 import 'app_icon_button.dart';
 
 /// What [PhotoViewerPage] is pushed with, through the route's `extra`.
@@ -324,6 +325,8 @@ class _ZoomablePhotoState extends State<_ZoomablePhoto> with SingleTickerProvide
           child: CachedNetworkImage(
             imageUrl: widget.imageUrl,
             cacheKey: widget.cacheKey,
+            color: context.imageBackdrop,
+            colorBlendMode: BlendMode.dstOver,
             fit: BoxFit.contain,
             // No `memCacheWidth` here, unlike the feed card: the whole point
             // of this screen is the full-resolution photo, and a

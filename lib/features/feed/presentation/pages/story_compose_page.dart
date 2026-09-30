@@ -7,7 +7,10 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/di/injection.dart';
+import '../../../../shared/extensions/context_extension.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
+import '../../../../shared/widgets/input_glow.dart';
+import '../../../../shared/widgets/send_icon.dart';
 import '../../domain/entities/story_entity.dart';
 import '../bloc/story_compose_cubit.dart';
 import '../widgets/story_background.dart';
@@ -107,7 +110,12 @@ class _StoryComposeViewState extends State<_StoryComposeView> {
                     // composer has to frame the shot exactly as it will play
                     // back, or the user picks a photo against a preview that
                     // crops differently from the posted story.
-                    ? Image.file(state.image!, fit: BoxFit.contain)
+                    ? Image.file(
+                        state.image!,
+                        fit: BoxFit.contain,
+                        color: context.imageBackdrop,
+                        colorBlendMode: BlendMode.dstOver,
+                      )
                     : DecoratedBox(decoration: BoxDecoration(gradient: storyBackgroundGradient(state.background))),
               ),
               Positioned.fill(
@@ -235,13 +243,11 @@ class _StoryComposeViewState extends State<_StoryComposeView> {
                   left: 16,
                   right: 16,
                   bottom: 96 + bottomInset + keyboardInset,
-                  child: Container(
+                  child: InputGlow(
+                    fillColor: Colors.black.withValues(alpha: 0.42),
+                    borderColor: Colors.white.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(999),
                     padding: const EdgeInsets.symmetric(horizontal: 17),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1.5),
-                      color: Colors.black.withValues(alpha: 0.42),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
                     child: TextField(
                       controller: _textController,
                       onChanged: cubit.setText,
@@ -365,9 +371,16 @@ class _PostButton extends StatelessWidget {
                     height: 17,
                     child: CircularProgressIndicator(strokeWidth: 2, color: ink),
                   )
-                : Text(
-                    label,
-                    style: const TextStyle(color: ink, fontWeight: FontWeight.w800, fontSize: 12),
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        style: const TextStyle(color: ink, fontWeight: FontWeight.w800, fontSize: 12),
+                      ),
+                      const SizedBox(width: 7),
+                      const SendIcon(size: 15, color: ink),
+                    ],
                   ),
           ),
         ),

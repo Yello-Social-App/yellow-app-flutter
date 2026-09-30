@@ -6,6 +6,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../domain/entities/reaction_breakdown.dart';
 import 'reactors_sheet.dart';
+import '../../../../shared/widgets/shimmer_loading.dart';
 
 /// Opens the "View reactions" sheet from the post overflow menu — the one
 /// place this app calls the dedicated `GET .../summary` endpoint rather than
@@ -51,9 +52,17 @@ Future<void> showReactionBreakdownSheet(
                 future: fetch(),
                 builder: (tileContext, snapshot) {
                   if (snapshot.connectionState != ConnectionState.done) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(child: CircularProgressIndicator()),
+                    return Column(
+                      children: [
+                        for (final width in const [64.0, 80.0, 56.0])
+                          ShimmerListTile(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            avatarSize: 24,
+                            gap: 10,
+                            titleWidth: width,
+                            trailing: const ShimmerBox(width: 40, height: 12),
+                          ),
+                      ],
                     );
                   }
                   final breakdown = snapshot.data;

@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_style.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/app_avatar.dart';
@@ -44,7 +45,7 @@ class CreatePostPrompt extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.fromLTRB(7, 7, 12, 7),
             decoration: BoxDecoration(
-              border: Border.all(color: colors.line, width: 1.5),
+              border: Border.all(color: colors.line, width: AppStyle.of(context).borderWidth),
               borderRadius: BorderRadius.circular(AppRadii.pill),
             ),
             child: Row(

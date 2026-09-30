@@ -186,16 +186,25 @@ class MessagesCubit extends Cubit<MessagesState> {
 
   /// Folds the current presence set into the rows. A DM's dot is its peer's;
   /// a group has none — its avatar is the group's photo, so a dot there would
-  /// claim something about a person that presence never said.
+  /// claim something about a person that presence never said. A group gets a
+  /// count of its online members instead, for the chat header's "Online".
   List<ConversationEntity> _withPresence(List<ConversationEntity> conversations) {
-    if (_onlineUserIds.isEmpty && conversations.every((c) => !c.isOnline)) return conversations;
+    if (_onlineUserIds.isEmpty && conversations.every((c) => !c.isOnline && c.onlineMemberCount == 0)) {
+      return conversations;
+    }
     return [
       for (final conversation in conversations) _withPeerPresence(conversation),
     ];
   }
 
   ConversationEntity _withPeerPresence(ConversationEntity conversation) {
-    final peerId = conversation.isGroup ? null : conversation.peer?.userId;
+    if (conversation.isGroup) {
+      final count = conversation.participants
+          .where((p) => p.userId != conversation.viewerId && _onlineUserIds.contains(p.userId))
+          .length;
+      return conversation.onlineMemberCount == count ? conversation : conversation.copyWith(onlineMemberCount: count);
+    }
+    final peerId = conversation.peer?.userId;
     final isOnline = peerId != null && _onlineUserIds.contains(peerId);
     return conversation.isOnline == isOnline ? conversation : conversation.copyWith(isOnline: isOnline);
   }

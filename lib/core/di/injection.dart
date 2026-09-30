@@ -11,6 +11,12 @@ import '../../features/auth/domain/usecases/password_reset_usecases.dart';
 import '../../features/auth/domain/usecases/register_usecase.dart';
 import '../../features/auth/domain/usecases/verify_otp_usecase.dart';
 import '../../features/auth/presentation/bloc/auth_cubit.dart';
+import '../../features/call/data/datasources/call_remote_datasource.dart';
+import '../../features/call/data/repositories/call_repository_impl.dart';
+import '../../features/call/domain/repositories/call_repository.dart';
+import '../../features/call/domain/usecases/call_usecases.dart';
+import '../../features/call/presentation/bloc/call_cubit.dart';
+import '../../features/call/presentation/bloc/conversation_call_cubit.dart';
 import '../../features/chat/data/datasources/chat_remote_datasource.dart';
 import '../../features/chat/data/datasources/chat_socket.dart';
 import '../../features/chat/data/datasources/presence_tracker.dart';
@@ -24,6 +30,7 @@ import '../../features/chat/domain/usecases/chat_usecases.dart';
 import '../../features/chat/domain/usecases/sticker_usecases.dart';
 import '../../features/chat/presentation/bloc/chat_cubit.dart';
 import '../../features/chat/presentation/bloc/group_info_cubit.dart';
+import '../../features/chat/presentation/bloc/new_conversation_cubit.dart';
 import '../../features/chat/presentation/bloc/messages_cubit.dart';
 import '../../features/chat/presentation/bloc/sticker_creator_cubit.dart';
 import '../../features/chat/presentation/bloc/stickers_cubit.dart';
@@ -127,6 +134,9 @@ import '../../features/showcase/presentation/bloc/project_detail_cubit.dart';
 import '../../features/showcase/presentation/bloc/publish_project_cubit.dart';
 import '../../features/showcase/presentation/bloc/showcase_cubit.dart';
 import '../audio/voice_note_player.dart';
+import '../call/call_keep_alive.dart';
+import '../call/call_room.dart';
+import '../call/call_tones.dart';
 import '../audio/voice_note_plays_store.dart';
 import '../network/api_client.dart';
 import '../network/network_info.dart';
@@ -165,6 +175,7 @@ Future<void> configureDependencies() async {
   _registerNotifications();
   _registerProfile();
   _registerChat();
+  _registerCall();
   _registerSearch();
   _registerLinkPreview();
   _registerCommunities();
@@ -238,16 +249,24 @@ void _registerFriends() {
   sl.registerLazySingleton(() => DeclineFriendRequestUseCase(sl()));
   sl.registerLazySingleton(() => UnfriendUseCase(sl()));
 
-  // Routes the client previously had no methods for at all, though the
-  // backend has always served them. No UI yet — the data layer is ready
-  // whenever a "blocked users" screen is.
+  // Blocked users are listed (and unblocked) from Circle's Blocked tab;
+  // blocking itself happens from a user's profile.
   sl.registerLazySingleton(() => CancelFriendRequestUseCase(sl()));
   sl.registerLazySingleton(() => GetBlockedUsersUseCase(sl()));
   sl.registerLazySingleton(() => BlockUserUseCase(sl()));
   sl.registerLazySingleton(() => UnblockUserUseCase(sl()));
 
   sl.registerFactory(
-    () => FriendsCubit(getFriends: sl(), getRequests: sl(), acceptRequest: sl(), declineRequest: sl(), unfriend: sl()),
+    () => FriendsCubit(
+      getFriends: sl(),
+      getRequests: sl(),
+      acceptRequest: sl(),
+      declineRequest: sl(),
+      cancelRequest: sl(),
+      unfriend: sl(),
+      getBlocked: sl(),
+      unblock: sl(),
+    ),
   );
 }
 
@@ -513,6 +532,73 @@ void _registerChat() {
       inbox: sl(),
     ),
   );
+
+  // Fresh per open of the Inbox's "New message" dialog — its friend list and
+  // in-flight flag belong to that one dialog. The conversation it creates is
+  // written to `MessagesCubit`.
+  sl.registerFactory(
+    () => NewConversationCubit(
+      getFriends: sl(),
+      startDirect: sl(),
+      startGroup: sl(),
+      inbox: sl(),
+    ),
+  );
+}
+
+/// Audio and video calls, 1:1 and group. `yello-chat` rings and authorises
+/// them over the chat socket; the media goes through LiveKit (`CallRoom`).
+void _registerCall() {
+  // Same `ApiClient` and the same `ChatSocket` as chat: calls are frames on
+  // that one connection, not a second one.
+  sl.registerLazySingleton<CallRemoteDataSource>(() => CallRemoteDataSourceImpl(sl(), sl()));
+  // (remote, socket, getMe, networkInfo)
+  sl.registerLazySingleton<CallRepository>(() => CallRepositoryImpl(sl(), sl(), sl(), sl()));
+
+  sl.registerLazySingleton(() => StartCallUseCase(sl()));
+  sl.registerLazySingleton(() => AcceptCallUseCase(sl()));
+  sl.registerLazySingleton(() => DeclineCallUseCase(sl()));
+  sl.registerLazySingleton(() => EndCallUseCase(sl()));
+  sl.registerLazySingleton(() => GetCallTokenUseCase(sl()));
+  sl.registerLazySingleton(() => GetActiveCallUseCase(sl()));
+  sl.registerLazySingleton(() => GetConversationCallUseCase(sl()));
+
+  // Device-side call plumbing: the LiveKit room, the ring tones and the
+  // Android foreground service. One each — there is only ever one call.
+  sl.registerLazySingleton(CallRoom.new);
+  sl.registerLazySingleton(CallTones.new);
+  sl.registerLazySingleton(CallKeepAlive.new);
+
+  // Long-lived on purpose: one call per user at a time, and it outlives
+  // whichever screen started it. Nothing here can go stale the way a list
+  // can — every change is pushed over the socket, and each (re)connect
+  // re-reads the server's active call. `CallHost` decides when it listens;
+  // `bootstrap()` resets it on sign-out.
+  sl.registerLazySingleton(
+    () => CallCubit(
+      startCall: sl(),
+      acceptCall: sl(),
+      declineCall: sl(),
+      endCall: sl(),
+      getCallToken: sl(),
+      getActiveCall: sl(),
+      getConversation: sl(),
+      repository: sl(),
+      room: sl(),
+      tones: sl(),
+      keepAlive: sl(),
+    ),
+  );
+
+  // Per chat page (param1 = conversation id): the "Join call" bar has no
+  // reason to outlive the screen showing it.
+  sl.registerFactoryParam<ConversationCallCubit, String, void>(
+    (conversationId, _) => ConversationCallCubit(
+      conversationId: conversationId,
+      getConversationCall: sl(),
+      repository: sl(),
+    ),
+  );
 }
 
 /// Feedback, post reports, mute and hide — one feature slice over four
@@ -535,8 +621,7 @@ void _registerSafety() {
   // No caller yet: hiding is offered from the post menu, but nothing lists
   // hidden posts to unhide them from — `GET /v1/feed` simply leaves them
   // out and there is no "hidden posts" endpoint to build that screen on.
-  // Registered so the route is one screen away, not one layer away. Same
-  // reasoning as the friends feature's `GetBlockedUsersUseCase`.
+  // Registered so the route is one screen away, not one layer away.
   sl.registerLazySingleton(() => UnhidePostUseCase(sl()));
 
   // Factories: none of this state should outlive the screen or sheet that

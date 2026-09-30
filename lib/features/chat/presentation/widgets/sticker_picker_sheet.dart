@@ -15,6 +15,9 @@ import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/app_warning_dialog.dart';
 import '../../../../shared/widgets/error_view.dart';
 import '../../../../shared/widgets/filter_chip_pill.dart';
+import '../../../../shared/widgets/glow_border.dart';
+import '../../../../shared/widgets/input_glow.dart';
+import '../../../../shared/widgets/send_icon.dart';
 import '../../../../shared/widgets/shimmer_loading.dart';
 import '../../domain/entities/sticker_entity.dart';
 import '../../domain/usecases/sticker_usecases.dart';
@@ -207,9 +210,8 @@ class _StickerPickerSheetState extends State<_StickerPickerSheet> {
       final results = state.search(_query);
       if (results.isEmpty) {
         return _EmptyState(
-          icon: CupertinoIcons.search,
-          title: 'No stickers match “${_query.trim()}”',
-          body: 'Try another word, or make your own.',
+          title: 'NO MATCHES',
+          body: 'No stickers match “${_query.trim()}”. Try another word, or make your own.',
           actionLabel: state.isFull ? null : 'Create a sticker',
           onAction: _create,
         );
@@ -221,8 +223,7 @@ class _StickerPickerSheetState extends State<_StickerPickerSheet> {
       case _RecentTab():
         if (state.recent.isEmpty) {
           return _EmptyState(
-            icon: CupertinoIcons.smiley,
-            title: 'Nothing sent yet',
+            title: 'NOTHING SENT YET',
             body: 'Stickers you send show up here, on every device.',
             actionLabel: state.isFull ? null : 'Create a sticker',
             onAction: _create,
@@ -239,8 +240,7 @@ class _StickerPickerSheetState extends State<_StickerPickerSheet> {
       case _MineTab():
         if (state.mine.isEmpty) {
           return _EmptyState(
-            icon: CupertinoIcons.sparkles,
-            title: 'Make your first sticker',
+            title: 'NO STICKERS YET',
             body: 'Turn any photo into a sticker and send it in any chat.',
             actionLabel: 'Create a sticker',
             onAction: _create,
@@ -305,7 +305,7 @@ Future<String?> _promptForName(BuildContext context, String current) {
               borderRadius: BorderRadius.circular(AppRadii.xs),
               borderSide: BorderSide(color: colors.line, width: 1.5),
             ),
-            focusedBorder: OutlineInputBorder(
+            focusedBorder: GlowInputBorder(
               borderRadius: BorderRadius.circular(AppRadii.xs),
               borderSide: BorderSide(color: colors.yel, width: 1.5),
             ),
@@ -314,7 +314,7 @@ Future<String?> _promptForName(BuildContext context, String current) {
         actions: [
           AppButton(
             label: 'Cancel',
-            variant: AppButtonVariant.subtle,
+            variant: AppButtonVariant.secondary,
             dense: true,
             onPressed: () => Navigator.of(dialogContext).pop(),
           ),
@@ -351,9 +351,9 @@ class _StickerActionsSheet extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (final (action, icon, label, destructive) in const [
-                (_StickerAction.send, CupertinoIcons.arrow_up_circle, 'Send', false),
-                (_StickerAction.rename, CupertinoIcons.pencil, 'Rename', false),
-                (_StickerAction.delete, CupertinoIcons.delete, 'Delete', true),
+                (_StickerAction.send, SendIcon(), 'Send', false),
+                (_StickerAction.rename, Icon(CupertinoIcons.pencil), 'Rename', false),
+                (_StickerAction.delete, Icon(CupertinoIcons.delete), 'Delete', true),
               ])
                 InkWell(
                   onTap: () => Navigator.of(context).pop(action),
@@ -361,7 +361,10 @@ class _StickerActionsSheet extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
                     child: Row(
                       children: [
-                        Icon(icon, size: 20, color: destructive ? colors.red : colors.ink),
+                        IconTheme(
+                          data: IconThemeData(size: 20, color: destructive ? colors.red : colors.ink),
+                          child: icon,
+                        ),
                         const SizedBox(width: 14),
                         Text(
                           label,
@@ -400,13 +403,10 @@ class _SearchRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Container(
+            child: InputGlow(
+              fillColor: colors.surf2,
+              borderRadius: BorderRadius.circular(AppRadii.pill),
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: colors.surf2,
-                border: Border.all(color: colors.line, width: 1.5),
-                borderRadius: BorderRadius.circular(AppRadii.pill),
-              ),
               child: Row(
                 children: [
                   Icon(CupertinoIcons.search, size: 16, color: colors.ink3),
@@ -644,14 +644,12 @@ class _LoadingGrid extends StatelessWidget {
 
 class _EmptyState extends StatelessWidget {
   const _EmptyState({
-    required this.icon,
     required this.title,
     required this.body,
     required this.actionLabel,
     required this.onAction,
   });
 
-  final IconData icon;
   final String title;
   final String body;
 
@@ -662,22 +660,13 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
     final label = actionLabel;
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
-      child: Column(
-        children: [
-          Icon(icon, size: 26, color: colors.ink3),
-          const SizedBox(height: 10),
-          Text(title, textAlign: TextAlign.center, style: AppTextStyles.titleSm.copyWith(color: colors.ink)),
-          const SizedBox(height: 4),
-          Text(body, textAlign: TextAlign.center, style: AppTextStyles.bodySm.copyWith(color: colors.ink2)),
-          if (label != null) ...[
-            const SizedBox(height: 14),
-            AppButton(label: label, dense: true, onPressed: onAction),
-          ],
-        ],
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      child: EmptyStateCard(
+        title: title,
+        hint: body,
+        action: label == null ? null : AppButton(label: label, dense: true, onPressed: onAction),
       ),
     );
   }
