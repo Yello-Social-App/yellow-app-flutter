@@ -16,6 +16,10 @@ file only when it genuinely helps.
 
 ## [Unreleased]
 
+---
+
+## [1.0.0] — 2026-09-30
+
 ### Added
 
 - **Calls ring even when Yello is closed.** On Android an incoming call now
