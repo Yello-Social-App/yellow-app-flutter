@@ -41,7 +41,7 @@ file only when it genuinely helps.
 
 ---
 
-## [1.0.2] — 2026-10-01
+## [1.0.2] — 2026-10-02
 
 ### Added
 
