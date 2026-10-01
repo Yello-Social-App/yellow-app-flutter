@@ -60,6 +60,12 @@ abstract final class NotificationTypes {
   /// stops ringing. `data` carries `callId`, `conversationId` and `reason`.
   static const callRingStopped = 'CALL_RING_STOPPED';
 
+  /// "A new version is out." Not a `yello-notify` type: it is sent by hand
+  /// from Firebase Cloud Messaging after a release is published, so it is
+  /// never an inbox row and never a preference. `data` carries only `type`;
+  /// tapping it opens App version (ADR-054).
+  static const appUpdate = 'APP_UPDATE';
+
   /// Post and friend activity shown in Signals. Notification recipients are
   /// determined by the notification service.
   static const signalTypes = {

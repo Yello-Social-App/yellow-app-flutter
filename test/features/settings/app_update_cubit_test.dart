@@ -103,6 +103,110 @@ void main() {
     await cubit.close();
   });
 
+  // The shell's own check after launch (ADR-053): it hands back the build to
+  // prompt for, and leaves the App version screen ready to download it.
+  group('checkOnLaunch', () {
+    test('returns the newer build and lands on available', () async {
+      when(() => check(any())).thenAnswer((_) async => const Right(_update));
+
+      final cubit = build();
+
+      expect(await cubit.checkOnLaunch(), _update);
+      expect(cubit.state.status, AppUpdateStatus.available);
+      expect(cubit.state.update, _update);
+      await cubit.close();
+    });
+
+    test('returns nothing when this build is current', () async {
+      when(() => check(any())).thenAnswer((_) async => const Right(null));
+
+      final cubit = build();
+
+      expect(await cubit.checkOnLaunch(), isNull);
+      expect(cubit.state.status, AppUpdateStatus.upToDate);
+      await cubit.close();
+    });
+
+    // Nobody asked for this check, so its failure must not be waiting on
+    // the App version screen as an error.
+    test('a failure is silent and goes back to idle', () async {
+      when(() => check(any())).thenAnswer((_) async => const Left(NetworkFailure('No internet connection.')));
+
+      final cubit = build();
+
+      expect(await cubit.checkOnLaunch(), isNull);
+      expect(cubit.state, const AppUpdateState());
+      await cubit.close();
+    });
+
+    test('runs once per process, so a rebuilt shell does not prompt again', () async {
+      when(() => check(any())).thenAnswer((_) async => const Right(_update));
+
+      final cubit = build();
+      await cubit.checkOnLaunch();
+
+      expect(await cubit.checkOnLaunch(), isNull);
+      verify(() => check(any())).called(1);
+      await cubit.close();
+    });
+
+    test('leaves a check the user already ran alone', () async {
+      when(() => check(any())).thenAnswer((_) async => const Right(_update));
+
+      final cubit = build();
+      await cubit.check();
+
+      expect(await cubit.checkOnLaunch(), isNull);
+      expect(cubit.state.status, AppUpdateStatus.available);
+      verify(() => check(any())).called(1);
+      await cubit.close();
+    });
+  });
+
+  // The check behind a tapped "new version" push (ADR-054).
+  group('checkAnnounced', () {
+    test('re-checks over a stale answer, so the push and the screen agree', () async {
+      when(() => check(any())).thenAnswer((_) async => const Right(null));
+      final cubit = build();
+      await cubit.check();
+      expect(cubit.state.status, AppUpdateStatus.upToDate);
+
+      when(() => check(any())).thenAnswer((_) async => const Right(_update));
+      await cubit.checkAnnounced();
+
+      expect(cubit.state.status, AppUpdateStatus.available);
+      expect(cubit.state.update, _update);
+      await cubit.close();
+    });
+
+    test('spends the launch check: the screen it opens makes the prompt redundant', () async {
+      when(() => check(any())).thenAnswer((_) async => const Right(_update));
+
+      final cubit = build();
+      await cubit.checkAnnounced();
+
+      expect(await cubit.checkOnLaunch(), isNull);
+      verify(() => check(any())).called(1);
+      await cubit.close();
+    });
+
+    test('leaves a downloaded file alone', () async {
+      when(() => check(any())).thenAnswer((_) async => const Right(_update));
+      when(() => download(any())).thenAnswer((_) async => const Right('/cache/updates/yello.apk'));
+      when(() => install(any())).thenAnswer((_) async => const Right(false));
+
+      final cubit = build();
+      await cubit.check();
+      await cubit.download();
+      await cubit.checkAnnounced();
+
+      expect(cubit.state.status, AppUpdateStatus.needsPermission);
+      expect(cubit.state.filePath, '/cache/updates/yello.apk');
+      verify(() => check(any())).called(1);
+      await cubit.close();
+    });
+  });
+
   // The user asked for an update, not for a file, so a finished download
   // goes straight into the OS installer.
   test('a finished download hands the file to the installer on its own', () async {

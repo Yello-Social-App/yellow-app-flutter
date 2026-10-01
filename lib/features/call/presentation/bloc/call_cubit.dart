@@ -12,7 +12,9 @@ import '../../../../core/utils/logger.dart';
 import '../../../chat/domain/entities/conversation_entity.dart';
 import '../../../chat/domain/usecases/chat_usecases.dart';
 import '../../domain/entities/call_entity.dart';
+import '../../domain/entities/call_log_entry.dart';
 import '../../domain/repositories/call_repository.dart';
+import '../../domain/usecases/call_log_usecases.dart';
 import '../../domain/usecases/call_usecases.dart';
 
 /// Where the one call on this device stands, as the screen sees it.
@@ -242,6 +244,8 @@ class CallCubit extends Cubit<CallState> {
     required GetCallTokenUseCase getCallToken,
     required GetActiveCallUseCase getActiveCall,
     required GetConversationUseCase getConversation,
+    required RecordCallUseCase recordCall,
+    required ClearCallLogUseCase clearCallLog,
     required CallRepository repository,
     required CallRoom room,
     required CallTones tones,
@@ -255,6 +259,8 @@ class CallCubit extends Cubit<CallState> {
        _getCallToken = getCallToken,
        _getActiveCall = getActiveCall,
        _getConversation = getConversation,
+       _recordCall = recordCall,
+       _clearCallLog = clearCallLog,
        _repository = repository,
        _room = room,
        _tones = tones,
@@ -270,6 +276,11 @@ class CallCubit extends Cubit<CallState> {
   final GetCallTokenUseCase _getCallToken;
   final GetActiveCallUseCase _getActiveCall;
   final GetConversationUseCase _getConversation;
+
+  /// The chat thread's call lines. The server writes none (`docs/BACKEND.md`),
+  /// so each call is noted on the device as it ends — see [_log].
+  final RecordCallUseCase _recordCall;
+  final ClearCallLogUseCase _clearCallLog;
 
   /// For [CallRepository.watchCalls] alone — a stream has no single result
   /// for a `UseCase` to carry. Same exception `ChatCubit` makes for
@@ -405,7 +416,10 @@ class CallCubit extends Cubit<CallState> {
     }
     result.fold((failure) => _finish(message: failure.message), (call) {
       // BUSY comes back already ended: nothing rang anywhere.
-      if (!call.isLive) return _finish(call: call, message: _endCopy(call));
+      if (!call.isLive) {
+        _log(call);
+        return _finish(call: call, message: _endCopy(call));
+      }
       if (call.status == CallStatus.active) {
         // The group's call was already running and we joined it instead.
         unawaited(_tones.stop());
@@ -493,6 +507,9 @@ class CallCubit extends Cubit<CallState> {
     unawaited(_keepAlive.release());
     // Closes at once: the one who declined does not need to be told.
     emit(const CallState());
+    // A DM ends on this decline; a group call rings on for the others, and
+    // its own `call.ended` says how it went.
+    if (!call.isGroup) _log(call, endReason: CallEndReason.declined);
     if (!_wantsListening) _stopListening();
     // Nothing to do if this fails — every refusal means there is no longer a
     // ringing call to decline.
@@ -509,8 +526,11 @@ class CallCubit extends Cubit<CallState> {
         return decline();
       case CallPhase.outgoing:
         _finish(call: call, message: 'Cancelled');
+        if (call != null) _log(call, endReason: CallEndReason.cancelled);
       case CallPhase.connecting || CallPhase.active || CallPhase.interrupted:
         _finish(call: call, message: _hangUpCopy(call));
+        // Leaving a group call does not end it.
+        if (call != null && !call.isGroup) _log(call, endReason: CallEndReason.hangup);
     }
     if (call != null) unawaited(_endCall(call.id));
   }
@@ -602,6 +622,8 @@ class CallCubit extends Cubit<CallState> {
     _answerOnRing = null;
     _wantsListening = false;
     _stopListening();
+    // The call lines are the signed-out account's; the next one starts clean.
+    unawaited(_clearCallLog(const NoParams()));
     await _tones.stop();
     await _room.leave();
     await _keepAlive.release();
@@ -625,6 +647,7 @@ class CallCubit extends Cubit<CallState> {
       case CallUpdated(:final call):
         _onUpdated(call);
       case CallEnded(:final call):
+        _logEnded(call);
         _onEnded(call);
     }
   }
@@ -1009,6 +1032,29 @@ class CallCubit extends Cubit<CallState> {
       emit(const CallState());
       if (!_wantsListening) _stopListening();
     });
+  }
+
+  /// Every `call.ended` this device hears, whether or not the call is on
+  /// screen: the callee who declined has already closed theirs, and a group
+  /// call ends long after a member left it.
+  void _logEnded(CallEntity ended) {
+    final known = state.call?.id == ended.id ? state.call : null;
+    // The copy on screen knows which side this device is on — and the
+    // conversation, should the frame abbreviate the call.
+    final call = ended.conversationId.isEmpty && known != null ? known : ended.copyWith(isOutgoing: known?.isOutgoing);
+    _log(call, endReason: ended.endReason);
+  }
+
+  /// Notes a finished call for its conversation's thread (`CallLogCubit`
+  /// draws it). [endReason] is this device's own account of a call it ended
+  /// itself; the server's `call.ended` replaces the note when it arrives.
+  /// Not awaited and never surfaced: a note that could not be saved costs a
+  /// line in the thread, nothing more.
+  void _log(CallEntity call, {CallEndReason? endReason}) {
+    if (call.id.isEmpty || call.conversationId.isEmpty) return;
+    final answeredAt = call.answeredAt;
+    final talkTime = call.talkTime ?? (answeredAt == null ? null : DateTime.now().difference(answeredAt));
+    unawaited(_recordCall(CallLogEntry.fromCall(call, endReason: endReason, talkTime: talkTime)));
   }
 
   /// Names the other side — the DM's other person, or the group — and, for

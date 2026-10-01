@@ -388,6 +388,13 @@ Things that bite:
 Not built server-side: a "missed call" line in the chat history, recording,
 end-to-end encryption.
 
+**No call line of any kind, and no call history** (re-checked against
+`/ws/docs-json` 2026-10-01): `Message` has no call field, a finished call
+creates no message, and the only call reads are the two *live* lookups above.
+The thread's "Voice call declined" / "Missed video call" lines are therefore
+the app's own, noted on the device as each `call.ended` arrives (ADR-055) —
+see the gap table below.
+
 ### Incoming-call pushes (2026-09-30)
 
 From the "Incoming calls from outside the app" frontend guide. Three new
@@ -456,6 +463,29 @@ From the "Incoming calls from outside the app" frontend guide. Three new
   only when the id is the profile on screen. Foreground only — a background
   push runs no Dart for it, so the affected screen catches up on its next
   load.
+
+### `APP_UPDATE` is not a backend push (2026-10-01)
+
+The "a new version is out" push is the one type `yello-notify` does not
+send. It is composed by hand in the Firebase console (**Messaging → New
+campaign → Notifications**) after a release is published, and reaches every
+install through FCM directly — the API has no version resource and no
+broadcast endpoint, and this needs neither. ADR-054.
+
+- **Custom data:** `type` = `APP_UPDATE`. That one key is the whole
+  contract; `PushDestination.fromData` turns it into `AppVersionDestination`
+  and `MainShellPage` opens App version.
+- **Keep the notification block** (the console always sends one). The OS
+  draws it while the app is backgrounded or killed; in the foreground
+  `PushNotificationService` redraws it under `yello_default`.
+- **Target the Android app.** The Updates group is Android-only (ADR-029),
+  so an iOS install would open App version to nothing it can act on.
+- **No version in the payload.** What the screen offers is whatever
+  `latest.json` says when it opens, so send the push *after* the release's
+  manifest is live (README, Releasing, step 8) or it announces a build the
+  app cannot see yet.
+- Never an inbox row and never a preference: nothing is stored server-side,
+  so it does not appear in Signals and has no toggle.
 
 ### Direct reply needs two payload changes (2026-09-23)
 
@@ -562,6 +592,7 @@ close-friends lists, an archive on/off setting, and any live
 |---|---|---|
 | **Saved posts / bookmarks** | No endpoint. Persisted on-device via `shared_preferences`; not synced across devices. | `feed/data/datasources/bookmarks_local_datasource.dart` |
 | **Chat** | *Does* have a backend (`yello-chat`, `/ws`, with a socket upgrade on the same path for live delivery). | `chat/data/datasources/chat_remote_datasource.dart` |
+| **Call lines in a chat thread** | No endpoint and no message type: `yello-chat` records calls but exposes no history. Noted on-device via `shared_preferences` as each call ends (ADR-055); not synced across devices, gone on sign-out or reinstall, and a call that ended while the app had no socket leaves no line. If the service ever writes a call message, delete the local log rather than merging the two. | `call/data/datasources/call_log_local_datasource.dart` |
 | **Link previews / unfurls** | No preview or unfurl endpoint on any of the three services, and no `og:` metadata on any response. The app reads the linked page itself on the device (ADR-039): a bare Dio with no interceptors, redirects followed by hand so every hop can be checked against `PrivateNetworkGuard`, and the read capped at 64 KB. A server-side unfurler would be strictly better — one fetch per link for everyone instead of one per reader — so if one ever lands, this becomes a data-source swap. | `link_preview/data/datasources/link_preview_remote_datasource.dart` |
 | **App updates / version check** | Still no version resource on any of the three services. The app does not ask one: since it is sideloaded rather than installed from a store, the Updates group reads a `latest.json` published beside each release's APK (`AppConfig.updateManifestUrl`, ADR-029). Don't route that through `ApiClient` — it is off-host, and `AuthInterceptor` would attach the session token to it. | `settings/data/datasources/app_update_remote_datasource.dart` |
 

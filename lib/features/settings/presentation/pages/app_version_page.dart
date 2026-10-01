@@ -40,9 +40,11 @@ class AppVersionPage extends StatelessWidget {
         BlocProvider(create: (_) => sl<AppVersionCubit>()..load()),
         // `.value`, because `AppUpdateCubit` is a singleton: a download
         // that is running must not be closed by popping this screen.
-        // Not auto-checked on open either — an update check is a network
-        // call the user did not ask for, and this screen's first job is to
-        // answer "what am I running?" offline.
+        // Not checked on open: this screen's first job is to answer "what
+        // am I running?" offline. The shell's once-per-launch check
+        // (ADR-053) has usually filled the state in by now, which is how
+        // "Update now" on the prompt lands on a card already offering the
+        // download.
         BlocProvider.value(value: sl<AppUpdateCubit>()),
       ],
       child: const _AppVersionView(),

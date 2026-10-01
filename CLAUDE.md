@@ -44,6 +44,12 @@ same whichever assistant is driving. Where the two files overlap, fix
 Slash commands wired up for this project: `/prime` (load context), `/codemap`,
 `/changelog`, `/adr`, `/feature`, `/review`, `/preflight`.
 
+**Workflow for a task of any size:** `/scope` → `/plan` → `/develop` →
+`/verify` → `/ship`. State lives in `docs/current-task.md` (gitignored, reset
+each ship), so a task survives a context reset — after one, read that file
+and resume at the first unchecked `## Plan` item instead of re-deriving the
+task. Run only affected tests. Check `docs/` before asking.
+
 ---
 
 ## 0. Workflow

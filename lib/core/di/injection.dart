@@ -11,11 +11,16 @@ import '../../features/auth/domain/usecases/password_reset_usecases.dart';
 import '../../features/auth/domain/usecases/register_usecase.dart';
 import '../../features/auth/domain/usecases/verify_otp_usecase.dart';
 import '../../features/auth/presentation/bloc/auth_cubit.dart';
+import '../../features/call/data/datasources/call_log_local_datasource.dart';
 import '../../features/call/data/datasources/call_remote_datasource.dart';
+import '../../features/call/data/repositories/call_log_repository_impl.dart';
 import '../../features/call/data/repositories/call_repository_impl.dart';
+import '../../features/call/domain/repositories/call_log_repository.dart';
 import '../../features/call/domain/repositories/call_repository.dart';
+import '../../features/call/domain/usecases/call_log_usecases.dart';
 import '../../features/call/domain/usecases/call_usecases.dart';
 import '../../features/call/presentation/bloc/call_cubit.dart';
+import '../../features/call/presentation/bloc/call_log_cubit.dart';
 import '../../features/call/presentation/bloc/conversation_call_cubit.dart';
 import '../../features/chat/data/datasources/chat_remote_datasource.dart';
 import '../../features/chat/data/datasources/chat_socket.dart';
@@ -563,6 +568,15 @@ void _registerCall() {
   sl.registerLazySingleton(() => GetActiveCallUseCase(sl()));
   sl.registerLazySingleton(() => GetConversationCallUseCase(sl()));
 
+  // The chat thread's call lines. No backend for them (`docs/BACKEND.md`):
+  // `CallCubit` notes each call on the device as it ends. A singleton
+  // repository because it is also the stream an open chat listens to.
+  sl.registerLazySingleton<CallLogLocalDataSource>(() => CallLogLocalDataSourceImpl());
+  sl.registerLazySingleton<CallLogRepository>(() => CallLogRepositoryImpl(sl()));
+  sl.registerLazySingleton(() => RecordCallUseCase(sl()));
+  sl.registerLazySingleton(() => GetCallLogUseCase(sl()));
+  sl.registerLazySingleton(() => ClearCallLogUseCase(sl()));
+
   // Device-side call plumbing: the LiveKit room, the ring tones and the
   // Android foreground service. One each — there is only ever one call.
   sl.registerLazySingleton(CallRoom.new);
@@ -583,6 +597,8 @@ void _registerCall() {
       getCallToken: sl(),
       getActiveCall: sl(),
       getConversation: sl(),
+      recordCall: sl(),
+      clearCallLog: sl(),
       repository: sl(),
       room: sl(),
       tones: sl(),
@@ -598,6 +614,11 @@ void _registerCall() {
       getConversationCall: sl(),
       repository: sl(),
     ),
+  );
+
+  // Per chat page too: the lines are read from the device when it opens.
+  sl.registerFactoryParam<CallLogCubit, String, void>(
+    (conversationId, _) => CallLogCubit(conversationId: conversationId, getCallLog: sl(), repository: sl()),
   );
 }
 

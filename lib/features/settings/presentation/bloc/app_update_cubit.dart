@@ -76,7 +76,8 @@ class AppUpdateState extends Equatable {
 
 /// Backs the Updates group on the App version screen: check, download,
 /// install — the whole sideload path, since Yello is installed from an APK
-/// rather than from a store (ADR-029).
+/// rather than from a store (ADR-029). The shell also asks it once per launch
+/// whether to show the update prompt ([checkOnLaunch], ADR-053).
 ///
 /// Android only. The page builds this group behind a `Platform.isAndroid`
 /// check, so nothing here has an iOS branch to get wrong.
@@ -97,6 +98,11 @@ class AppUpdateCubit extends Cubit<AppUpdateState> {
   final InstallUpdateUseCase _installUpdate;
   final OpenInstallSettingsUseCase _openInstallSettings;
 
+  /// Whether [checkOnLaunch] has been spent. This cubit is a singleton, so
+  /// the flag lasts as long as the process does: logging out and back in
+  /// rebuilds the shell, and must not prompt a second time.
+  bool _launchChecked = false;
+
   Future<void> check() async {
     // In-flight guard — "Check now" and "Try again" are the same call and
     // both stay tappable while one runs.
@@ -113,6 +119,45 @@ class AppUpdateCubit extends Cubit<AppUpdateState> {
             : AppUpdateState(status: AppUpdateStatus.available, update: update),
       ),
     );
+  }
+
+  /// The check the shell runs by itself after launch, so a newer build is
+  /// offered without the user going looking for it (ADR-053). Returns the
+  /// build to offer, or null when there is nothing to say.
+  ///
+  /// It differs from [check] in three ways, all because nobody asked for it:
+  /// it runs once per process, it leaves a check or download the user
+  /// started alone, and a failure goes back to [AppUpdateStatus.idle]
+  /// instead of leaving an error on the App version screen.
+  Future<AppUpdate?> checkOnLaunch() async {
+    if (_launchChecked || state.status != AppUpdateStatus.idle) return null;
+    _launchChecked = true;
+    emit(const AppUpdateState(status: AppUpdateStatus.checking));
+
+    final result = await _checkForUpdate(const NoParams());
+    if (isClosed) return null;
+    final update = result.fold((_) => null, (update) => update);
+    emit(
+      result.fold(
+        (_) => const AppUpdateState(),
+        (update) => update == null
+            ? const AppUpdateState(status: AppUpdateStatus.upToDate)
+            : AppUpdateState(status: AppUpdateStatus.available, update: update),
+      ),
+    );
+    return update;
+  }
+
+  /// The check behind a tapped "new version" push (ADR-054). Tapping it is
+  /// the user asking, so this is [check], errors and all, with two
+  /// differences. It spends the launch check, because the push opens the
+  /// very screen the prompt would lead to. And it leaves a downloaded file
+  /// alone: a fresh check would put the user back before the download they
+  /// already made.
+  Future<void> checkAnnounced() async {
+    _launchChecked = true;
+    if (state.status == AppUpdateStatus.readyToInstall || state.status == AppUpdateStatus.needsPermission) return;
+    await check();
   }
 
   Future<void> download() async {

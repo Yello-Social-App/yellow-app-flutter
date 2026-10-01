@@ -37,14 +37,18 @@ import '../../../../shared/widgets/linked_text.dart';
 import '../../../../shared/widgets/photo_viewer_page.dart';
 import '../../../../shared/widgets/send_icon.dart';
 import '../../../call/domain/entities/call_entity.dart';
+import '../../../call/domain/entities/call_log_entry.dart';
 import '../../../call/presentation/bloc/call_cubit.dart';
+import '../../../call/presentation/bloc/call_log_cubit.dart';
 import '../../../call/presentation/bloc/conversation_call_cubit.dart';
+import '../../../call/presentation/widgets/call_log_line.dart';
 import '../../../call/presentation/widgets/join_call_bar.dart';
 import '../../domain/entities/attachment_entity.dart';
 import '../../domain/entities/conversation_entity.dart';
 import '../../domain/entities/group_invite_entity.dart';
 import '../../domain/entities/message_entity.dart';
 import '../../domain/entities/participant_entity.dart';
+import '../../domain/usecases/chat_usecases.dart' show chatMessageMaxAttachments;
 import '../bloc/chat_cubit.dart';
 import '../bloc/messages_cubit.dart';
 import '../bloc/stickers_cubit.dart';
@@ -95,6 +99,9 @@ class ChatPage extends StatelessWidget {
             ..start()
             ..refresh(),
         ),
+        // The thread's call lines — "Voice call declined", "Missed video
+        // call". Read from the device: the server writes none.
+        BlocProvider(create: (_) => sl<CallLogCubit>(param1: conversationId)..load()),
       ],
       child: _ChatView(conversationId: conversationId),
     );
@@ -211,20 +218,40 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
 
   Future<void> _pickAttachment() async {
     final cubit = context.read<ChatCubit>();
+    // Before the sheet, not after the picker: no point choosing photos the
+    // message has no room for.
+    final slotsLeft = cubit.state.attachmentSlotsLeft;
+    if (slotsLeft <= 0) {
+      AppStatusSnackbar.showError(context, message: 'You can attach up to $chatMessageMaxAttachments files.');
+      return;
+    }
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => const _AttachmentSourceSheet(),
     );
     if (source == null || !mounted) return;
-    final picked = await _picker.pickImage(
-      source: source,
-      imageQuality: 85,
-      maxWidth: AppConstants.postImageMaxDimension,
-      maxHeight: AppConstants.postImageMaxDimension,
-    );
-    if (picked == null || !mounted) return;
-    unawaited(cubit.attachFile(File(picked.path)));
+    final List<XFile> picked;
+    if (source == ImageSource.camera) {
+      final shot = await _picker.pickImage(
+        source: source,
+        imageQuality: 85,
+        maxWidth: AppConstants.postImageMaxDimension,
+        maxHeight: AppConstants.postImageMaxDimension,
+      );
+      picked = [?shot];
+    } else {
+      // Capped at what the message still has room for. With one slot left
+      // `image_picker` opens its single-photo picker on its own.
+      picked = await _picker.pickMultiImage(
+        imageQuality: 85,
+        maxWidth: AppConstants.postImageMaxDimension,
+        maxHeight: AppConstants.postImageMaxDimension,
+        limit: slotsLeft,
+      );
+    }
+    if (picked.isEmpty || !mounted) return;
+    unawaited(cubit.attachFiles(picked.map((x) => File(x.path)).toList()));
   }
 
   /// Opens the picker and sends whatever comes back from it.
@@ -509,30 +536,47 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
 
-    return BlocListener<ChatCubit, ChatState>(
-      listenWhen: (previous, current) =>
-          previous.actionError != current.actionError ||
-          previous.wasRemoved != current.wasRemoved ||
-          previous.isLive != current.isLive,
-      listener: (context, state) {
-        if (state.isLive != _isLive) {
-          _isLive = state.isLive;
-          _startRefreshTimer();
-          // Coming back up after a gap: catch up on whatever the socket missed.
-          if (_isLive) _refreshLatest();
-        }
-        if (state.wasRemoved) {
-          AppStatusSnackbar.showError(
-            context,
-            message: 'You are no longer in this group.',
-            title: 'Removed',
-          );
-          Navigator.of(context).maybePop();
-          return;
-        }
-        final error = state.actionError;
-        if (error != null) AppStatusSnackbar.showError(context, message: error);
-      },
+    return MultiBlocListener(
+      listeners: [
+        BlocListener<ChatCubit, ChatState>(
+          listenWhen: (previous, current) =>
+              previous.actionError != current.actionError ||
+              previous.wasRemoved != current.wasRemoved ||
+              previous.isLive != current.isLive,
+          listener: (context, state) {
+            if (state.isLive != _isLive) {
+              _isLive = state.isLive;
+              _startRefreshTimer();
+              // Coming back up after a gap: catch up on whatever the socket missed.
+              if (_isLive) _refreshLatest();
+            }
+            if (state.wasRemoved) {
+              AppStatusSnackbar.showError(
+                context,
+                message: 'You are no longer in this group.',
+                title: 'Removed',
+              );
+              Navigator.of(context).maybePop();
+              return;
+            }
+            final error = state.actionError;
+            if (error != null) AppStatusSnackbar.showError(context, message: error);
+          },
+        ),
+        // A call that just ended adds its line at the bottom of the thread;
+        // follow it the way a new message is followed. Never the opening pin
+        // — that is the messages' (`_didPinToBottom`), and without a list on
+        // screen yet this does nothing.
+        BlocListener<CallLogCubit, List<CallLogEntry>>(
+          listenWhen: (previous, current) => previous.lastOrNull?.callId != current.lastOrNull?.callId,
+          listener: (context, _) {
+            if (!_didPinToBottom) return;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) unawaited(_pinToBottom(animate: true));
+            });
+          },
+        ),
+      ],
       child: Scaffold(
         backgroundColor: colors.bg,
         // `top: false` because the header slab runs up under the status bar
@@ -583,6 +627,10 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                       previous.busyInviteIds != current.busyInviteIds ||
                       previous.errorMessage != current.errorMessage,
                   builder: (context, state) {
+                    // Watched rather than wrapped in a second builder: the
+                    // call lines decide the empty state below as well as the
+                    // rows, so both have to rebuild on them.
+                    final calls = context.watch<CallLogCubit>().state;
                     if (state.status == ChatStatus.loading) {
                       return const ShimmerChatThread();
                     }
@@ -597,7 +645,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                         ),
                       );
                     }
-                    if (state.messages.isEmpty && !state.isTyping) {
+                    if (state.messages.isEmpty && calls.isEmpty && !state.isTyping) {
                       return Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -615,14 +663,14 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                       bloc: sl<MessagesCubit>(),
                       builder: (context, inboxState) {
                         final conversation = _conversation(state);
+                        final messages = state.messages;
+                        final rows = chatThreadRows(messages, calls, hasOlder: state.hasMore);
                         return ListView.builder(
                           controller: _scrollController,
                           padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
-                          itemCount:
-                              state.messages.length + (state.isTyping ? 1 : 0),
+                          itemCount: rows.length + (state.isTyping ? 1 : 0),
                           itemBuilder: (context, index) {
-                            final messages = state.messages;
-                            if (index == messages.length) {
+                            if (index == rows.length) {
                               return _TypingBubble(
                                 typists: _typists(
                                   state.typingUserIds,
@@ -631,7 +679,19 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                                 isGroup: conversation?.isGroup ?? false,
                               );
                             }
-                            final message = messages[index];
+                            final row = rows[index];
+                            if (row is CallLogEntry) {
+                              return CallLogLine(
+                                key: ValueKey('call:${row.callId}'),
+                                entry: row,
+                                time: _timeLabel(row.at.toLocal()),
+                              );
+                            }
+                            final message = row as MessageEntity;
+                            // A call line between two messages breaks their
+                            // run, the same as a long pause does.
+                            final before = index == 0 ? null : rows[index - 1];
+                            final after = index == rows.length - 1 ? null : rows[index + 1];
                             final card = message.groupInvite;
                             final Widget bubble;
                             if (card != null) {
@@ -653,12 +713,8 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                                   conversation,
                                 ),
                                 isGroup: conversation?.isGroup ?? false,
-                                firstInRun:
-                                    index == 0 ||
-                                    !_sameRun(messages[index - 1], message),
-                                lastInRun:
-                                    index == messages.length - 1 ||
-                                    !_sameRun(message, messages[index + 1]),
+                                firstInRun: before is! MessageEntity || !_sameRun(before, message),
+                                lastInRun: after is! MessageEntity || !_sameRun(message, after),
                                 isRead: _isReadByPeers(
                                   message,
                                   messages,
@@ -768,6 +824,34 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
       !a.isInviteCard &&
       !b.isInviteCard &&
       b.createdAt.difference(a.createdAt).abs() <= _runGap;
+}
+
+/// The transcript's rows, oldest first: every loaded message, with the
+/// conversation's finished calls ([CallLogEntry]) slotted in by the time
+/// each one rang. Both lists arrive oldest first.
+///
+/// With older pages still unloaded ([hasOlder]), a call from before the
+/// oldest loaded message is left out — it belongs further up than anything
+/// on screen, and takes its place once that page is pulled in.
+@visibleForTesting
+List<Object> chatThreadRows(List<MessageEntity> messages, List<CallLogEntry> calls, {required bool hasOlder}) {
+  if (calls.isEmpty) return messages;
+  final rows = <Object>[];
+  var next = 0;
+  if (hasOlder && messages.isNotEmpty) {
+    final oldest = messages.first.createdAt;
+    while (next < calls.length && calls[next].at.isBefore(oldest)) {
+      next++;
+    }
+  }
+  for (final message in messages) {
+    while (next < calls.length && calls[next].at.isBefore(message.createdAt)) {
+      rows.add(calls[next++]);
+    }
+    rows.add(message);
+  }
+  rows.addAll(calls.skip(next));
+  return rows;
 }
 
 /// Only an actual read-message marker proves a read. `lastReadAt` is the

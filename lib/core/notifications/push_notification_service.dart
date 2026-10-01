@@ -31,8 +31,9 @@ const _androidChannel = AndroidNotificationChannel(
 
 /// Where a tapped push should take the user, worked out from its `data`
 /// map in the order the notify guide fixes: a conversation first, then a
-/// post (optionally at a comment), then a profile. Anything else is an
-/// unknown type and is ignored — new types are added over time.
+/// post (optionally at a comment), then a profile. Two types name a screen
+/// instead and are checked ahead of that ladder. Anything else is an unknown
+/// type and is ignored — new types are added over time.
 sealed class PushDestination {
   const PushDestination();
 
@@ -48,9 +49,11 @@ sealed class PushDestination {
     // id ladder below: a resolved report carries `reportId`/`status` and
     // none of the ids that ladder looks for, and its destination is a
     // screen rather than one of the things those ids name.
-    if (read('type') == NotificationTypes.reportResolved) {
+    final type = read('type');
+    if (type == NotificationTypes.reportResolved) {
       return ReportsDestination(reportId: read('reportId'));
     }
+    if (type == NotificationTypes.appUpdate) return const AppVersionDestination();
     final conversationId = read('conversationId');
     if (conversationId != null) {
       return ConversationDestination(conversationId: conversationId, messageId: read('messageId'));
@@ -94,6 +97,15 @@ class ProfileDestination extends PushDestination {
 class ReportsDestination extends PushDestination {
   const ReportsDestination({this.reportId});
   final String? reportId;
+}
+
+/// An `APP_UPDATE` push — opens App version, where the new build is checked
+/// for, downloaded and installed. The push carries no version of its own:
+/// what is on offer is whatever the release channel's `latest.json` says
+/// when the screen opens, so an announcement can never disagree with the
+/// file it leads to (ADR-054).
+class AppVersionDestination extends PushDestination {
+  const AppVersionDestination();
 }
 
 /// Wires Firebase Cloud Messaging: requests notification permission, keeps

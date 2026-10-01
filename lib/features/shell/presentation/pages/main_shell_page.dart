@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
@@ -12,6 +13,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../feed/presentation/bloc/feed_cubit.dart';
 import '../../../chat/presentation/bloc/messages_cubit.dart';
 import '../../../notification/presentation/bloc/notifications_cubit.dart';
+import '../../../settings/presentation/bloc/app_update_cubit.dart';
+import '../../../settings/presentation/widgets/update_available_sheet.dart';
 import '../widgets/bottom_nav_bar.dart';
 
 /// Wraps the bottom-nav tabs (Feed/Circle/Inbox/Signals/Profile/Explore) in
@@ -70,8 +73,27 @@ class _MainShellPageState extends State<MainShellPage> with WidgetsBindingObserv
       // the session being authenticated, and a shell built while a session
       // restore is still settling would otherwise never take one.
       _syncPresenceLease();
+      unawaited(_offerUpdate());
     });
     _startInboxRefreshTimer();
+  }
+
+  /// Asks the release channel once per launch whether a newer build exists
+  /// and, if so, shows the update prompt. "Update now" opens the App version
+  /// screen, where the download and install already live (ADR-053).
+  ///
+  /// Android only, like the Updates group itself: an iOS build can only be
+  /// updated by the App Store (ADR-029).
+  Future<void> _offerUpdate() async {
+    if (!Platform.isAndroid) return;
+    final update = await sl<AppUpdateCubit>().checkOnLaunch();
+    if (update == null || !mounted) return;
+    // Already where "Update now" leads: an update push was tapped while the
+    // check was in flight, or the user got there first.
+    if (GoRouter.of(context).state.name == RouteNames.appVersion) return;
+    final accepted = await showUpdateAvailableSheet(context, update);
+    if (accepted != true || !mounted) return;
+    unawaited(context.pushNamed(RouteNames.appVersion));
   }
 
   /// The green online dot is drawn on the Inbox list, its rail and the chat
@@ -121,7 +143,17 @@ class _MainShellPageState extends State<MainShellPage> with WidgetsBindingObserv
       // per-report screen to open — Privacy & safety re-reads
       // `GET /v1/reports/me` and the outcome is in the list.
       ReportsDestination() => (RouteNames.profile, RouteNames.privacySafety, <String, String>{}),
+      // A "new version" announcement, sent by hand from Firebase (ADR-054).
+      // Profile is the tab App version is reached from.
+      AppVersionDestination() => (RouteNames.profile, RouteNames.appVersion, <String, String>{}),
     };
+
+    // The push says a build is out, so the screen must not open on a stale
+    // "you are on the newest build" from a check made hours ago. Before the
+    // early return below: a tap with the screen already open still re-checks.
+    if (destination is AppVersionDestination && Platform.isAndroid) {
+      unawaited(sl<AppUpdateCubit>().checkAnnounced());
+    }
 
     final current = router.state;
     if (current.name == overlay && params.entries.every((e) => current.pathParameters[e.key] == e.value)) {
