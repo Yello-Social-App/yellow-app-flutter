@@ -107,6 +107,10 @@ class ChatState extends Equatable {
   bool get isComposingReply => replyingTo != null;
   bool get isEditing => editing != null;
 
+  /// How many more files the message being composed can take — what the
+  /// photo picker is told to stop at.
+  int get attachmentSlotsLeft => chatMessageMaxAttachments - pendingAttachments.length;
+
   /// Sentinel so `nextCursor: null` means "history exhausted" rather than
   /// "leave it alone". Without it the last page — which answers
   /// `nextCursor: null` — would keep [hasMore] true and [loadOlder] would
@@ -618,24 +622,36 @@ class ChatCubit extends Cubit<ChatState> {
 
   // --- attachments ---
 
-  /// Uploads one file and parks it in [ChatState.pendingAttachments] until
-  /// the next send carries its id. Uploads are sequential on purpose: the
-  /// composer shows one spinner, and the server's per-message cap is easier
-  /// to hold when they land one at a time.
-  Future<void> attachFile(File file) async {
-    if (state.isUploading) return;
-    if (state.pendingAttachments.length >= chatMessageMaxAttachments) {
-      emit(state.copyWith(actionError: 'You can attach up to $chatMessageMaxAttachments files.'));
+  /// Uploads [files] in order and parks each in
+  /// [ChatState.pendingAttachments] until the next send carries its id.
+  /// Uploads are sequential on purpose: the composer shows one spinner, and
+  /// the server's per-message cap is easier to hold when they land one at a
+  /// time. The batch stops at the cap or at the first failure — whatever
+  /// uploaded before that stays attached.
+  Future<void> attachFiles(List<File> files) async {
+    if (state.isUploading || files.isEmpty) return;
+    const capReached = 'You can attach up to $chatMessageMaxAttachments files.';
+    if (state.attachmentSlotsLeft <= 0) {
+      emit(state.copyWith(actionError: capReached));
       return;
     }
     emit(state.copyWith(isUploading: true));
-    final result = await _uploadAttachment(UploadAttachmentParams(conversationId: conversationId, file: file));
-    if (isClosed) return;
-    result.fold(
-      (failure) => emit(state.copyWith(isUploading: false, actionError: failure.message)),
-      (attachment) =>
-          emit(state.copyWith(isUploading: false, pendingAttachments: [...state.pendingAttachments, attachment])),
-    );
+    String? error;
+    for (final file in files) {
+      // Re-read each time round: a thumbnail can be removed mid-batch.
+      if (state.attachmentSlotsLeft <= 0) {
+        error = capReached;
+        break;
+      }
+      final result = await _uploadAttachment(UploadAttachmentParams(conversationId: conversationId, file: file));
+      if (isClosed) return;
+      error = result.fold<String?>((failure) => failure.message, (attachment) {
+        emit(state.copyWith(pendingAttachments: [...state.pendingAttachments, attachment]));
+        return null;
+      });
+      if (error != null) break;
+    }
+    emit(state.copyWith(isUploading: false, actionError: error));
   }
 
   /// Sends a recording the voice sheet has already uploaded.

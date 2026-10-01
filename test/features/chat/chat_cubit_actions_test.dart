@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dartz/dartz.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -129,6 +130,63 @@ void main() {
     await cubit.load();
     cubit.startEdit(cubit.state.messages[0]);
     expect(cubit.state.isEditing, isFalse);
+  });
+
+  group('attachFiles', () {
+    late Directory dir;
+
+    /// Real files: `UploadAttachmentUseCase` reads the length before uploading.
+    List<File> photos(int count) => [
+          for (var i = 0; i < count; i++) File('${dir.path}/p$i.jpg')..writeAsBytesSync([0]),
+        ];
+
+    void uploads(File file, {bool fails = false}) {
+      final id = file.uri.pathSegments.last;
+      when(() => repository.uploadAttachment(conversationId: 'chat', file: file)).thenAnswer(
+        (_) async => fails
+            ? const Left(NetworkFailure())
+            : Right(_image(id, url: 'https://cdn.test/$id', expiresIn: const Duration(hours: 1))),
+      );
+    }
+
+    setUp(() => dir = Directory.systemTemp.createTempSync('chat_attach'));
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    test('uploads a whole selection in order', () async {
+      final files = photos(3);
+      files.forEach(uploads);
+
+      await cubit.attachFiles(files);
+
+      expect(cubit.state.pendingAttachments.map((a) => a.id), ['p0.jpg', 'p1.jpg', 'p2.jpg']);
+      expect(cubit.state.isUploading, isFalse);
+      expect(cubit.state.actionError, isNull);
+    });
+
+    test('stops at the first failure and keeps what already uploaded', () async {
+      final files = photos(3);
+      uploads(files[0]);
+      uploads(files[1], fails: true);
+      uploads(files[2]);
+
+      await cubit.attachFiles(files);
+
+      expect(cubit.state.pendingAttachments.map((a) => a.id), ['p0.jpg']);
+      expect(cubit.state.isUploading, isFalse);
+      expect(cubit.state.actionError, isNotNull);
+      verifyNever(() => repository.uploadAttachment(conversationId: 'chat', file: files[2]));
+    });
+
+    test('stops at the per-message cap', () async {
+      final files = photos(chatMessageMaxAttachments + 2);
+      files.forEach(uploads);
+
+      await cubit.attachFiles(files);
+
+      expect(cubit.state.pendingAttachments, hasLength(chatMessageMaxAttachments));
+      expect(cubit.state.actionError, 'You can attach up to $chatMessageMaxAttachments files.');
+      verifyNever(() => repository.uploadAttachment(conversationId: 'chat', file: files.last));
+    });
   });
 
   test('deleteMessage leaves a tombstone and flags replies quoting it', () async {

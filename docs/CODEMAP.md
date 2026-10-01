@@ -5,8 +5,8 @@
 Index of every meaningful file in `lib/`, so you can jump straight to the
 right one instead of searching. **Read this before opening source files.**
 
-- Generated from commit `8d8260b`
-- `lib/`: 359 Dart files · `test/`: 59 test files
+- Generated from commit `bd265f0`
+- `lib/`: 367 Dart files · `test/`: 62 test files
 - Regenerate: `bash tool/codemap.sh` · Staleness check: `bash tool/codemap.sh --check`
 
 Layer rule (see [ARCHITECTURE.md](ARCHITECTURE.md)): `presentation` → `domain/usecases`
@@ -95,6 +95,8 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `BlockUserUseCase`
 - `BookmarksLocalDataSource`
 - `CallCubit`
+- `CallLogLocalDataSource`
+- `CallLogRepository`
 - `CallRemoteDataSource`
 - `CallRepository`
 - `CancelFriendRequestUseCase`
@@ -103,6 +105,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `ChatRepository`
 - `ChatSocket`
 - `CheckForUpdateUseCase`
+- `ClearCallLogUseCase`
 - `CommunitiesRemoteDataSource`
 - `CommunitiesRepository`
 - `Connectivity`
@@ -132,6 +135,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `GetActiveCallUseCase`
 - `GetAppBuildInfoUseCase`
 - `GetBlockedUsersUseCase`
+- `GetCallLogUseCase`
 - `GetCallTokenUseCase`
 - `GetCommentsUseCase`
 - `GetCommunitiesUseCase`
@@ -206,6 +210,7 @@ the file's own comments explain each one; read them before changing a lifetime.
 - `ReactToCommunityPostUseCase`
 - `ReactToMessageUseCase`
 - `ReactToPostUseCase`
+- `RecordCallUseCase`
 - `RecordProjectViewUseCase`
 - `RefreshAttachmentUseCase`
 - `RegisterDeviceUseCase`
@@ -349,11 +354,13 @@ on re-entry.
 **Cubits + States**
 
 - `lib/features/call/presentation/bloc/call_cubit.dart` — CallState, CallCubit, formatCallDuration()
+- `lib/features/call/presentation/bloc/call_log_cubit.dart` — CallLogCubit
 - `lib/features/call/presentation/bloc/conversation_call_cubit.dart` — ConversationCallCubit
 
 **Widgets**
 
 - `lib/features/call/presentation/widgets/call_host.dart` — CallHost
+- `lib/features/call/presentation/widgets/call_log_line.dart` — CallLogLine, callLogLabel()
 - `lib/features/call/presentation/widgets/call_screen.dart` — CallScreen, CallPill
 - `lib/features/call/presentation/widgets/call_widgets.dart` — CallPalette, OnVideoTheme, CallRoundAction, CallTimerText
 - `lib/features/call/presentation/widgets/group_call_view.dart` — GroupCallView
@@ -361,18 +368,22 @@ on re-entry.
 
 **Usecases**
 
+- `lib/features/call/domain/usecases/call_log_usecases.dart` — RecordCallUseCase, GetCallLogUseCase, ClearCallLogUseCase
 - `lib/features/call/domain/usecases/call_usecases.dart` — StartCallParams, StartCallUseCase, AcceptCallUseCase, DeclineCallUseCase, EndCallUseCase, GetCallTokenUseCase, GetActiveCallUseCase, GetConversationCallUseCase
 
 **Entities**
 
 - `lib/features/call/domain/entities/call_entity.dart` — CallParticipant, CallEntity, CallTokenEntity, CallPeer
+- `lib/features/call/domain/entities/call_log_entry.dart` — CallLogEntry
 
 **Repository interfaces**
 
+- `lib/features/call/domain/repositories/call_log_repository.dart`
 - `lib/features/call/domain/repositories/call_repository.dart` — CallLinkChanged, CallRinging, CallAccepted, CallUpdated, CallEnded
 
 **Repository implementations**
 
+- `lib/features/call/data/repositories/call_log_repository_impl.dart` — CallLogRepositoryImpl
 - `lib/features/call/data/repositories/call_repository_impl.dart` — CallRepositoryImpl
 
 **Models (JSON ⇄ entity)**
@@ -382,6 +393,7 @@ on re-entry.
 **Data sources**
 
 - `lib/features/call/data/datasources/call_frame_decoder.dart`
+- `lib/features/call/data/datasources/call_log_local_datasource.dart` — CallLogLocalDataSourceImpl
 - `lib/features/call/data/datasources/call_remote_datasource.dart` — CallInProgressException, CallRemoteDataSourceImpl
 
 ### Chat — `lib/features/chat`
@@ -398,7 +410,7 @@ on re-entry.
 
 **Pages**
 
-- `lib/features/chat/presentation/pages/chat_page.dart` — ChatPage
+- `lib/features/chat/presentation/pages/chat_page.dart` — ChatPage, chatThreadRows()
 - `lib/features/chat/presentation/pages/group_info_page.dart` — GroupInfoPage
 - `lib/features/chat/presentation/pages/messages_page.dart` — MessagesPage
 
@@ -855,6 +867,7 @@ on re-entry.
 **Widgets**
 
 - `lib/features/settings/presentation/widgets/settings_card.dart` — SettingsCard
+- `lib/features/settings/presentation/widgets/update_available_sheet.dart` — showUpdateAvailableSheet(), updateHighlights()
 - `lib/features/settings/presentation/widgets/update_card.dart` — UpdateCard
 
 **Usecases**
@@ -1001,7 +1014,7 @@ on re-entry.
 - `lib/core/notifications/background_auth.dart` — backgroundAccessToken(), backgroundDio(), bearer(), refreshedAccessToken()
 - `lib/core/notifications/call_alert.dart` — callAlertId(), callIdOf(), cancelCallAlert(), declineCallFromNotification(), handleCallPush(), isCallPush()
 - `lib/core/notifications/chat_reply_action.dart` — sendChatReply()
-- `lib/core/notifications/push_notification_service.dart` — ConversationDestination, PostDestination, ProfileDestination, ReportsDestination, PushNotificationServiceImpl, cancelChatNotification(), chatAlertDetails(), chatAlertPayload(), chatNotificationTag(), decodeNotificationPayload(), firebaseMessagingBackgroundHandler(), notificationActionBackgroundHandler(), replyFromNotification()
+- `lib/core/notifications/push_notification_service.dart` — ConversationDestination, PostDestination, ProfileDestination, ReportsDestination, AppVersionDestination, PushNotificationServiceImpl, cancelChatNotification(), chatAlertDetails(), chatAlertPayload(), chatNotificationTag(), decodeNotificationPayload(), firebaseMessagingBackgroundHandler(), notificationActionBackgroundHandler(), replyFromNotification()
 
 **`lib/core/router`**
 
@@ -1102,12 +1115,14 @@ on re-entry.
 - `test/features/auth/presentation/auth_wave_header_test.dart`
 - `test/features/call/call_cubit_test.dart`
 - `test/features/call/call_frame_decoder_test.dart`
+- `test/features/call/call_log_test.dart`
 - `test/features/call/call_remote_datasource_test.dart`
 - `test/features/call/conversation_call_cubit_test.dart`
 - `test/features/call/group_call_view_test.dart`
 - `test/features/chat/chat_cubit_actions_test.dart`
 - `test/features/chat/chat_frame_decoder_test.dart`
 - `test/features/chat/chat_socket_test.dart`
+- `test/features/chat/chat_thread_rows_test.dart`
 - `test/features/chat/loading_test.dart`
 - `test/features/chat/message_mapper_test.dart`
 - `test/features/chat/new_conversation_cubit_test.dart`
@@ -1139,6 +1154,7 @@ on re-entry.
 - `test/features/safety/safety_cubits_test.dart`
 - `test/features/settings/app_update_cubit_test.dart`
 - `test/features/settings/app_version_cubit_test.dart`
+- `test/features/settings/update_available_sheet_test.dart`
 - `test/features/shell/bottom_nav_bar_test.dart`
 - `test/features/showcase/showcase_widgets_test.dart`
 - `test/helpers/mock_data.dart`

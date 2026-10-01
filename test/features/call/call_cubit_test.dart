@@ -8,7 +8,10 @@ import 'package:yello_social_app/core/call/call_room.dart';
 import 'package:yello_social_app/core/call/call_tones.dart';
 import 'package:yello_social_app/core/error/failures.dart';
 import 'package:yello_social_app/features/call/domain/entities/call_entity.dart';
+import 'package:yello_social_app/features/call/domain/entities/call_log_entry.dart';
+import 'package:yello_social_app/features/call/domain/repositories/call_log_repository.dart';
 import 'package:yello_social_app/features/call/domain/repositories/call_repository.dart';
+import 'package:yello_social_app/features/call/domain/usecases/call_log_usecases.dart';
 import 'package:yello_social_app/features/call/domain/usecases/call_usecases.dart';
 import 'package:yello_social_app/features/call/presentation/bloc/call_cubit.dart';
 import 'package:yello_social_app/features/chat/domain/repositories/chat_repository.dart';
@@ -17,6 +20,33 @@ import 'package:yello_social_app/features/chat/domain/usecases/chat_usecases.dar
 class _CallRepository extends Mock implements CallRepository {}
 
 class _ChatRepository extends Mock implements ChatRepository {}
+
+/// The on-device call log, kept in memory: one entry per call, a later note
+/// for the same call replacing the earlier one.
+class _CallLog implements CallLogRepository {
+  final Map<String, CallLogEntry> entries = {};
+  bool cleared = false;
+
+  @override
+  Future<Either<Failure, Unit>> record(CallLogEntry entry) async {
+    entries[entry.callId] = entry;
+    return const Right(unit);
+  }
+
+  @override
+  Future<Either<Failure, List<CallLogEntry>>> forConversation(String conversationId) async =>
+      Right(entries.values.where((e) => e.conversationId == conversationId).toList());
+
+  @override
+  Future<Either<Failure, Unit>> clear() async {
+    entries.clear();
+    cleared = true;
+    return const Right(unit);
+  }
+
+  @override
+  Stream<CallLogEntry> watch() => const Stream.empty();
+}
 
 class _Room extends Mock implements CallRoom {}
 
@@ -85,6 +115,7 @@ final _token = CallTokenEntity(
 void main() {
   late _CallRepository calls;
   late _ChatRepository chat;
+  late _CallLog log;
   late _Room room;
   late _Tones tones;
   late _KeepAlive keepAlive;
@@ -104,6 +135,8 @@ void main() {
     getCallToken: GetCallTokenUseCase(calls),
     getActiveCall: GetActiveCallUseCase(calls),
     getConversation: GetConversationUseCase(chat),
+    recordCall: RecordCallUseCase(log),
+    clearCallLog: ClearCallLogUseCase(log),
     repository: calls,
     room: room,
     tones: tones,
@@ -118,6 +151,7 @@ void main() {
   setUp(() {
     calls = _CallRepository();
     chat = _ChatRepository();
+    log = _CallLog();
     room = _Room();
     tones = _Tones();
     keepAlive = _KeepAlive();
@@ -671,6 +705,110 @@ void main() {
       verifyNever(() => keepAlive.setScreenCapture(true));
       verifyNever(() => room.setScreenShareEnabled(true));
       expect(cubit.state.screenSharing, isFalse);
+    });
+  });
+
+  group('call lines for the chat thread', () {
+    Future<void> ringOut() async {
+      when(
+        () => calls.startCall(
+          conversationId: any(named: 'conversationId'),
+          media: any(named: 'media'),
+        ),
+      ).thenAnswer((_) async => Right(_call()));
+      await cubit.startCall(conversationId: 'dm-1', media: CallMedia.audio, peer: _peer);
+    }
+
+    test('the other person declining is noted for the caller', () async {
+      await ringOut();
+      expect(log.entries, isEmpty, reason: 'nothing to say while it rings');
+
+      // The frame cannot tell whose call it is without the viewer's id; the
+      // call on screen can.
+      events.add(CallEnded(_call(status: CallStatus.ended, endReason: CallEndReason.declined, isOutgoing: false)));
+      await settle();
+
+      final entry = log.entries['call-1']!;
+      expect(entry.conversationId, 'dm-1');
+      expect(entry.endReason, CallEndReason.declined);
+      expect(entry.isOutgoing, isTrue);
+      expect(entry.at, DateTime(2026, 9, 29, 10));
+    });
+
+    test('declining is noted for the one who declined, before the server says so', () async {
+      events.add(CallRinging(_call(isOutgoing: false)));
+      await settle();
+
+      await cubit.decline();
+      await settle();
+
+      final entry = log.entries['call-1']!;
+      expect(entry.endReason, CallEndReason.declined);
+      expect(entry.isOutgoing, isFalse);
+      expect(entry.talkTime, isNull);
+
+      // The server's own word arrives after the screen has closed, and is
+      // the same call: still one line.
+      events.add(CallEnded(_call(status: CallStatus.ended, endReason: CallEndReason.declined, isOutgoing: false)));
+      await settle();
+      expect(log.entries, hasLength(1));
+    });
+
+    test('giving up while it rings is noted as cancelled', () async {
+      await ringOut();
+
+      await cubit.hangUp();
+      await settle();
+
+      expect(log.entries['call-1']?.endReason, CallEndReason.cancelled);
+    });
+
+    test('a busy line is noted though nothing rang', () async {
+      when(
+        () => calls.startCall(
+          conversationId: any(named: 'conversationId'),
+          media: any(named: 'media'),
+        ),
+      ).thenAnswer((_) async => Right(_call(status: CallStatus.ended, endReason: CallEndReason.busy)));
+
+      await cubit.startCall(conversationId: 'dm-1', media: CallMedia.video, peer: _peer);
+      await settle();
+
+      expect(log.entries['call-1']?.endReason, CallEndReason.busy);
+    });
+
+    test('a call that ends off screen is still noted', () async {
+      events.add(CallEnded(_group(status: CallStatus.ended, endReason: CallEndReason.hangup)));
+      await settle();
+
+      expect(cubit.state.phase, CallPhase.idle);
+      expect(log.entries['call-9']?.conversationId, 'group-1');
+      expect(log.entries['call-9']?.isGroup, isTrue);
+    });
+
+    test('leaving a group call notes nothing — the call goes on', () async {
+      events.add(CallRinging(_group(status: CallStatus.ringing)));
+      await settle();
+      await cubit.accept();
+      events.add(CallAccepted(_group(mine: CallParticipantState.joined)));
+      await settle();
+
+      await cubit.hangUp();
+      await settle();
+
+      expect(log.entries, isEmpty);
+    });
+
+    test('signing out forgets them', () async {
+      await ringOut();
+      await cubit.hangUp();
+      await settle();
+      expect(log.entries, isNotEmpty);
+
+      await cubit.reset();
+
+      expect(log.cleared, isTrue);
+      expect(log.entries, isEmpty);
     });
   });
 

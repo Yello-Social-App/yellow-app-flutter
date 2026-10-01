@@ -46,6 +46,11 @@ void main() {
       expect(withPostId, isA<ReportsDestination>());
     });
 
+    test('an update announcement opens App version, ahead of any id on it', () {
+      expect(PushDestination.fromData({'type': 'APP_UPDATE'}), isA<AppVersionDestination>());
+      expect(PushDestination.fromData({'type': ' APP_UPDATE ', 'postId': 'p'}), isA<AppVersionDestination>());
+    });
+
     test('a silent friendship change is not a destination', () {
       // Data-only: nothing is shown for it and nothing is tappable, so it
       // must not resolve to the profile via some other key.

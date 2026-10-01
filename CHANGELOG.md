@@ -16,6 +16,29 @@ file only when it genuinely helps.
 
 ## [Unreleased]
 
+### Added
+
+- **Yello tells you when there is a newer version.** On Android, opening the
+  app now checks for a newer build and, when there is one, slides up a sheet
+  with the version and what is new in it. **Update now** takes you to App
+  version, where the download is one tap away; **Maybe later** closes it
+  until the next time you open Yello.
+- **A new version can reach you as a notification.** Tapping a "new version"
+  notification opens App version, already checked and ready to download.
+- **Calls leave a line in the chat.** When a call ends, the conversation now
+  shows what happened to it, at the time it rang — "Voice call declined",
+  "Missed video call", "Voice call · no answer", or how long you talked.
+  These lines are kept on this phone: they do not appear on your other
+  devices, and a call you missed while Yello was closed does not get one.
+
+### Fixed
+
+- **You can pick several photos at once in a chat.** Choosing **Photo
+  library** from the composer used to let you select one picture, so a
+  ten-photo message meant opening the picker ten times. It now takes as many
+  as the message still has room for and uploads them in the order you picked
+  them.
+
 ---
 
 ## [1.0.0] — 2026-09-30

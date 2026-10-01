@@ -55,6 +55,10 @@ app.*.map.json
 # Claude Code local overrides (machine-specific, not shared)
 .claude/settings.local.json
 
+# Scratchpad for the task in flight (/scope → /ship). Per-developer state,
+# reset on every ship — see ADR-052.
+/docs/current-task.md
+
 # Release signing. The keystore and its passwords sign every APK a user
 # installs — Android refuses an update signed by a different key, so losing
 # or leaking these is unrecoverable. Keep the .jks backed up somewhere that

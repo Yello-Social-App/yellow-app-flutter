@@ -2562,3 +2562,175 @@ handling of `YELLO_CALL` responses (decline over `URLSession` with the
 keychain token, Accept forwarded to Dart), built and checked on a Mac; or
 CallKit arrives server-side (VoIP pushes), which replaces the iOS path
 outright.
+
+## ADR-052 — A task's state lives in a gitignored scratchpad, driven by five commands
+
+**Status:** Accepted
+
+`/scope` → `/plan` → `/develop` → `/verify` → `/ship` each read and write
+one file, `docs/current-task.md`, with three sections: `## Scope`, `## Plan`,
+`## Verify`. `/ship` refuses without `Result: pass` and resets the file.
+
+**Why:** ADR-008's docs make *onboarding* cheap, but nothing made *resuming*
+cheap — a context reset mid-task meant re-deriving the goal, the files and
+how far the work had got from `git diff`. A checklist on disk is the
+smallest thing that survives that. It is gitignored because it is one
+developer's in-flight state, not history: the durable part of a task already
+lands in `CHANGELOG.md`, `docs/DECISIONS.md` and `docs/GOTCHAS.md` at ship.
+
+The five commands sit beside the existing seven rather than replacing them.
+`/verify` is `/preflight` narrowed to affected tests plus a `flutter-reviewer`
+pass against the scope; `/ship` applies `/changelog`'s and `/adr`'s rules.
+Rejected: a `docs/ai/` tree and `.claude/rules/` as in the template this came
+from — this repo already has `docs/` and `AGENTS.md` doing those jobs, and a
+second home for the same rules is how they drift.
+
+`.claude/settings.json` also denies `git push --force*` and
+`git reset --hard*`, so an assistant can't discard work on its own.
+
+**Cost:** one task at a time per checkout — `/scope` overwrites. And the
+gate is a convention the commands follow, not something git enforces; a
+commit made by hand skips it.
+
+**Revisit if:** two tasks routinely run in one checkout (then key the file
+by branch), or the gate needs teeth (then a pre-commit hook, not more prose).
+
+## ADR-053 — A newer build is offered at launch, by a sheet that hands off to App version
+
+**Status:** Accepted. Narrows ADR-029's "a card in settings": the card is
+still where an update is downloaded and installed, but it is no longer the
+only place one is announced.
+
+ADR-029 left the update check behind a button on the App version screen, so
+a user who never opened that screen never learned a newer build existed —
+the same "keeps running an old build forever" problem the updater was built
+to end. Asked for (2026-10-01): a bottom sheet that appears when a new
+version is available, whose "Update now" opens the version screen.
+
+- **The shell checks once per launch.** `MainShellPage` calls
+  `AppUpdateCubit.checkOnLaunch()` after its first frame, Android only. The
+  shell rather than `bootstrap()` because it needs a `BuildContext` to show
+  a sheet, and it only exists once the session is authenticated — nobody is
+  prompted over the login screen.
+- **`checkOnLaunch` is not `check`.** Nobody asked for it, so it runs once
+  per process (a flag on the singleton cubit: logging out and back in
+  rebuilds the shell and must not prompt twice), it does nothing unless the
+  cubit is `idle`, and a failure returns to `idle` instead of leaving "The
+  update check failed" waiting on a screen the user has not opened.
+- **It returns the build instead of the shell listening for `available`.**
+  A `BlocListener` would also fire for a check the user runs by hand on the
+  App version screen, and put the sheet over the card that already says the
+  same thing.
+- **"Update now" navigates; it does not download.** The sheet resolves to a
+  bool and the shell pushes `appVersion`. The cubit is already `available`,
+  so the screen opens on the card offering the download. The progress bar,
+  the "install unknown apps" permission step and the retry row all live
+  there (`UpdateCard`), and a second copy of that state machine in a sheet
+  is the thing to avoid.
+- **"Maybe later" is remembered for the process only.** The next cold start
+  asks again. For a sideloaded app that is the point; persisting the
+  dismissal per build would need storage and a usecase for a prompt that is
+  one tap to close.
+- **The checklist is the manifest's `notes`, split.** `latest.json` carries
+  one folded line (`tool/release_manifest.sh`), so `updateHighlights` splits
+  it by sentence, or by line when the notes were written one item per line,
+  and shows at most three. No notes, no checklist.
+- **The call to action is not an `AppButton`.** The design draws it as a
+  dark slab with a yellow label, echoing the banner; ADR-049's yellow
+  primary would be the second yellow block in a sheet that already has one.
+  It is private to the sheet, and flips to the ordinary yellow face on a
+  dark theme, where a `shell`-coloured slab would sink into the sheet.
+  "Maybe later" is plain text for the same reason — the design's third
+  level below `secondary`, which ADR-049 said to revisit when it turned up.
+
+**Cost:** one unauthenticated GET to the release host per launch, on a bare
+`Dio` (ADR-029), after the first frame.
+
+**Revisit if:** an update has to be forced (ADR-029's `minBuildNumber`
+gate), the prompt proves too frequent (then remember the dismissed build
+number), or a second sheet wants the plain-text action (then add
+`AppButtonVariant.text` and move both onto it).
+
+## ADR-054 — A new version is announced by a hand-sent FCM push that opens App version
+
+**Status:** Accepted
+
+ADR-053's sheet only reaches someone who opens the app. Asked for
+(2026-10-01): a Firebase Cloud Messaging notification for a new version
+that, when tapped, goes to the version screen.
+
+- **Sent from the Firebase console, not by `yello-notify`.** The backend has
+  no version resource and no broadcast endpoint (`docs/BACKEND.md`), and a
+  release is cut by hand anyway. A console campaign reaches every install's
+  FCM token with no server change. The step is in README's Releasing.
+- **The contract is one data key: `type: APP_UPDATE`.** It joins
+  `NotificationTypes` and resolves to `AppVersionDestination` ahead of the
+  id ladder, the same way `REPORT_RESOLVED` names a screen rather than a
+  thing. The shell opens App version over the Profile tab.
+- **The push carries no version.** The screen re-reads `latest.json` when it
+  opens, so the announcement cannot disagree with the file it leads to —
+  and a push sent before the manifest is live shows "newest build", which
+  is why the README orders it after the verify step.
+- **A tap re-checks.** `AppUpdateCubit.checkAnnounced()` is `check()` — a
+  tap is the user asking, so a failure shows — except that it spends the
+  launch check (the sheet over the screen it would lead to is noise) and
+  leaves a downloaded file alone. Without it, a warm app would open the
+  screen on whatever a check hours ago had concluded.
+- **No topic subscription.** A console campaign targets the app itself.
+  A topic only earns its place when something other than a person sends
+  the push.
+
+**Cost:** it is a manual step that can be forgotten, and the console cannot
+target "installs older than build N" without Analytics audiences — everyone
+on Android gets it, including people already updated, who land on "You are
+on the newest build".
+
+**Revisit if:** releases are automated (then subscribe to an `app_updates`
+topic and send from CI through the FCM HTTP v1 API), or `yello-notify`
+grows a broadcast type (then it should own this push and its inbox row).
+
+## ADR-055 — A finished call's line in the chat is the app's own, kept on the device
+
+**Status:** Accepted
+
+Reported 2026-10-01: calling someone who declines leaves nothing in the
+conversation. Nothing was broken — `yello-chat` writes no call line. A
+`Message` has no call field, a finished call creates no message, and no route
+lists past calls (`docs/BACKEND.md`, re-checked against `/ws/docs-json`).
+
+- **Noted on the device, as each call ends.** `CallCubit` is the one object
+  that hears every `call.ended` while the app is on screen, so it records a
+  `CallLogEntry` there — for *every* such frame, not only the call on screen:
+  the callee who declined has already closed theirs, and a group call ends
+  long after a member left it.
+- **The device's own endings are noted without waiting.** Declining, giving
+  up while it rings, hanging up a DM and a `BUSY` reply are recorded at once;
+  the server's frame for the same call replaces the note (one entry per call
+  id), so the line cannot double. Leaving a group call notes nothing — the
+  call goes on.
+- **`shared_preferences`, one JSON value, newest 200.** The saved-posts
+  trade-off again (`BookmarksLocalDataSource`). Cleared on sign-out through
+  `CallCubit.reset()`: the entries carry no account id, and a DM's other
+  member signing in on the same phone would read them from the wrong side.
+- **Its own repository, not three more methods on `CallRepository`.** That
+  interface is `yello-chat`; this never touches the network.
+- **Drawn by the chat page, merged by time.** `chatThreadRows` slots the
+  entries between the loaded messages at the time each call *rang*, and holds
+  back one older than the oldest loaded message until that page is pulled in.
+  A line is not a `MessageEntity`: it has no sender, no id the server knows,
+  and nothing can be done to it.
+- **Not a real message sent by the caller.** A "Declined call" text message
+  would reach both sides and every device, but it is a message the user never
+  wrote — editable, deletable, quotable, counted as unread, pushed as a
+  notification — and each client would send its own.
+
+**Cost:** the two sides can disagree (each phone notes only what it heard),
+nothing syncs or survives a reinstall, and a call that ended while the app had
+no socket — missed with the app closed, declined from the notification —
+leaves no line. The inbox row's preview does not mention a call either.
+
+**Revisit if:** `yello-chat` starts writing a call message or grows a call
+history route — then delete the local log (`CallLog*`, the two `_log` calls in
+`CallCubit`) and render the server's, rather than merging the two. Short of
+that, the `CALL_MISSED` push could note a missed call from the background
+isolate; it would need the foreground to `reload()` the preferences.

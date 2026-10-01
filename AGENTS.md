@@ -150,3 +150,41 @@ The docs above are only worth reading if they're accurate. So:
 - Don't retrofit patterns into working code nobody asked you to change.
 - Git commit messages describe the change and nothing else — no AI/model
   attribution anywhere in subject, body, or trailers.
+
+---
+
+## 8. Cutting a release
+
+The full, copy-pasteable procedure is in [`README.md`](README.md) under
+**Releasing** — follow it step by step. What an agent must not get wrong:
+
+1. **Gate first.** `flutter analyze` and `flutter test` pass before anything
+   is tagged.
+2. **Branch** `release/v<version>` — never release from a feature branch that
+   tracks an old release branch. Commit pending work as its own `feat:`/`fix:`
+   commit; leave stray untracked files out and tell the user.
+3. **Bump two files:** `pubspec.yaml` `version: <semver>+<build>` and
+   `CHANGELOG.md` (keep `## [Unreleased]`, add `---` and
+   `## [<version>] — <ISO date>` beneath it). The build number after `+`
+   always increases — the updater compares it, never the version text
+   (ADR-029).
+4. **Commit** `chore(release): v<version>`, **tag** `git tag -a v<version>`,
+   push the branch and the tag. Never force-push, never move a pushed tag.
+5. **Merge** `release/v<version>` into `main` by pull request (the user does
+   this), then fast-forward local `main`.
+6. **Publish** — only when the user asks, it is public:
+   `flutter build apk --release`, `bash tool/release_manifest.sh`, copy the
+   APK to `build/yello-<version>.apk`, then
+   `gh release create v<version> build/yello-<version>.apk build/latest.json --title "v<version>" --latest`.
+   Check the release tag matches `pubspec.yaml` before uploading anything.
+7. **Never a pre-release.** The app fetches
+   `releases/latest/download/latest.json`, and GitHub's "latest" skips
+   pre-releases. Fix one with
+   `gh release edit v<version> --prerelease=false --latest`.
+8. **Verify** that URL returns the new `version`/`buildNumber`. GitHub may
+   serve the previous manifest for a few minutes after the change — wait and
+   re-check rather than altering the release or the app.
+
+The user's shell is PowerShell with no `bash` on PATH: hand them PowerShell
+commands, and run `tool/*.sh` through Git Bash
+(`& "C:\Program Files\Git\bin\bash.exe" tool/release_manifest.sh`).
