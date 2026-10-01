@@ -2734,3 +2734,35 @@ history route — then delete the local log (`CallLog*`, the two `_log` calls in
 `CallCubit`) and render the server's, rather than merging the two. Short of
 that, the `CALL_MISSED` push could note a missed call from the background
 isolate; it would need the foreground to `reload()` the preferences.
+
+## ADR-056 — A call note that arrives as a text message is recognised by its words
+
+**Status:** Accepted
+
+Reported 2026-10-01: "Cancelled voice call" sits in a thread as an ordinary
+bubble from the caller, indistinguishable from something they typed. These are
+not ADR-055's lines (those are centred pills, drawn from the on-device log).
+They are real `Message`s whose `body` is the note — sent by something other
+than this app, with no call field on the wire to say so (`docs/BACKEND.md`).
+
+- **Read from the text.** `callMessageOf` matches the whole body against
+  "[lead] voice|audio|video call [tail]" — anchored at both ends, at most 48
+  characters, case-insensitive. It is the only signal there is.
+- **Only a bare text message qualifies.** A quote, an attachment, a sticker,
+  an edit or a tombstone each rule it out: a person wrote those.
+- **Still a bubble, on the sender's side.** It is a real message — it has a
+  sender, a time, a read state, reactions and a long-press sheet — so it keeps
+  its row and only its inside changes: `CallMessageCard` (badge, kind of call,
+  what became of it) in a flat `surf2` bubble, never the yellow fill. Turning
+  it into ADR-055's centred pill would drop who called, which a group needs.
+- **Red means it never connected**, the same reading as `CallLogLine`.
+- **Presentation only.** `MessageEntity` gains nothing: a guess from the words
+  is not a fact about the message, and the inbox preview, quotes and
+  notifications keep showing the text as sent.
+
+**Cost:** a person who types exactly "Missed voice call" gets the card. A
+phrasing the pattern does not know stays a plain bubble. And a call this phone
+also heard end is drawn twice — the sender's card and ADR-055's pill.
+
+**Revisit if:** `Message` grows a call field — switch `callMessageOf` to it
+and drop the pattern; and settle the double line then (ADR-055's "Revisit if").

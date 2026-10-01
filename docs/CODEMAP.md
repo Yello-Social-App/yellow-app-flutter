@@ -5,8 +5,8 @@
 Index of every meaningful file in `lib/`, so you can jump straight to the
 right one instead of searching. **Read this before opening source files.**
 
-- Generated from commit `bd265f0`
-- `lib/`: 367 Dart files · `test/`: 62 test files
+- Generated from commit `eb442a2`
+- `lib/`: 368 Dart files · `test/`: 63 test files
 - Regenerate: `bash tool/codemap.sh` · Staleness check: `bash tool/codemap.sh --check`
 
 Layer rule (see [ARCHITECTURE.md](ARCHITECTURE.md)): `presentation` → `domain/usecases`
@@ -416,6 +416,7 @@ on re-entry.
 
 **Widgets**
 
+- `lib/features/chat/presentation/widgets/call_message_card.dart` — CallMessage, CallMessageCard, callMessageOf()
 - `lib/features/chat/presentation/widgets/new_conversation_dialog.dart` — showNewConversationDialog()
 - `lib/features/chat/presentation/widgets/shimmer_chat_thread.dart` — ShimmerChatThread
 - `lib/features/chat/presentation/widgets/shimmer_conversation_list.dart` — ShimmerConversationList
@@ -1119,6 +1120,7 @@ on re-entry.
 - `test/features/call/call_remote_datasource_test.dart`
 - `test/features/call/conversation_call_cubit_test.dart`
 - `test/features/call/group_call_view_test.dart`
+- `test/features/chat/call_message_test.dart`
 - `test/features/chat/chat_cubit_actions_test.dart`
 - `test/features/chat/chat_frame_decoder_test.dart`
 - `test/features/chat/chat_socket_test.dart`
