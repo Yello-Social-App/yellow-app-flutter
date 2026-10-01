@@ -16,6 +16,10 @@ file only when it genuinely helps.
 
 ## [Unreleased]
 
+---
+
+## [1.0.3] — 2026-10-01
+
 ### Added
 
 - **Yello tells you when there is a newer version.** On Android, opening the
