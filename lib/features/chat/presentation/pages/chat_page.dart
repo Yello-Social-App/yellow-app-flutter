@@ -52,6 +52,7 @@ import '../../domain/usecases/chat_usecases.dart' show chatMessageMaxAttachments
 import '../bloc/chat_cubit.dart';
 import '../bloc/messages_cubit.dart';
 import '../bloc/stickers_cubit.dart';
+import '../widgets/call_message_card.dart';
 import '../widgets/sticker_image.dart';
 import '../widgets/sticker_picker_sheet.dart';
 import '../widgets/story_reply_preview.dart';
@@ -1247,10 +1248,14 @@ class _Composer extends StatelessWidget {
                         controller: controller,
                         focusNode: focusNode,
                         onChanged: cubit.onDraftChanged,
-                        onSubmitted: (_) => onSend(),
                         minLines: 1,
                         maxLines: 5,
-                        textInputAction: TextInputAction.send,
+                        // Enter breaks the line; sending is the button's job.
+                        // A `send` action here replaces the keyboard's Enter
+                        // key, which leaves a five-line field with no way to
+                        // start its second line.
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
                         style: AppTextStyles.hint.copyWith(color: colors.ink),
                         decoration: InputDecoration(
                           hintText: editing != null
@@ -1809,6 +1814,12 @@ class _MessageBubble extends StatelessWidget {
     final deleted = message.isDeleted;
     final reply = message.replyTo;
     final storyReply = deleted ? null : message.storyReply;
+    // A call note arrives as plain text; it is drawn as a card on the
+    // sender's side so it cannot be mistaken for something they typed.
+    final call = callMessageOf(message);
+    // A tombstone and a call note are both flat: nobody's words are in them,
+    // so neither takes the yellow fill and lifted outline of your own bubble.
+    final flat = deleted || call != null;
     // Everything under an incoming bubble is pushed past the avatar column
     // so it lines up with the bubble, not with the avatar.
     final indent = mine ? 0.0 : _senderColumnWidth;
@@ -1843,6 +1854,8 @@ class _MessageBubble extends StatelessWidget {
       Widget body;
       if (deleted) {
         body = _Tombstone(ink: colors.ink3);
+      } else if (call != null) {
+        body = CallMessageCard(call: call);
       } else {
         body = Column(
           // A quote spans the bubble's width; the bubble is still only as
@@ -1910,16 +1923,18 @@ class _MessageBubble extends StatelessWidget {
         if (reply != null) body = IntrinsicWidth(child: body);
       }
       bubble = Container(
-        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+        padding: call != null
+            ? const EdgeInsets.fromLTRB(10, 9, 14, 9)
+            : const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
         decoration: BoxDecoration(
-          color: deleted ? colors.surf2 : (mine ? colors.yel : colors.surf),
+          color: flat ? colors.surf2 : (mine ? colors.yel : colors.surf),
           border: Border.all(
-            color: mine && !deleted ? colors.ink : colors.line,
+            color: mine && !flat ? colors.ink : colors.line,
             width: AppStyle.of(context).borderWidth,
           ),
           // Ink outline lifts only your own bubbles, so the two sides of a
           // thread still read apart at a glance.
-          boxShadow: mine && !deleted ? AppStyle.of(context).hardShadow(colors, AppStyle.buttonOffset) : null,
+          boxShadow: mine && !flat ? AppStyle.of(context).hardShadow(colors, AppStyle.buttonOffset) : null,
           // The tail goes on whatever is lowest: the bubble, the sticker, or
           // the pictures under it.
           borderRadius: _bubbleRadius(

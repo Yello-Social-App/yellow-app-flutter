@@ -18,6 +18,23 @@ file only when it genuinely helps.
 
 ---
 
+## [1.0.5] — 2026-10-01
+
+### Changed
+
+- **A call in a chat now looks like a call.** A message such as "Cancelled
+  voice call" or "Video call · 1:05" is drawn as a card with a phone or camera
+  badge instead of an ordinary text bubble, and turns red when the call was
+  never answered.
+
+### Fixed
+
+- **You can start a new line in a chat message.** The keyboard's Enter key
+  now breaks the line instead of sending; the send button next to the field
+  still sends.
+
+---
+
 ## [1.0.3] — 2026-10-01
 
 ### Added

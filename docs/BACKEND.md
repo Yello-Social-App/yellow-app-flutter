@@ -395,6 +395,14 @@ The thread's "Voice call declined" / "Missed video call" lines are therefore
 the app's own, noted on the device as each `call.ended` arrives (ADR-055) —
 see the gap table below.
 
+**But call notes do turn up as plain text messages** (seen on a phone
+2026-10-01: two "Cancelled voice call" bubbles from the caller, dated
+2026-09-30). No branch of this app sends them and the document above still
+has no call field, so whoever writes them — the service, or another client —
+writes an ordinary `Message` whose `body` is the note. **Unconfirmed which,
+and the full vocabulary is unknown**: only that one phrase has been seen. The
+app recognises them by their text alone (`callMessageOf`, ADR-056).
+
 ### Incoming-call pushes (2026-09-30)
 
 From the "Incoming calls from outside the app" frontend guide. Three new
