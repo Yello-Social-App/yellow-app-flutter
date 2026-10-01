@@ -41,6 +41,8 @@ file only when it genuinely helps.
 
 ---
 
+## [1.0.1] — 2026-10-01
+
 ## [1.0.0] — 2026-09-30
 
 ### Added
@@ -71,6 +73,7 @@ file only when it genuinely helps.
   For now the app has to be open for a call to ring — a phone with Yello
   closed does not hear it yet. On Android a call keeps going with the screen
   off, shown as an ongoing "Call with …" notification.
+
 - **Group calls.** Group chats now have the phone and camera buttons too, and
   ring every member who is free (up to 16 people in a call). Once you are in,
   everyone appears as a tile in a two-column grid — swipe or tap the arrow
@@ -430,7 +433,7 @@ file only when it genuinely helps.
   back to the header.
 - **Reply to a message from the notification itself.** Chat notifications
   are now drawn as conversations — sender on top, the message below, and a
-  *Reply* field — so you can answer from the notification shade without
+  _Reply_ field — so you can answer from the notification shade without
   opening Yello. Sending clears the notification. If it doesn't go through
   you get a new one saying so, with your text in it, so nothing is lost and
   you can try again or tap into the chat. Today this works while Yello is
@@ -439,13 +442,13 @@ file only when it genuinely helps.
   gives the app a say — closing that gap needs a change on the notification
   service (see `docs/BACKEND.md`).
 - **Hide a post, report it, or mute whoever wrote it.** The "···" menu on
-  someone else's post now ends with three new choices. *Hide this post*
+  someone else's post now ends with three new choices. _Hide this post_
   takes it out of your feed for good, on every device you sign in on.
-  *Report post* asks what is wrong with it — spam, harassment, hate speech,
+  _Report post_ asks what is wrong with it — spam, harassment, hate speech,
   violence, nudity, false information, or something else — with room for a
   sentence of your own; the author is never told who reported them, and
   reporting the same post twice just tells you it is already reported.
-  *Mute @someone* stops their posts appearing in your feed without blocking
+  _Mute @someone_ stops their posts appearing in your feed without blocking
   them: they can still message you and see your posts, and they are never
   told.
 - **Settings → Privacy & safety**, reached from your profile's menu
@@ -499,24 +502,24 @@ file only when it genuinely helps.
 - `tool/codemap.sh`, which regenerates `docs/CODEMAP.md` from the source tree
   (`--check` fails when the committed map is stale).
 - **A Theme screen, instead of a switch buried in a menu.** The account menu's
-  *Theme* item now opens a screen of its own, where Light and Dark are laid
+  _Theme_ item now opens a screen of its own, where Light and Dark are laid
   out side by side with the one you are on ticked. The menu row tells you
   which is active without opening it.
 - **App version, so you can say which build you are on.** A new screen under
   the account menu shows the version and build number of the Yello installed
   on this phone, along with the package, your Android/iOS version and your
-  device. *Copy* puts the lot on your clipboard in one line, ready to paste
+  device. _Copy_ puts the lot on your clipboard in one line, ready to paste
   into a bug report. It does not check for a newer version — updates come
   from the store, and Yello has nothing to ask about them.
 
 ### Changed
 
-- **The account menu is shorter, and every row now opens a screen.** *Your
-  circle*, *Shared posts* and *Privacy & safety* have been taken out of the
-  menu behind the ☰ button on your profile, and *Theme* and *App version*
+- **The account menu is shorter, and every row now opens a screen.** _Your
+  circle_, _Shared posts_ and _Privacy & safety_ have been taken out of the
+  menu behind the ☰ button on your profile, and _Theme_ and _App version_
   added in their place. Your circle is still one tap away from the
   connections row on your profile header, and your shared posts are still
-  the *Shared* tab on your own profile.
+  the _Shared_ tab on your own profile.
 
 - **All / Shared / Saved is one switcher now, not three loose pills.** The
   three filters on your profile share a single segmented control — the same
@@ -583,7 +586,6 @@ file only when it genuinely helps.
   was an attachment or has since been deleted, and spans the bubble's width
   behind a yellow accent bar — the same shape as the composer's reply
   banner, which now reads "Replying to <name>" instead of just "Replying".
-
 
 - Loading placeholders now match the screen they're on. Explore (both the
   Communities lists and the Showcase grid), people search and the Profile
