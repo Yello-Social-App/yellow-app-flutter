@@ -16,6 +16,10 @@ file only when it genuinely helps.
 
 ## [Unreleased]
 
+---
+
+## [1.1.0] — 2026-10-02
+
 ### Added
 
 - **A Pchum Ben theme.** Theme now offers "Pchum Ben" in light and dark:
