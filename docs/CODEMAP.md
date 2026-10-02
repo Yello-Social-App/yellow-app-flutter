@@ -5,8 +5,8 @@
 Index of every meaningful file in `lib/`, so you can jump straight to the
 right one instead of searching. **Read this before opening source files.**
 
-- Generated from commit `eb442a2`
-- `lib/`: 368 Dart files · `test/`: 63 test files
+- Generated from commit `c02d57f`
+- `lib/`: 370 Dart files · `test/`: 64 test files
 - Regenerate: `bash tool/codemap.sh` · Staleness check: `bash tool/codemap.sh --check`
 
 Layer rule (see [ARCHITECTURE.md](ARCHITECTURE.md)): `presentation` → `domain/usecases`
@@ -546,6 +546,7 @@ on re-entry.
 **Widgets**
 
 - `lib/features/feed/presentation/widgets/create_post_prompt.dart` — CreatePostPrompt
+- `lib/features/feed/presentation/widgets/pchum_ben_greeting_card.dart` — PchumBenGreetingCard
 - `lib/features/feed/presentation/widgets/post_card.dart` — PostCard, RepostedPostPreview
 - `lib/features/feed/presentation/widgets/post_image_carousel.dart` — PostImageCarousel
 - `lib/features/feed/presentation/widgets/post_options_sheet.dart` — confirmDeletePost(), confirmMuteAuthor(), showEditPostSheet(), showPostOptionsSheet()
@@ -1089,6 +1090,7 @@ on re-entry.
 - `lib/shared/widgets/input_glow.dart` — InputGlow
 - `lib/shared/widgets/linked_text.dart` — LinkedText
 - `lib/shared/widgets/paged_list_view.dart` — PagedListView
+- `lib/shared/widgets/pchum_ben_ornaments.dart` — PetalFriezePainter, PetalFrieze, LotusRosettePainter, PchumBenSkyline, PchumBenSlabScene, PchumBenCoverScene, PchumBenWaveScene, PchumBenOfferingScene, LotusMark, LotusFlower
 - `lib/shared/widgets/photo_viewer_page.dart` — PhotoViewerArgs, PhotoViewerPage, openPhotoViewer()
 - `lib/shared/widgets/responsive_content.dart` — ResponsiveContent
 - `lib/shared/widgets/segmented_tabs.dart` — SegmentedTabs
@@ -1110,6 +1112,7 @@ on re-entry.
 - `test/core/security/private_network_guard_test.dart`
 - `test/core/security/session_manager_test.dart`
 - `test/core/theme/ink_outline_theme_test.dart`
+- `test/core/theme/pchum_ben_theme_test.dart`
 - `test/core/utils/link_scanner_test.dart`
 - `test/core/utils/presigned_url_test.dart`
 - `test/features/auth/domain/login_usecase_test.dart`

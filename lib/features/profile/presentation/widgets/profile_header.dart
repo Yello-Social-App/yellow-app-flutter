@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:yello_social_app/core/router/route_names.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_style.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
@@ -15,6 +16,7 @@ import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/image_placeholder.dart';
 import '../../../../shared/widgets/ink_outline.dart';
 import '../../../../shared/widgets/linked_text.dart';
+import '../../../../shared/widgets/pchum_ben_ornaments.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../friends/domain/entities/friendship_entity.dart';
 import '../../domain/entities/public_user_entity.dart';
@@ -340,19 +342,27 @@ class _Cover extends StatelessWidget {
   final String? url;
   final String? caption;
 
-  Widget get _placeholder => caption == null ? const ImagePlaceholder() : ImagePlaceholder(caption: caption!);
-
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final width = MediaQuery.sizeOf(context).width;
 
+    // What stands in for a cover that isn't there. Under Pchum Ben that is
+    // the festival scene rather than the "drop an image" slot (ADR-057); the
+    // camera button on the cover still says how to add one.
+    final Widget placeholder;
+    if (AppStyle.of(context).pchumBen) {
+      placeholder = ColoredBox(color: colors.slot, child: const PchumBenCoverScene());
+    } else {
+      placeholder = caption == null ? const ImagePlaceholder() : ImagePlaceholder(caption: caption!);
+    }
+
     return Stack(
       fit: StackFit.expand,
       children: [
         if (url == null || url!.isEmpty)
-          _placeholder
+          placeholder
         else
           CachedNetworkImage(
             imageUrl: url!,
@@ -360,7 +370,7 @@ class _Cover extends StatelessWidget {
             colorBlendMode: BlendMode.dstOver,
             fit: BoxFit.cover,
             memCacheWidth: (width * dpr).round(),
-            errorWidget: (_, _, _) => _placeholder,
+            errorWidget: (_, _, _) => placeholder,
           ),
         // Top scrim keeps the floating chrome buttons legible over a light
         // cover photo; the bottom one melts the cover into the page so the

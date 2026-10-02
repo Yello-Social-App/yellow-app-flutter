@@ -18,6 +18,7 @@ import '../../../../shared/widgets/date_label.dart';
 import '../../../../shared/widgets/error_view.dart';
 import '../../../../shared/widgets/glow_border.dart';
 import '../../../../shared/widgets/ink_outline.dart';
+import '../../../../shared/widgets/pchum_ben_ornaments.dart';
 import '../../../../shared/widgets/yello_wordmark.dart';
 import '../../domain/entities/conversation_entity.dart';
 import '../bloc/messages_cubit.dart';
@@ -30,9 +31,21 @@ import '../widgets/shimmer_conversation_list.dart';
 /// The slab is dark in *both* themes, the same call `BottomNavBar` makes with
 /// `AppColors.shell`. Its contents therefore can't read the active token set:
 /// in dark mode `ink` is near-white, which would paint a white slab carrying
-/// white text. They take the dark set unconditionally instead, which is what
+/// white text. They take a dark set unconditionally instead, which is what
 /// "on a dark surface" means in this palette.
-const AppColors _onSlab = AppColors.dark;
+///
+/// *Which* dark set: the classic one, except under Pchum Ben, whose slab is
+/// lacquer rather than black and whose accent is saffron — the classic
+/// yellow ring beside the slab's own saffron glow read as two accents
+/// (ADR-057). Quiet rails and Ink outline keep the classic set they shipped
+/// with.
+AppColors _onSlabOf(BuildContext context) =>
+    AppStyle.of(context).pchumBen ? AppColors.pchumBenDark : AppColors.dark;
+
+/// The light set the search pill is cut from in light mode — the counterpart
+/// of [_onSlabOf], on the same terms.
+AppColors _slabPillOf(BuildContext context) =>
+    AppStyle.of(context).pchumBen ? AppColors.pchumBenLight : AppColors.light;
 
 /// How far the conversation sheet rides up over the bottom of the slab, so
 /// its rounded top corners read as a sheet laid *on* the slab rather than a
@@ -269,6 +282,8 @@ class _HeaderSlab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
+    final onSlab = _onSlabOf(context);
+    final festive = AppStyle.of(context).pchumBen;
 
     return Stack(
       children: [
@@ -281,6 +296,18 @@ class _HeaderSlab extends StatelessWidget {
             ),
           ),
         ),
+        // Pchum Ben: a faint wat and palms behind the title. Pinned to the
+        // slab's top-right at a fixed size, and offset by the status-bar
+        // inset the picture was drawn for (44), so the roof stays level with
+        // the title on any phone. The Stack's own clip trims what slides off.
+        if (festive)
+          Positioned(
+            top: topInset - 44,
+            right: 0,
+            width: PchumBenSlabScene.size.width,
+            height: PchumBenSlabScene.size.height,
+            child: const IgnorePointer(child: PchumBenSlabScene()),
+          ),
         Padding(
           padding: EdgeInsets.fromLTRB(
             18,
@@ -300,10 +327,10 @@ class _HeaderSlab extends StatelessWidget {
                         // Same date eyebrow Feed and Explore wear above
                         // their titles, carrying the unread count as its
                         // trailing fact rather than stacking a second mono
-                        // row between the date and the wordmark. `_onSlab`
+                        // row between the date and the wordmark. `onSlab`
                         // because this is painted on the slab.
                         DateLabel(
-                          color: _onSlab.ink2,
+                          color: onSlab.ink2,
                           trailing: unreadTotal == 0
                               ? 'All caught up'
                               : '$unreadTotal unread',
@@ -323,13 +350,13 @@ class _HeaderSlab extends StatelessWidget {
                     // since an ink one would vanish into the dark slab.
                     child: InkOutline(
                       fill: colors.yel,
-                      borderColor: _onSlab.ink,
-                      shadowColor: _onSlab.ink,
+                      borderColor: onSlab.ink,
+                      shadowColor: onSlab.ink,
                       child: AppIconButton(
                         icon: const Icon(CupertinoIcons.pencil),
-                        backgroundColor: _onSlab.surf2,
-                        borderColor: _onSlab.line,
-                        iconColor: AppStyle.of(context).outlined ? colors.onYel : _onSlab.ink,
+                        backgroundColor: onSlab.surf2,
+                        borderColor: onSlab.line,
+                        iconColor: AppStyle.of(context).outlined ? colors.onYel : onSlab.ink,
                         onPressed: () => _newConversation(context),
                       ),
                     ),
@@ -346,7 +373,7 @@ class _HeaderSlab extends StatelessWidget {
                 const SizedBox(height: 20),
                 Text(
                   'BROWSE YOUR CHATS',
-                  style: AppTextStyles.eyebrow.copyWith(color: _onSlab.ink2),
+                  style: AppTextStyles.eyebrow.copyWith(color: onSlab.ink2),
                 ),
                 const SizedBox(height: 14),
                 _PeopleRail(people: people),
@@ -368,6 +395,18 @@ class _HeaderSlab extends StatelessWidget {
             ),
           ),
         ),
+        // Pchum Ben: a lotus resting on the sheet's lip, its leaf just over
+        // the edge. It sits in the gap the slab's bottom padding leaves under
+        // the people rail, so it never covers an avatar.
+        if (festive)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: _sheetOverlap - 3,
+            child: IgnorePointer(
+              child: Center(child: LotusFlower(edge: colors.shell)),
+            ),
+          ),
       ],
     );
   }
@@ -446,9 +485,11 @@ class _SlabSearchField extends StatelessWidget {
     // Light mode gets the reference's bright pill punched into the dark slab.
     // In dark mode that pill would be the brightest thing on the screen, so
     // the field inverts to the slab's own inset surface instead.
-    final fill = isDark ? _onSlab.surf2 : AppColors.light.surf;
-    final ink = isDark ? _onSlab.ink : AppColors.light.ink;
-    final hintInk = isDark ? _onSlab.ink3 : AppColors.light.ink3;
+    final onSlab = _onSlabOf(context);
+    final pill = _slabPillOf(context);
+    final fill = isDark ? onSlab.surf2 : pill.surf;
+    final ink = isDark ? onSlab.ink : pill.ink;
+    final hintInk = isDark ? onSlab.ink3 : pill.ink3;
 
     final radius = BorderRadius.circular(AppRadii.pill);
     final style = AppStyle.of(context);
@@ -458,7 +499,7 @@ class _SlabSearchField extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: radius,
-        boxShadow: style.hardShadow(AppColors.of(context), AppStyle.pillOffset, color: _onSlab.yel),
+        boxShadow: style.hardShadow(AppColors.of(context), AppStyle.pillOffset, color: onSlab.yel),
       ),
       child: TextField(
         controller: controller,
@@ -504,7 +545,7 @@ class _SlabSearchField extends StatelessWidget {
           ),
           focusedBorder: GlowInputBorder(
             borderRadius: radius,
-            borderSide: BorderSide(color: _onSlab.yel, width: 1.5),
+            borderSide: BorderSide(color: onSlab.yel, width: 1.5),
           ),
         ),
       ),
@@ -541,6 +582,7 @@ class _RailAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final unread = conversation.unreadCount > 0;
+    final onSlab = _onSlabOf(context);
 
     return Semantics(
       button: true,
@@ -560,7 +602,7 @@ class _RailAvatar extends StatelessWidget {
             showOnlineDot: conversation.isOnline,
             // Every avatar carries a ring so unread and read stay the same
             // size in the rail — only its colour changes.
-            ringColor: unread ? _onSlab.yel : _onSlab.line,
+            ringColor: unread ? onSlab.yel : onSlab.line,
           ),
         ),
       ),

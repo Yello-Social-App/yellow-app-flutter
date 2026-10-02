@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_style.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../shared/widgets/pchum_ben_ornaments.dart';
 import '../../../../shared/widgets/yello_wordmark.dart';
 
 /// A text + icon link pinned to the top-right corner of [AuthWaveHeader]
@@ -97,6 +99,9 @@ class _AuthWaveHeaderState extends State<AuthWaveHeader>
               height: _contentHeight,
               child: Stack(
                 children: [
+                  // Pchum Ben stands a wat and palms on the wave (ADR-057).
+                  // Under the wave so the line draws itself across them.
+                  if (AppStyle.of(context).pchumBen) const Positioned.fill(child: PchumBenWaveScene()),
                   Positioned.fill(
                     child: RepaintBoundary(
                       child: CustomPaint(

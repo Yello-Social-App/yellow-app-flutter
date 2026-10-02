@@ -2,8 +2,10 @@ import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_style.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/pchum_ben_ornaments.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../domain/entities/public_user_entity.dart';
 
@@ -82,7 +84,13 @@ class ProfileDetailsCard extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.all(8.0),
-          child: Text('PERSONAL DETAILS', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
+          child: Row(
+            children: [
+              Text('PERSONAL DETAILS', style: AppTextStyles.eyebrow.copyWith(color: colors.ink2)),
+              // The Pchum Ben heading mark (ADR-057).
+              if (AppStyle.of(context).pchumBen) ...[const SizedBox(width: 8), const LotusMark(size: 14)],
+            ],
+          ),
         ),
         const SizedBox(height: 10),
         DecoratedBox(

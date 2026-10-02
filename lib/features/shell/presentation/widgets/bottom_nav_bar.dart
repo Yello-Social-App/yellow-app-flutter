@@ -11,6 +11,7 @@ import '../../../../features/feed/presentation/bloc/feed_cubit.dart';
 import '../../../../shared/extensions/string_extension.dart';
 import '../../../../shared/widgets/active_tab_indicator_painter.dart';
 import '../../../../shared/widgets/app_avatar.dart';
+import '../../../../shared/widgets/pchum_ben_ornaments.dart';
 
 /// The bottom nav: Feed, Explore, a raised "+" create button, Inbox, then
 /// Profile — five equal-width slots, with a short yellow accent line sitting
@@ -96,7 +97,7 @@ class BottomNavBar extends StatelessWidget {
     final c = AppColors.of(context);
     final style = AppStyle.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return DecoratedBox(
+    final bar = DecoratedBox(
       decoration: BoxDecoration(
         color: c.surf,
         // A neutral hairline rather than the old yellow tint — the same
@@ -188,42 +189,64 @@ class BottomNavBar extends StatelessWidget {
                         ),
                         SizedBox(
                           width: slotWidth,
-                          child: Center(
-                            child: Semantics(
-                              label: 'Create post',
-                              button: true,
-                              // Ink outline draws the brand button like its
-                              // other buttons: ink edge, ink glyph, hard
-                              // shadow. The soft look keeps its cream ring.
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  boxShadow: style.hardShadow(c, AppStyle.buttonOffset),
-                                ),
-                                child: Material(
-                                  color: _yel,
-                                  shape: CircleBorder(
-                                    side: BorderSide(
-                                      color: style.outlined ? c.ink : _onYelGlyph,
-                                      width: style.outlined ? style.borderWidth : 1.8,
-                                    ),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // Pchum Ben sits the button on a lotus. Static,
+                              // unblurred and never repainted, so it costs
+                              // nothing while the indicator animates past.
+                              if (style.pchumBen)
+                                IgnorePointer(
+                                  child: CustomPaint(
+                                    size: const Size.square(_barHeight),
+                                    painter: LotusRosettePainter(edge: isDark ? c.surf : null),
                                   ),
-                                  child: InkWell(
-                                    onTap: onCreate,
-                                    customBorder: const CircleBorder(),
-                                    child: SizedBox(
-                                      width: 45,
-                                      height: 45,
-                                      child: Icon(
-                                        CupertinoIcons.add,
-                                        color: style.outlined ? c.onYel : _onYelGlyph,
-                                        size: 22,
+                                ),
+                              Semantics(
+                                label: 'Create post',
+                                button: true,
+                                // Ink outline draws the brand button like its
+                                // other buttons: ink edge, ink glyph, hard
+                                // shadow. The soft look keeps its cream ring.
+                                //
+                                // Pchum Ben is the one flavor that recolors
+                                // it: its saffron sits right beside the
+                                // indicator's, where the fixed brand yellow
+                                // would read as a second, clashing accent.
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    boxShadow: style.hardShadow(c, AppStyle.buttonOffset),
+                                  ),
+                                  child: Material(
+                                    color: style.pchumBen ? c.yel : _yel,
+                                    shape: CircleBorder(
+                                      side: BorderSide(
+                                        color: style.outlined
+                                            ? c.ink
+                                            : style.pchumBen
+                                            ? c.yelb
+                                            : _onYelGlyph,
+                                        width: style.outlined ? style.borderWidth : 1.8,
+                                      ),
+                                    ),
+                                    child: InkWell(
+                                      onTap: onCreate,
+                                      customBorder: const CircleBorder(),
+                                      child: SizedBox(
+                                        width: 45,
+                                        height: 45,
+                                        child: Icon(
+                                          CupertinoIcons.add,
+                                          color: style.outlined || style.pchumBen ? c.onYel : _onYelGlyph,
+                                          size: 22,
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
+                            ],
                           ),
                         ),
                         SizedBox(
@@ -270,6 +293,17 @@ class BottomNavBar extends StatelessWidget {
           },
         ),
       ),
+    );
+
+    // The Pchum Ben plinth: lotus petals standing on the bar's top edge,
+    // painted in the strip *above* the bar's own box so the bar keeps its
+    // height, and in the foreground so the bar's upward shadow doesn't dim
+    // them. A null painter in every other flavor, so nothing is drawn.
+    return CustomPaint(
+      foregroundPainter: style.pchumBen
+          ? PetalFriezePainter(fill: c.surf, stroke: c.yel, pointUp: true, above: true)
+          : null,
+      child: bar,
     );
   }
 }

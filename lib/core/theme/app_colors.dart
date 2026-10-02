@@ -1,15 +1,24 @@
 import 'package:flutter/material.dart';
 
 /// Which palette family the app draws with. Orthogonal to [Brightness]: each
-/// flavor supplies both a light and a dark [AppColors] set, so the six
-/// themes the Theme screen offers are the three flavors crossed with the two
+/// flavor supplies both a light and a dark [AppColors] set, so the eight
+/// themes the Theme screen offers are the four flavors crossed with the two
 /// brightnesses.
 ///
 /// Adding a flavor means adding a case here plus its two palettes in
 /// [AppColors] — nothing else in the app hard-codes a palette, because every
 /// widget reads tokens through `AppColors.of(context)`. A flavor that also
-/// changes how surfaces are *drawn* (outline, shadow) says so in `AppStyle`.
+/// changes how surfaces are *drawn* (outline, shadow, ornament) says so in
+/// `AppStyle`.
+///
+/// The Theme screen lists the flavors in this order.
 enum AppThemeFlavor {
+  /// The Pchum Ben festival theme: rice-white paper and dark lacquer, with
+  /// monk's-robe saffron standing in for the brand yellow. It also turns on
+  /// the festival ornaments, through `AppStyle.pchumBen` (ADR-057). Listed
+  /// first so the seasonal theme leads the Theme screen.
+  pchumBen('Pchum Ben', 'Saffron, lacquer and lotus, for the season of offerings.'),
+
   /// The original hand-tuned Yello Mobile v2 palette: warm off-white paper
   /// and warm charcoal, soft hairlines, amber-leaning yellow (ADR-020).
   classic('Classic', 'Warm paper and charcoal, soft seams.'),
@@ -50,10 +59,11 @@ enum AppThemeFlavor {
 /// draws with, rather than approximating it through Material's ColorScheme
 /// roles.
 ///
-/// Six palettes live here, as three [AppThemeFlavor]s crossed with the two
+/// Eight palettes live here, as four [AppThemeFlavor]s crossed with the two
 /// brightnesses: [light]/[dark] are the classic pair,
 /// [quietRailsLight]/[quietRailsDark] are the Yello Design System's own
-/// tables, and [inkLight]/[inkDark] are the classic pair with a solid [line]. Pick one with [resolve] rather than naming a constant — the named
+/// tables, [inkLight]/[inkDark] are the classic pair with a solid [line], and
+/// [pchumBenLight]/[pchumBenDark] are the festival pair. Pick one with [resolve] rather than naming a constant — the named
 /// constants exist for the handful of widgets that deliberately want a fixed
 /// set regardless of the active theme (see `messages_page.dart`).
 @immutable
@@ -298,11 +308,64 @@ class AppColors extends ThemeExtension<AppColors> {
     slot: Color(0xFF322E24),
   );
 
+  /// "Pchum Ben" light — morning at the wat. A rice-white page under a card
+  /// that is warm rather than pure white, ink in the maroon-brown of dark
+  /// lacquer, and the brand yellow moved to monk's-robe saffron.
+  ///
+  /// Soft on the same terms as [light]: the hairlines are 10% / 6% of the
+  /// lacquer ink, and [ink3] stops at 3.5:1 on a card, the floor for
+  /// placeholder text. [red] and [grn] are deeper than the classic pair so
+  /// white labels on a reacted or reposted pill clear 4.5:1.
+  ///
+  /// [shell] stays dark, as in every flavor (ADR-009), in lacquer maroon
+  /// rather than black.
+  static const pchumBenLight = AppColors(
+    bg: Color(0xFFFCF6EA),
+    surf: Color(0xFFFFFDF8),
+    surf2: Color(0xFFF7EEDC),
+    ink: Color(0xFF3A1A14),
+    ink2: Color(0xFF7A5A4C),
+    ink3: Color(0xFF9C8272),
+    line: Color(0x1A5A1F14),
+    line2: Color(0x0F5A1F14),
+    yel: Color(0xFFF0A21F),
+    yelb: Color(0xFFFDEFD0),
+    yeld: Color(0xFF8A4B00),
+    onYel: Color(0xFF3A1A14),
+    red: Color(0xFFC8372D),
+    grn: Color(0xFF37803F),
+    shell: Color(0xFF2A0F0C),
+    slot: Color(0xFFF1E6D2),
+  );
+
+  /// "Pchum Ben" dark — bay ben, before dawn. Dark lacquer surfaces lit by
+  /// candle gold, with cream ink. Hairlines are 17% / 8% of that cream, the
+  /// same proportions as [dark].
+  static const pchumBenDark = AppColors(
+    bg: Color(0xFF1B100D),
+    surf: Color(0xFF261813),
+    surf2: Color(0xFF33211A),
+    ink: Color(0xFFF8EEDD),
+    ink2: Color(0xFFBDA28E),
+    ink3: Color(0xFF8F7666),
+    line: Color(0x2BF8EEDD),
+    line2: Color(0x14F8EEDD),
+    yel: Color(0xFFF5B335),
+    yelb: Color(0xFF4A2E0A),
+    yeld: Color(0xFFF5B335),
+    onYel: Color(0xFF2A120C),
+    red: Color(0xFFDC4C3F),
+    grn: Color(0xFF439E55),
+    shell: Color(0xFF0E0605),
+    slot: Color(0xFF3A261D),
+  );
+
   /// The palette for a ([AppThemeFlavor], [Brightness]) pair — the single
-  /// place the six sets are selected from.
+  /// place the eight sets are selected from.
   static AppColors resolve(AppThemeFlavor flavor, Brightness brightness) {
     final isDark = brightness == Brightness.dark;
     return switch (flavor) {
+      AppThemeFlavor.pchumBen => isDark ? pchumBenDark : pchumBenLight,
       AppThemeFlavor.classic => isDark ? dark : light,
       AppThemeFlavor.quietRails => isDark ? quietRailsDark : quietRailsLight,
       AppThemeFlavor.ink => isDark ? inkDark : inkLight,

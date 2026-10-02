@@ -19,12 +19,17 @@ class ActiveTabIndicatorPainter extends CustomPainter {
     required this.slotWidth,
     required this.color,
     this.atBottom = false,
+    this.lotus = false,
   });
 
   final double selectedCenter;
   final double slotWidth;
   final Color color;
   final bool atBottom;
+
+  /// Draws a lotus bud on the line in place of the arrowhead — the Pchum Ben
+  /// theme's marker (ADR-057).
+  final bool lotus;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -50,6 +55,11 @@ class ActiveTabIndicatorPainter extends CustomPainter {
     canvas.drawLine(lineStart, lineEnd, glowLinePaint);
     canvas.drawLine(lineStart, lineEnd, linePaint);
 
+    if (lotus) {
+      _paintLotusBud(canvas, lineY);
+      return;
+    }
+
     // Small arrowhead on the line, tip pointing away from the edge — base
     // overlaps the line slightly so it reads as popping out of it.
     const arrowHalfWidth = 5.0;
@@ -73,10 +83,46 @@ class ActiveTabIndicatorPainter extends CustomPainter {
     canvas.drawPath(arrowPath, Paint()..color = color);
   }
 
+  /// Three petals opening away from the line — the Pchum Ben marker. Flat
+  /// fills with no glow: the bud is small enough that a blur would only
+  /// smear the gaps between its petals.
+  void _paintLotusBud(Canvas canvas, double lineY) {
+    final cx = selectedCenter;
+    // Petal coordinates are distances *away from the line*; `d` is which way
+    // that is — up from a header tab row's bottom edge, down from the bottom
+    // nav's top edge. Same convention as the arrowhead above.
+    final d = atBottom ? -1.0 : 1.0;
+    final base = lineY + d;
+    Offset at(double dx, double dy) => Offset(cx + dx, base + d * dy);
+
+    Path petal(List<Offset> p) => Path()
+      ..moveTo(p[0].dx, p[0].dy)
+      ..cubicTo(p[1].dx, p[1].dy, p[2].dx, p[2].dy, p[3].dx, p[3].dy)
+      ..cubicTo(p[4].dx, p[4].dy, p[5].dx, p[5].dy, p[0].dx, p[0].dy)
+      ..close();
+
+    final paint = Paint()..color = color;
+    for (final side in const [-1.0, 1.0]) {
+      canvas.drawPath(
+        petal([
+          at(0, 0),
+          at(side * 4, 0),
+          at(side * 7, 2),
+          at(side * 8, 5.5),
+          at(side * 4.5, 5.5),
+          at(side * 1.5, 3.5),
+        ]),
+        paint,
+      );
+    }
+    canvas.drawPath(petal([at(0, 0), at(-3, 2.5), at(-3, 6.5), at(0, 10), at(3, 6.5), at(3, 2.5)]), paint);
+  }
+
   @override
   bool shouldRepaint(ActiveTabIndicatorPainter oldDelegate) =>
       oldDelegate.selectedCenter != selectedCenter ||
       oldDelegate.slotWidth != slotWidth ||
       oldDelegate.color != color ||
-      oldDelegate.atBottom != atBottom;
+      oldDelegate.atBottom != atBottom ||
+      oldDelegate.lotus != lotus;
 }

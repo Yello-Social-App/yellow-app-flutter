@@ -25,6 +25,7 @@ import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/date_label.dart';
 import '../../../../shared/widgets/error_view.dart';
+import '../../../../shared/widgets/pchum_ben_ornaments.dart';
 import '../../../../shared/widgets/shimmer_loading.dart';
 import '../../../../shared/widgets/underline_tabs.dart';
 import '../../../../shared/widgets/yello_wordmark.dart';
@@ -32,6 +33,7 @@ import '../../domain/entities/post_entity.dart';
 import '../../domain/entities/story_entity.dart';
 import '../bloc/feed_cubit.dart';
 import '../widgets/create_post_prompt.dart';
+import '../widgets/pchum_ben_greeting_card.dart';
 import '../widgets/post_card.dart';
 import '../widgets/post_options_sheet.dart';
 import '../widgets/reaction_breakdown_sheet.dart';
@@ -155,6 +157,9 @@ class _FeedViewState extends State<_FeedView> {
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
     final cubit = context.read<FeedCubit>();
+    // The Pchum Ben ornaments (ADR-057): a skyline by the date, an eave under
+    // the tabs and a greeting card above the prompt.
+    final festive = AppStyle.of(context).pchumBen;
 
     return Scaffold(
       backgroundColor: colors.bg,
@@ -192,9 +197,21 @@ class _FeedViewState extends State<_FeedView> {
                     SliverToBoxAdapter(
                       child: ColoredBox(
                         color: colors.surf,
-                        child: const Padding(
-                          padding: EdgeInsets.fromLTRB(18, 14, 14, 0),
-                          child: DateLabel(),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(18, 14, 14, 0),
+                          // Pchum Ben draws a skyline at the far end of the
+                          // date line. Positioned rather than put in a Row so
+                          // the line keeps the label's height; unclipped so
+                          // the skyline can stand up into the padding above.
+                          child: festive
+                              ? const Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    DateLabel(),
+                                    Positioned(right: 2, bottom: 0, child: PchumBenSkyline(width: 130)),
+                                  ],
+                                )
+                              : const DateLabel(),
                         ),
                       ),
                     ),
@@ -238,6 +255,7 @@ class _FeedViewState extends State<_FeedView> {
                         labelOf: (tab) => tab.label,
                         onSelect: _selectTab,
                         colors: colors,
+                        festive: festive,
                       ),
                     ),
                     const SliverToBoxAdapter(child: SizedBox(height: 14)),
@@ -270,6 +288,11 @@ class _FeedViewState extends State<_FeedView> {
                         ),
                       )
                     else ...[
+                      if (festive)
+                        const SliverPadding(
+                          padding: EdgeInsets.fromLTRB(14, 0, 14, 16),
+                          sliver: SliverToBoxAdapter(child: PchumBenGreetingCard()),
+                        ),
                       SliverPadding(
                         padding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
                         sliver: SliverToBoxAdapter(
