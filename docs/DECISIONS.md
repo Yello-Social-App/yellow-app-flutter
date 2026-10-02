@@ -2766,3 +2766,53 @@ also heard end is drawn twice — the sender's card and ADR-055's pill.
 
 **Revisit if:** `Message` grows a call field — switch `callMessageOf` to it
 and drop the pattern; and settle the double line then (ADR-055's "Revisit if").
+
+## ADR-057 — Pchum Ben is a flavor whose ornaments hang off one `AppStyle` flag
+
+**Status:** Accepted
+
+Asked for (2026-10-01) a Khmer Pchum Ben theme, reviewed as a design first
+(https://claude.ai/artifact/74hcgTyyQcYRdZBZZfg5hz) and then asked to carry
+"more items from the festival" than a recolour.
+
+- **A fourth `AppThemeFlavor`, `pchumBen`**, with `AppColors.pchumBenLight` /
+  `pchumBenDark`: rice-white and lacquer, saffron for the brand yellow. The
+  palette alone is ADR-035's "two `const AppColors` and nothing else".
+- **The decoration is a second `AppStyle` flag, `pchumBen`** — ADR-050's
+  route. Widgets ask `AppStyle.of(context).pchumBen`; none switch on the
+  flavor. (The Theme screen's own card is the exception: it names the flavor
+  it *offers*, whatever the app is wearing.) A plain `bool`, not an ornament
+  enum: there is one festival, and a second would be the moment to generalise.
+- **All drawing lives in `shared/widgets/pchum_ben_ornaments.dart`.** The
+  frieze and the lotus rosette are `CustomPainter`s, because they tile or
+  scale to a box. The pictures are SVG strings through `flutter_svg` (already
+  a dependency, until now unused), built per call so their colours are the
+  active tokens. Static assets were the alternative; they would have needed a
+  light and a dark copy of each picture and would not follow a palette retune.
+- **Where it shows:** bottom nav (petal plinth, lotus under "+"), Feed
+  (skyline by the date, eave and lotus bud on the tabs, greeting card), Chat
+  inbox (skyline on the slab, lotus on the sheet lip), Profile (scene on an
+  empty cover, mark by "Personal details"), Signals (closing skyline), the
+  auth header (wat and palms on the wave). Every other screen is palette
+  only.
+- **Three places stop being theme-independent, under this flavor only.** The
+  nav's "+" takes the flavor's `yel`/`onYel` instead of the fixed brand
+  yellow, which clashed beside a saffron indicator. Chat's slab contents take
+  `pchumBenDark` instead of the pinned classic dark set (ADR-009 still holds:
+  a pinned *dark* set, just this flavor's). The wordmark is left alone.
+- **No lotus under an avatar.** A person seated on a lotus reads as a
+  religious image; the lotus is kept to buttons, markers and the table.
+- **Listed first on the Theme screen**, as drawn. `fromName` still falls back
+  to `classic`, so no install changes theme by upgrading.
+
+**Cost:** the flag is checked in ten files; a new screen gets no ornament
+until someone adds it. The Khmer name and greeting are hard-coded strings in
+`GoogleFonts.moul`, fetched at runtime like every other face here, and were
+not checked by a Khmer reader. The auth scene is stretched with the header's
+width so the palms stay on the wave, which distorts the wat by up to a tenth.
+The eave adds 9px to Feed's pinned tab header.
+
+**Revisit if:** the festival is over — move `pchumBen` to the end of the enum
+(order is free; the stored value is the name). Or a second seasonal theme
+arrives — then turn the flag into an ornament set and this file into one of
+several.

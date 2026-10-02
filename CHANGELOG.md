@@ -18,6 +18,19 @@ file only when it genuinely helps.
 
 ---
 
+## [1.1.0] — 2026-10-02
+
+### Added
+
+- **A Pchum Ben theme.** Theme now offers "Pchum Ben" in light and dark:
+  rice-white and dark lacquer with saffron in place of the yellow. It also
+  dresses the app for the festival — a greeting and an offering table at the
+  top of the feed, lotus petals along the tabs and the bottom bar, a wat
+  skyline on Chat, Signals and the sign-in screen, and a dawn scene on a
+  profile with no cover photo. The other themes look exactly as before.
+
+---
+
 ## [1.0.5] — 2026-10-01
 
 ### Changed

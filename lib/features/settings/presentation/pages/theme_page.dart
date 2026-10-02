@@ -1,15 +1,17 @@
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:yello_social_app/shared/widgets/yello_wordmark.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/theme_cubit.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
+import '../../../../shared/widgets/pchum_ben_ornaments.dart';
 import '../widgets/settings_card.dart';
 
-/// Account menu → Theme. Six choices: the three [AppThemeFlavor]s, each in
+/// Account menu → Theme. Eight choices: the four [AppThemeFlavor]s, each in
 /// light and dark. Still no "match the system" option, because [ThemeCubit]
 /// persists a concrete brightness rather than a third value.
 ///
@@ -65,11 +67,27 @@ class ThemePage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     for (final flavor in AppThemeFlavor.values) ...[
-                      Text(
-                        flavor.label.toUpperCase(),
-                        style: AppTextStyles.eyebrow.copyWith(
-                          color: colors.ink2,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            flavor.label.toUpperCase(),
+                            style: AppTextStyles.eyebrow.copyWith(
+                              color: colors.ink2,
+                            ),
+                          ),
+                          // Keyed off the flavor this card *offers*, not the
+                          // one the app is wearing: the festival theme is
+                          // named in Khmer whichever theme is active.
+                          if (flavor == AppThemeFlavor.pchumBen) ...[
+                            const SizedBox(width: 8),
+                            const LotusMark(),
+                            const SizedBox(width: 6),
+                            Text(
+                              'ភ្ជុំបិណ្ឌ',
+                              style: GoogleFonts.moul(fontSize: 11, height: 1.6, color: colors.yeld),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -219,6 +237,10 @@ class _ThemeOption extends StatelessWidget {
   static String _subtitle(AppThemeFlavor flavor, Brightness brightness) {
     final isDark = brightness == Brightness.dark;
     return switch (flavor) {
+      AppThemeFlavor.pchumBen =>
+        isDark
+            ? 'Candlelight on dark lacquer.'
+            : 'Rice-white paper, saffron accent.',
       AppThemeFlavor.classic =>
         isDark
             ? 'Dimmed surfaces, easier at night.'

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_style.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
@@ -13,6 +14,7 @@ import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_icon_button.dart';
 import '../../../../shared/widgets/app_status_snackbar.dart';
 import '../../../../shared/widgets/error_view.dart';
+import '../../../../shared/widgets/pchum_ben_ornaments.dart';
 import '../../../../shared/widgets/yello_wordmark.dart';
 import '../../domain/entities/notification_entity.dart';
 import '../bloc/notifications_cubit.dart';
@@ -103,10 +105,14 @@ class _NotificationsView extends StatelessWidget {
             final loadingEmpty = state.status == NotificationsStatus.loading && state.items.isEmpty;
             final errorEmpty = state.status == NotificationsStatus.error && state.items.isEmpty;
             final showLoadMoreFooter = state.hasMore && state.items.isNotEmpty;
+            // Pchum Ben closes a fully loaded list with a skyline (ADR-057).
+            // It takes the footer slot, which the load-more spinner only
+            // needs while there *is* more — the two are never both shown.
+            final showSkyline = AppStyle.of(context).pchumBen && !state.hasMore && state.items.isNotEmpty;
 
-            // header(1) + body/rows + optional load-more footer(1).
+            // header(1) + body/rows + optional footer(1).
             final bodyCount = loadingEmpty || errorEmpty || state.items.isEmpty ? 1 : state.items.length;
-            final itemCount = 1 + bodyCount + (showLoadMoreFooter ? 1 : 0);
+            final itemCount = 1 + bodyCount + (showLoadMoreFooter || showSkyline ? 1 : 0);
 
             return RefreshIndicator(
               onRefresh: cubit.refresh,
@@ -149,6 +155,13 @@ class _NotificationsView extends StatelessWidget {
                       cubit: cubit,
                       busy: state.busyRequestIds.contains(n.id),
                       outcome: state.respondedRequestIds[n.id],
+                    );
+                  }
+
+                  if (showSkyline) {
+                    return const Padding(
+                      padding: EdgeInsets.only(top: 4),
+                      child: Center(child: PchumBenSkyline()),
                     );
                   }
 

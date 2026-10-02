@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import 'active_tab_indicator_painter.dart';
+import 'pchum_ben_ornaments.dart';
 
 /// A pinned, full-width tab row with the bottom nav's sliding yellow
 /// indicator — Feed's Feed / Community and Circle's Friends / Requests.
@@ -18,6 +19,7 @@ class UnderlineTabsDelegate<T> extends SliverPersistentHeaderDelegate {
     required this.labelOf,
     required this.onSelect,
     required this.colors,
+    this.festive = false,
   });
 
   final List<T> values;
@@ -29,16 +31,37 @@ class UnderlineTabsDelegate<T> extends SliverPersistentHeaderDelegate {
   /// switch.
   final AppColors colors;
 
+  /// The Pchum Ben dressing (ADR-057): a lotus bud on the indicator, and a
+  /// lotus-petal eave hanging under the row. A constructor argument rather
+  /// than an `AppStyle` lookup in [build] because the eave adds to the
+  /// header's extent, which is asked for before there is a context.
+  final bool festive;
+
   static const _height = 46.0;
 
-  @override
-  double get minExtent => _height;
+  double get _extent => festive ? _height + PetalFriezePainter.height : _height;
 
   @override
-  double get maxExtent => _height;
+  double get minExtent => _extent;
+
+  @override
+  double get maxExtent => _extent;
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    final tabs = _tabs();
+    if (!festive) return tabs;
+    // The eave has no background of its own: the list scrolls past behind
+    // the petals, the way it would behind a real carved edge.
+    return Column(
+      children: [
+        SizedBox(height: _height, child: tabs),
+        PetalFrieze(fill: colors.yel, vein: colors.bg),
+      ],
+    );
+  }
+
+  Widget _tabs() {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colors.surf,
@@ -75,6 +98,7 @@ class UnderlineTabsDelegate<T> extends SliverPersistentHeaderDelegate {
                         slotWidth: slotWidth,
                         color: colors.yel,
                         atBottom: true,
+                        lotus: festive,
                       ),
                     ),
                   ),
@@ -90,7 +114,10 @@ class UnderlineTabsDelegate<T> extends SliverPersistentHeaderDelegate {
   /// Labels are compared too: Circle's Requests tab carries a live count.
   @override
   bool shouldRebuild(UnderlineTabsDelegate<T> oldDelegate) =>
-      oldDelegate.current != current || oldDelegate.colors != colors || !_sameLabels(oldDelegate);
+      oldDelegate.current != current ||
+      oldDelegate.colors != colors ||
+      oldDelegate.festive != festive ||
+      !_sameLabels(oldDelegate);
 
   bool _sameLabels(UnderlineTabsDelegate<T> other) {
     if (other.values.length != values.length) return false;
